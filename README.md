@@ -1,6 +1,8 @@
 # Thunder Blessing Slot
 
-中國風老虎機遊戲，以 Cocos Creator 3.8 開發。
+希臘神話風格老虎機遊戲，以 Cocos Creator 3.8 開發。
+
+高賠符號為宙斯（Zeus）、天馬（Pegasus）、雅典娜（Athena）、雄鷹（Eagle）；低賠符號為英文字母 Z、E、U、S。
 
 特色：滾輪自動擴展（Cascade）、雷霆 Scatter 變換符號、硬幣翻轉決定免費遊戲次數與倍率、最高 30,000× 總投注額獎金。
 
