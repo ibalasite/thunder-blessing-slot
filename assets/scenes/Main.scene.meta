@@ -1,0 +1,11 @@
+{
+  "ver": "1.1.50",
+  "imported": true,
+  "uuid": "32f601a05c8647ff8dc375",
+  "optimizeFor": "NONE",
+  "asyncLoadAssets": false,
+  "files": [
+    ".json"
+  ],
+  "subMetas": {}
+}

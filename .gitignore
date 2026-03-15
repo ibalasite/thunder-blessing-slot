@@ -1,0 +1,6 @@
+local/
+temp/
+library/
+build/
+node_modules/
+*.meta.user

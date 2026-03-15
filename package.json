@@ -1,0 +1,14 @@
+{
+  "name": "thunder-blessing-slot",
+  "version": "1.0.0",
+  "description": "Thunder Blessing Slot Game",
+  "main": "main.js",
+  "scripts": {},
+  "engines": {
+    "cocos-creator": "3.8.0"
+  },
+  "creator": {
+    "version": "3.8.0",
+    "dependencies": {}
+  }
+}

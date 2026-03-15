@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2015",
+    "module": "commonjs",
+    "lib": [
+      "ES2015",
+      "DOM"
+    ],
+    "strict": false,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "outDir": "./temp/",
+    "baseUrl": ".",
+    "paths": {
+      "cc": [
+        "./node_modules/cc/cc.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "assets/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "temp"
+  ]
+}

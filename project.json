@@ -1,0 +1,22 @@
+{
+  "engine": "cocos-creator",
+  "creator_version": "3.8.0",
+  "project_uuid": "ea2b59a6c8a74ada9e0514",
+  "scripting_backend": "NONE",
+  "groupList": [
+    "default"
+  ],
+  "collisionMatrix": [
+    [
+      true
+    ]
+  ],
+  "physicsSettings": {
+    "physicsGroup": [
+      {
+        "name": "default",
+        "index": 0
+      }
+    ]
+  }
+}

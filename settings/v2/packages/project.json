@@ -1,0 +1,13 @@
+{
+  "general": {
+    "designWidth": 960,
+    "designHeight": 640,
+    "fitWidth": false,
+    "fitHeight": false
+  },
+  "launch": {
+    "launchScene": "db://assets/scenes/Main.scene"
+  },
+  "physicsSystem": {},
+  "renderPipeline": ""
+}

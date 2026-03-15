@@ -1,0 +1,13 @@
+{
+  "ver": "4.0.23",
+  "imported": true,
+  "uuid": "a937a8b30e664e6eb654e6",
+  "optimizeFor": "NONE",
+  "fastBuild": false,
+  "queryDependency": true,
+  "isNativeAsset": false,
+  "files": [
+    ".cjs"
+  ],
+  "subMetas": {}
+}
