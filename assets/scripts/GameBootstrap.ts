@@ -95,6 +95,9 @@ export class GameBootstrap extends Component {
     private uiCtrl!:    UIController;
     private busy        = false;
 
+    // ── 타이틀 nodes (FG 중 숨김) ────────
+    private titleNodes:     Node[] = [];
+
     // ── 面板 ──────────────────────────
     private tbPanel?:       Node;
     private buyPanel?:      Node;
@@ -147,8 +150,8 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342);
-        makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320);
+        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342).node);
+        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320).node);
 
         // Reel area
         const reelArea = new Node('ReelArea');
@@ -307,9 +310,9 @@ export class GameBootstrap extends Component {
         dim.rect(-CANVAS_W/2, -CANVAS_H/2, CANVAS_W, CANVAS_H);
         dim.fill();
 
-        // Title (context-dependent)
-        this.coinTitleLbl = makeLabel(p, 'FLIP TO ENTER FREE GAME', 24, '#ff8800', 0, 300, 680);
-        makeLabel(p, 'WITH INCREASED MULTIPLIER', 20, '#ffcc00', 0, 268, 680);
+        // "FLIP TO CONTINUE" at BOTTOM of screen (matches reference screenshot)
+        this.coinTitleLbl = makeLabel(p, 'FLIP TO ENTER FREE GAME', 26, '#ff8800', 0, -248, 780);
+        makeLabel(p, 'WITH INCREASED MULTIPLIER', 22, '#ffcc00', 0, -278, 780);
 
         // Coin node
         const coinNode = new Node('Coin');
@@ -340,6 +343,10 @@ export class GameBootstrap extends Component {
             if (this.coinTitleLbl) {
                 this.coinTitleLbl.string = isFGContext
                     ? 'FLIP TO CONTINUE' : 'FLIP TO ENTER FREE GAME';
+            }
+            // Restore multBar visibility while coin panel is open (during FG)
+            if (isFGContext && this.multBarNode?.active) {
+                this.multBarNode.active = true;  // keep it active
             }
             if (this.coinGfx)     drawCoinFace(this.coinGfx, true);
             if (this.coinFaceLbl) {
@@ -395,22 +402,23 @@ export class GameBootstrap extends Component {
     private buildMultBar(root: Node): Node {
         const n = new Node('MultBar');
         root.addChild(n);
-        n.setPosition(0, 308, 5);
-        const barW = 540;
-        n.addComponent(UITransform).setContentSize(barW, 50);
+        // y=335 → spans y=309–361, sits flush at top of canvas (top edge = y=360)
+        n.setPosition(0, 335, 5);
+        const barW = 720;
+        n.addComponent(UITransform).setContentSize(barW, 52);
         this.multBarGfx    = n.addComponent(Graphics);
         this.multBarLabels = [];
 
         const mults   = FG_MULTIPLIERS;
-        const boxW    = 90, gap = 10;
+        const boxW    = 130, gap = 10;
         const startX  = -((mults.length - 1) * (boxW + gap)) / 2;
         for (let i = 0; i < mults.length; i++) {
             const box = new Node(`mult_${i}`);
             n.addChild(box);
             box.setPosition(startX + i * (boxW + gap), 0, 0);
-            box.addComponent(UITransform).setContentSize(boxW, 42);
-            const lbl = makeLabel(box, `×${mults[i]}`, 16, '#8899bb', 0, 0, boxW);
-            lbl.node.getComponent(UITransform)!.setContentSize(boxW, 28);
+            box.addComponent(UITransform).setContentSize(boxW, 44);
+            const lbl = makeLabel(box, `x${mults[i]}`, 18, '#8899bb', 0, 0, boxW);
+            lbl.node.getComponent(UITransform)!.setContentSize(boxW, 30);
             this.multBarLabels.push(lbl);
         }
         return n;
@@ -419,45 +427,83 @@ export class GameBootstrap extends Component {
     private updateMultBar(activeIdx: number): void {
         const g     = this.multBarGfx!;
         const mults = FG_MULTIPLIERS;
-        const boxW  = 90, gap = 10;
+        const boxW  = 130, gap = 10;
         const startX = -((mults.length - 1) * (boxW + gap)) / 2;
 
         g.clear();
-        const totalW = 540;
-        g.fillColor = new Color(5, 10, 40, 220);
-        g.roundRect(-totalW/2, -25, totalW, 50, 10);
+        const totalW = 720;
+        // Full-width stone bar background
+        g.fillColor = new Color(20, 18, 14, 255);
+        g.roundRect(-totalW/2, -26, totalW, 52, 0);
         g.fill();
-        g.strokeColor = Color.fromHEX(new Color(), '#3355aa');
-        g.lineWidth   = 1.5;
-        g.roundRect(-totalW/2, -25, totalW, 50, 10);
-        g.stroke();
+        // Top highlight strip
+        g.fillColor = new Color(255, 255, 255, 18);
+        g.roundRect(-totalW/2, 18, totalW, 4, 0);
+        g.fill();
+        // Bottom shadow strip
+        g.fillColor = new Color(0, 0, 0, 80);
+        g.roundRect(-totalW/2, -26, totalW, 4, 0);
+        g.fill();
 
         for (let i = 0; i < mults.length; i++) {
             const bx = startX + i * (boxW + gap);
             if (i === activeIdx) {
-                g.fillColor = new Color(80, 55, 5, 240);
-                g.roundRect(bx - boxW/2, -20, boxW, 40, 7);
+                // Gold glowing active box
+                g.fillColor = new Color(100, 65, 5, 255);
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
+                g.fill();
+                g.fillColor = new Color(60, 40, 0, 200);
+                g.roundRect(bx - boxW/2 + 2, -19, boxW - 4, 38, 5);
                 g.fill();
                 g.strokeColor = Color.fromHEX(new Color(), '#ffd700');
-                g.lineWidth   = 2;
-                g.roundRect(bx - boxW/2, -20, boxW, 40, 7);
+                g.lineWidth   = 2.5;
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
+                g.stroke();
+                // Inner gold rim
+                g.strokeColor = new Color(255, 200, 50, 100);
+                g.lineWidth   = 1;
+                g.roundRect(bx - boxW/2 + 3, -18, boxW - 6, 36, 4);
                 g.stroke();
                 this.multBarLabels[i].color    = Color.fromHEX(new Color(), '#ffd700');
-                this.multBarLabels[i].fontSize = 20;
+                this.multBarLabels[i].fontSize = 22;
+                this.multBarLabels[i].isBold   = true;
             } else if (i < activeIdx) {
-                g.fillColor = new Color(20, 20, 20, 180);
-                g.roundRect(bx - boxW/2, -20, boxW, 40, 7);
+                // Completed (dim)
+                g.fillColor = new Color(25, 20, 12, 200);
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
                 g.fill();
-                this.multBarLabels[i].color    = Color.fromHEX(new Color(), '#554422');
-                this.multBarLabels[i].fontSize = 14;
+                g.strokeColor = new Color(100, 80, 30, 100);
+                g.lineWidth   = 1;
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
+                g.stroke();
+                this.multBarLabels[i].color    = Color.fromHEX(new Color(), '#776633');
+                this.multBarLabels[i].fontSize = 16;
             } else {
-                g.fillColor = new Color(15, 20, 50, 180);
-                g.roundRect(bx - boxW/2, -20, boxW, 40, 7);
+                // Upcoming (stone)
+                g.fillColor = new Color(40, 35, 28, 220);
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
                 g.fill();
-                this.multBarLabels[i].color    = Color.fromHEX(new Color(), '#8899bb');
-                this.multBarLabels[i].fontSize = 15;
+                g.strokeColor = new Color(100, 90, 70, 120);
+                g.lineWidth   = 1;
+                g.roundRect(bx - boxW/2, -21, boxW, 42, 6);
+                g.stroke();
+                this.multBarLabels[i].color    = Color.fromHEX(new Color(), '#aaa080');
+                this.multBarLabels[i].fontSize = 18;
             }
         }
+    }
+
+    /** Show the FG multiplier bar and hide game title */
+    private showFGBar(activeIdx: number): void {
+        for (const n of this.titleNodes) n.active = false;
+        this.multBarNode!.active = true;
+        this.updateMultBar(activeIdx);
+    }
+
+    /** Hide the FG multiplier bar and restore game title */
+    private hideFGBar(): void {
+        this.multBarNode!.active = false;
+        for (const n of this.titleNodes) n.active = true;
     }
 
     // ══════════════════════════════════════════════════
@@ -710,7 +756,7 @@ export class GameBootstrap extends Component {
             if (gs.inFreeGame) {
                 gs.inFreeGame = false;
                 gs.clearMarks();
-                this.multBarNode!.active = false;
+                this.hideFGBar();
                 this.uiCtrl.refresh();
                 if (gs.roundWin > 0) await this.showTotalWin(gs.roundWin);
             } else {
@@ -725,17 +771,15 @@ export class GameBootstrap extends Component {
         } else {
             if (gs.fgMultIndex < FG_MULTIPLIERS.length - 1) gs.fgMultIndex++;
         }
-        this.updateMultBar(gs.fgMultIndex);
-        this.multBarNode!.active = true;
-        this.uiCtrl.setStatus(`⊙ 正面 — Free Game ×${gs.fgMultiplier}`, '#00ff88');
+        this.showFGBar(gs.fgMultIndex);
+        this.uiCtrl.setStatus(`⊙ 正面 — Free Game x${gs.fgMultiplier}`, '#00ff88');
         this.uiCtrl.refresh();
         await this.wait(0.5);
         await this.freeGameLoop();
     }
 
     private async freeGameLoop(): Promise<void> {
-        this.multBarNode!.active = true;
-        this.updateMultBar(gs.fgMultIndex);
+        this.showFGBar(gs.fgMultIndex);
 
         while (gs.inFreeGame) {
             this.uiCtrl.setStatus(`FREE GAME ×${gs.fgMultiplier} — 旋轉中…`, '#00cfff');
@@ -746,7 +790,7 @@ export class GameBootstrap extends Component {
             if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) {
                 gs.inFreeGame = false;
                 gs.clearMarks();
-                this.multBarNode!.active = false;
+                this.hideFGBar();
                 this.uiCtrl.refresh();
                 await this.showTotalWin(gs.roundWin);
                 return;
@@ -759,7 +803,7 @@ export class GameBootstrap extends Component {
             if (!heads) {
                 gs.inFreeGame = false;
                 gs.clearMarks();
-                this.multBarNode!.active = false;
+                this.hideFGBar();
                 this.uiCtrl.setStatus('Free Game 結束', '#ff8888');
                 this.uiCtrl.refresh();
                 await this.showTotalWin(gs.roundWin);
@@ -768,13 +812,13 @@ export class GameBootstrap extends Component {
 
             // Advance multiplier
             if (gs.fgMultIndex < FG_MULTIPLIERS.length - 1) gs.fgMultIndex++;
-            this.updateMultBar(gs.fgMultIndex);
-            this.uiCtrl.setStatus(`倍率升為 ×${gs.fgMultiplier}!`, '#ffd700');
+            this.showFGBar(gs.fgMultIndex);
+            this.uiCtrl.setStatus(`倍率升為 x${gs.fgMultiplier}!`, '#ffd700');
             this.uiCtrl.refresh();
             await this.wait(0.5);
         }
 
-        this.multBarNode!.active = false;
+        this.hideFGBar();
     }
 
     private wait(sec: number): Promise<void> {
