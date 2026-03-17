@@ -113,14 +113,14 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        // 主標題
-        makeLabel(root, '⚡ THUNDER BLESSING', 28, '#ffe066', 0, 290);
-        makeLabel(root, 'Zeus   Slot   Game', 14, '#88aacc', 0, 262);
+        // 主標題（緊貼畫布頂部）
+        makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342);
+        makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320);
 
         // ── 滾輪區 ──
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
-        reelArea.setPosition(0, 40, 0);
+        reelArea.setPosition(0, 60, 0);
         const reelUit = reelArea.addComponent(UITransform);
         reelUit.setContentSize(CANVAS_W - 40, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP));
         this.reelMgr = reelArea.addComponent(ReelManager);
@@ -128,7 +128,7 @@ export class GameBootstrap extends Component {
         // 滾輪外框
         const reelFrame = new Node('ReelFrame');
         root.addChild(reelFrame);
-        reelFrame.setPosition(0, 40, 1);
+        reelFrame.setPosition(0, 60, 1);
         const rfUit = reelFrame.addComponent(UITransform);
         rfUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + 20, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + 20);
         const rfGfx = reelFrame.addComponent(Graphics);
@@ -141,7 +141,7 @@ export class GameBootstrap extends Component {
         // ── UI 面板 ──
         const uiPanel = new Node('UIPanel');
         root.addChild(uiPanel);
-        uiPanel.setPosition(0, -266, 0);
+        uiPanel.setPosition(0, -283, 0);
         this.uiCtrl = uiPanel.addComponent(UIController);
 
         // 面板背景
@@ -162,7 +162,7 @@ export class GameBootstrap extends Component {
         this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 18, '#00cfff',    0, -30);
         this.uiCtrl.lblStatus     = makeLabel(uiPanel, '', 14, '#88aacc',    0, -50);
         // Status 在 uiPanel 上方
-        const statusLbl = makeLabel(root, '', 16, '#88aacc', 0, -230);
+        const statusLbl = makeLabel(root, '', 14, '#88aacc', 0, -218);
         this.uiCtrl.lblStatus = statusLbl;
 
         // SPIN 按鈕

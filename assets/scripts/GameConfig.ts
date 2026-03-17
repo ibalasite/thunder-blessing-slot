@@ -81,11 +81,11 @@ export const REEL_COUNT  = 5;
 export const BASE_ROWS   = 3;
 export const MAX_ROWS    = 6;
 export const SYMBOL_W    = 96;
-export const SYMBOL_H    = 84;
+export const SYMBOL_H    = 80;
 export const SYMBOL_GAP  = 6;
 export const REEL_GAP    = 8;
 export const CANVAS_W    = 960;
-export const CANVAS_H    = 640;
+export const CANVAS_H    = 720;
 export const REEL_TOP_Y  = 260;    // reel area top Y from canvas center
 export const REEL_START_X = -238;  // leftmost reel center X
 

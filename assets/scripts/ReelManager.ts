@@ -32,6 +32,9 @@ export class ReelManager extends Component {
     private stripIdx: number[] = Array(REEL_COUNT).fill(0);
     // 是否正在旋轉
     private spinning = false;
+    // 雲朵遮罩節點和圖形元件
+    private cloudNode: Node | null = null;
+    private cloudGfx: Graphics | null = null;
 
     start() {
         this.buildGrid();
@@ -49,9 +52,10 @@ export class ReelManager extends Component {
             for (let row = 0; row < MAX_ROWS; row++) {
                 const cell = this.createCell(ri, row, rx);
                 this.cells[ri][row] = cell;
-                if (row >= BASE_ROWS) cell.node.active = false;  // 初始隱藏擴展列
+                // 所有格子都保持 active — 雲朵 Mask 會遮住下方列
             }
         }
+        this.addCloudPanel();
         this.randomizeGrid();
     }
 
@@ -62,8 +66,8 @@ export class ReelManager extends Component {
         const uit = cellNode.addComponent(UITransform);
         uit.setContentSize(SYMBOL_W, SYMBOL_H);
 
-        // 計算位置（Y 向上為正，row=0 在頂部）
-        const ry = this.rowToY(row, BASE_ROWS);
+        // 計算位置（Y 向上為正，row=0 在頂部）— 永遠用 MAX_ROWS 定位，位置固定不動
+        const ry = this.rowToY(row, MAX_ROWS);
         cellNode.setPosition(rx, ry, 0);
 
         // 背景圖形
@@ -166,8 +170,66 @@ export class ReelManager extends Component {
                 grid[ri][row] = sym;
                 this.drawCell(this.cells[ri][row], sym);
             }
+            // 雲霧列：填入隨機符號（視覺預填，不計入 gs.grid）
+            for (let row = rows; row < MAX_ROWS; row++) {
+                const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                this.drawCell(this.cells[ri][row], sym);
+            }
         }
         gs.grid = grid;
+    }
+
+    // ── 雲霧遮罩 ─────────────────────────────────────────
+    /** 建立雲霧遮罩 Panel（加在所有 cell 之後，確保繪製在最上層） */
+    private addCloudPanel(): void {
+        const n = new Node('CloudMask');
+        this.node.addChild(n);
+        const totalW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + REEL_GAP;
+        const totalH = MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H;
+        const uit = n.addComponent(UITransform);
+        uit.setContentSize(totalW, totalH);
+        this.cloudGfx = n.addComponent(Graphics);
+        this.cloudNode = n;
+        this.setCloud(BASE_ROWS);
+    }
+
+    /** 依目前可見列數更新雲霧遮罩 */
+    setCloud(visibleRows: number): void {
+        if (!this.cloudGfx || !this.cloudNode) return;
+        const cloudRows = MAX_ROWS - visibleRows;
+        const g = this.cloudGfx;
+        g.clear();
+        if (cloudRows <= 0) { this.cloudNode.active = false; return; }
+        this.cloudNode.active = true;
+
+        const totalW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + REEL_GAP;
+        // 最後一列可見列的下緣 → 雲霧起始 Y
+        const lastVis = this.rowToY(visibleRows - 1, MAX_ROWS);
+        const cloudTop    = lastVis - SYMBOL_H / 2 - SYMBOL_GAP / 2;
+        // 最後一列雲霧列下緣
+        const lastCloud = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
+        const cloudBottom = lastCloud - SYMBOL_H / 2;
+        const cloudH = cloudTop - cloudBottom;
+
+        // 主體：深藍霧
+        g.fillColor = new Color(15, 35, 70, 235);
+        g.rect(-totalW / 2, cloudBottom, totalW, cloudH);
+        g.fill();
+        // 上緣漸層高亮（模擬雲頂）
+        const steps = 5;
+        for (let i = 0; i < steps; i++) {
+            const alpha = Math.floor(180 - i * 36);
+            g.fillColor = new Color(60, 110, 180, alpha);
+            const bandH = 18;
+            g.roundRect(-totalW / 2 + 4, cloudTop - bandH - i * bandH, totalW - 8, bandH, 4);
+            g.fill();
+        }
+        // 下緣細線（區隔可見區）
+        g.strokeColor = new Color(80, 140, 220, 180);
+        g.lineWidth = 2;
+        g.moveTo(-totalW / 2, cloudTop);
+        g.lineTo(totalW / 2, cloudTop);
+        g.stroke();
     }
 
     // ── 旋轉動畫 ─────────────────────────────────────────
@@ -206,7 +268,6 @@ export class ReelManager extends Component {
     }
 
     private spinReel(ri: number, result: SymType[], rows: number, delay: number, cb: () => void): void {
-        const startY  = this.cells[ri][0].node.position.y;
         const spinDist = (SYMBOL_H + SYMBOL_GAP) * 3;
 
         // 簡單做法：快速偏移再 snap 回正確符號
@@ -227,11 +288,11 @@ export class ReelManager extends Component {
                 })
                 .delay(0.16)
                 .call(() => {
-                    // 立即設置結果並移動到最終位置
+                    // 可見列：設置結果並動畫落下（使用 MAX_ROWS 固定座標）
                     for (let row = 0; row < rows; row++) {
                         const cell = reel[row];
                         this.drawCell(cell, result[row]);
-                        const targetY = this.rowToY(row, rows);
+                        const targetY = this.rowToY(row, MAX_ROWS);
                         cell.node.active = true;
                         cell.node.setPosition(cell.node.position.x, targetY + spinDist, 0);
                         tween(cell.node)
@@ -240,10 +301,15 @@ export class ReelManager extends Component {
                             .call(() => {})
                             .start();
                     }
-                    // 隱藏超出的列
+                    // 雲霧列：填入隨機符號並定位（固定座標，不動畫，雲霧蓋住）
                     for (let row = rows; row < MAX_ROWS; row++) {
-                        reel[row].node.active = false;
+                        const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                        this.drawCell(reel[row], sym);
+                        const targetY = this.rowToY(row, MAX_ROWS);
+                        reel[row].node.active = true;
+                        reel[row].node.setPosition(reel[row].node.position.x, targetY, 0);
                     }
+                    this.setCloud(rows);
                 })
                 .delay(0.28)
                 .call(cb)
@@ -284,12 +350,13 @@ export class ReelManager extends Component {
                     }
                     grid[ri] = remaining;
 
-                    // 重繪格子，並設定動畫（由上落下）
+                    // 重繪可見格子（使用 MAX_ROWS 固定座標）
                     for (let row = 0; row < newRows; row++) {
                         const cell = this.cells[ri][row];
                         cell.node.active = true;
+                        cell.node.setScale(1, 1, 1);
                         this.drawCell(cell, grid[ri][row]);
-                        const targetY = this.rowToY(row, newRows);
+                        const targetY = this.rowToY(row, MAX_ROWS);
                         // 動畫：格子從上方落下
                         cell.node.setPosition(cell.node.position.x, targetY + (SYMBOL_H + SYMBOL_GAP) * 2, 0);
                         tween(cell.node)
@@ -297,13 +364,18 @@ export class ReelManager extends Component {
                                 { easing: 'bounceOut' })
                             .start();
                     }
-                    // 隱藏多餘（不在擴展列）
+                    // 雲霧列：保持可見但不動畫（雲霧蓋住）
                     for (let row = newRows; row < MAX_ROWS; row++) {
-                        this.cells[ri][row].node.active = false;
+                        const cell = this.cells[ri][row];
+                        cell.node.active = true;
+                        cell.node.setScale(1, 1, 1);
+                        const targetY = this.rowToY(row, MAX_ROWS);
+                        cell.node.setPosition(cell.node.position.x, targetY, 0);
                     }
                 }
                 gs.grid = grid;
                 gs.rowCount = Array(REEL_COUNT).fill(newRows);
+                this.setCloud(newRows);
             }, 0.22);
 
             this.scheduleOnce(resolve, 0.6);
@@ -332,14 +404,14 @@ export class ReelManager extends Component {
         gs.rowCount = Array(REEL_COUNT).fill(BASE_ROWS);
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             for (let row = 0; row < MAX_ROWS; row++) {
-                this.cells[ri][row].node.active = (row < BASE_ROWS);
-                if (row < BASE_ROWS) {
-                    const targetY = this.rowToY(row, BASE_ROWS);
-                    this.cells[ri][row].node.setPosition(
-                        this.cells[ri][row].node.position.x, targetY, 0);
-                }
+                this.cells[ri][row].node.active = true;
+                const targetY = this.rowToY(row, MAX_ROWS);
+                this.cells[ri][row].node.setPosition(
+                    this.cells[ri][row].node.position.x, targetY, 0);
+                this.cells[ri][row].node.setScale(1, 1, 1);
             }
         }
+        this.setCloud(BASE_ROWS);
     }
 }
 
