@@ -9,6 +9,7 @@ import { _decorator, Component, Node, Label, Sprite, Color, UITransform,
 import { REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP,
          REEL_GAP, REEL_STRIP, SYMBOL_COLORS, SYMBOL_DARK, SYMBOL_LABELS, SymType, SYM, CANVAS_W } from './GameConfig';
 import { gs } from './GameState';
+import { WinResult } from './WinChecker';
 
 const { ccclass, property } = _decorator;
 
@@ -138,15 +139,32 @@ export class ReelManager extends Component {
         const g = cell.markGfx;
         g.clear();
         if (!show) return;
-        // 藍色半透明閃電邊框
-        const c = new Color(50, 150, 255, 160);
-        g.strokeColor = c;
-        g.lineWidth   = 4;
         const hw = SYMBOL_W / 2, hh = SYMBOL_H / 2;
+
+        // Blue tint wash
+        g.fillColor = new Color(0, 70, 200, 28);
+        g.roundRect(-hw + 3, -hh + 3, SYMBOL_W - 6, SYMBOL_H - 6, 8);
+        g.fill();
+        // Bright blue border
+        g.strokeColor = new Color(50, 150, 255, 220);
+        g.lineWidth   = 4;
         g.roundRect(-hw + 2, -hh + 2, SYMBOL_W - 4, SYMBOL_H - 4, 9);
         g.stroke();
-        // ⚡ 文字
-        cell.label.string = cell.sym + '\n⚡';
+        // Inner glow ring
+        g.strokeColor = new Color(100, 190, 255, 65);
+        g.lineWidth   = 8;
+        g.roundRect(-hw + 6, -hh + 6, SYMBOL_W - 12, SYMBOL_H - 12, 7);
+        g.stroke();
+
+        // ⚡ Lightning bolt shape — top-right corner
+        const bx = hw - 13, by = hh - 14;
+        g.strokeColor = new Color(255, 220, 30, 240);
+        g.lineWidth   = 2.5;
+        g.moveTo(bx + 2, by - 7);   // top
+        g.lineTo(bx - 1, by + 1);   // mid-left
+        g.lineTo(bx + 2, by + 1);   // mid-right kink
+        g.lineTo(bx - 2, by + 7);   // bottom
+        g.stroke();
     }
 
     /** 重新繪製所有閃電標記狀態 */
@@ -159,7 +177,63 @@ export class ReelManager extends Component {
         }
     }
 
-    // ── 盤面初始化 ───────────────────────────────────────
+    /**
+     * 中獎連線金色閃光 + 連線路徑高亮（cascade 前呼叫）
+     * 約 0.45 秒後 resolve
+     */
+    flashWinCells(wins: WinResult[]): Promise<void> {
+        return new Promise<void>(resolve => {
+            const seen = new Set<string>();
+            const flashNode = new Node('WinFlash');
+            this.node.addChild(flashNode);
+            flashNode.addComponent(UITransform).setContentSize(
+                REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W * 2,
+                MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H);
+            const g = flashNode.addComponent(Graphics);
+
+            for (const win of wins) {
+                // ① Payline connector line
+                g.strokeColor = new Color(255, 200, 20, 190);
+                g.lineWidth = 4;
+                for (let i = 0; i < win.cells.length; i++) {
+                    const c = win.cells[i];
+                    const cx = this.cells[c.reel][0].node.position.x;
+                    const cy = this.rowToY(c.row, MAX_ROWS);
+                    if (i === 0) g.moveTo(cx, cy); else g.lineTo(cx, cy);
+                }
+                g.stroke();
+
+                // ② Gold glow frame per unique winning cell
+                for (const c of win.cells) {
+                    const key = `${c.reel},${c.row}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    const cx = this.cells[c.reel][0].node.position.x;
+                    const cy = this.rowToY(c.row, MAX_ROWS);
+                    const hw = SYMBOL_W / 2, hh = SYMBOL_H / 2;
+                    // Outer soft glow
+                    g.fillColor = new Color(255, 190, 0, 55);
+                    g.roundRect(cx - hw - 7, cy - hh - 7, SYMBOL_W + 14, SYMBOL_H + 14, 15);
+                    g.fill();
+                    // Gold border
+                    g.strokeColor = new Color(255, 200, 20, 255);
+                    g.lineWidth = 3;
+                    g.roundRect(cx - hw - 1, cy - hh - 1, SYMBOL_W + 2, SYMBOL_H + 2, 11);
+                    g.stroke();
+                    // Scale pulse on the cell
+                    const cell = this.cells[c.reel][c.row];
+                    tween(cell.node)
+                        .to(0.11, { scale: new Vec3(1.12, 1.12, 1) })
+                        .to(0.11, { scale: new Vec3(0.97, 0.97, 1) })
+                        .to(0.09, { scale: new Vec3(1.06, 1.06, 1) })
+                        .to(0.09, { scale: new Vec3(1,    1,    1) })
+                        .start();
+                }
+            }
+
+            this.scheduleOnce(() => { flashNode.destroy(); resolve(); }, 0.44);
+        });
+    }
     private randomizeGrid(): void {
         const rows = gs.currentRows;
         const grid: SymType[][] = [];
@@ -324,65 +398,89 @@ export class ReelManager extends Component {
     // ── Cascade 動畫 ─────────────────────────────────────
     /** 移除中獎符號、其餘下移、頂部補新符號，同時擴展1列 */
     cascade(winCells: { reel: number; row: number }[], newRows: number): Promise<void> {
+        const oldRows = gs.currentRows;
+        const expanding = newRows > oldRows;
+
         return new Promise<void>(resolve => {
-            // 1. 閃爍中獎位置
+            // 1. Win cell elimination: burst then shrink to 0
             for (const c of winCells) {
                 const cell = this.cells[c.reel][c.row];
-                tween(cell.node).to(0.1,{scale:new Vec3(1.15,1.15,1)})
-                    .to(0.1,{scale:new Vec3(0,0,0)}).start();
+                tween(cell.node)
+                    .to(0.06, { scale: new Vec3(1.2,  1.2,  1) })
+                    .to(0.12, { scale: new Vec3(0,    0,    1) })
+                    .start();
+            }
+
+            // 2. Cloud shake when expanding — signals new row incoming
+            if (expanding && this.cloudNode) {
+                tween(this.cloudNode)
+                    .to(0.05, { position: new Vec3(0,  8, 0) })
+                    .to(0.06, { position: new Vec3(0, -6, 0) })
+                    .to(0.04, { position: new Vec3(0,  4, 0) })
+                    .to(0.05, { position: new Vec3(0,  0, 0) })
+                    .start();
             }
 
             this.scheduleOnce(() => {
-                // 2. 更新 grid & 重繪（新符號從頂部加入）
                 const grid = gs.grid;
                 for (let ri = 0; ri < REEL_COUNT; ri++) {
-                    // 找到要移除的 rows（已排序由小到大）
                     const removed = winCells
                         .filter(c => c.reel === ri)
                         .map(c => c.row)
-                        .sort((a,b)=>a-b);
+                        .sort((a, b) => a - b);
 
-                    // 從盤面移除（這些位置以 null 標記）
-                    const col: (SymType|null)[] = [...grid[ri]];
+                    const col: (SymType | null)[] = [...grid[ri]];
                     for (const r of removed) col[r] = null;
-
-                    // 剩餘符號往下推（row 大 = 下方）
                     const remaining = col.filter(s => s !== null) as SymType[];
-                    // 頂部補新符號
                     while (remaining.length < newRows) {
                         remaining.unshift(REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
                     }
                     grid[ri] = remaining;
 
-                    // 重繪可見格子（使用 MAX_ROWS 固定座標）
+                    // Drop visible cells from above
                     for (let row = 0; row < newRows; row++) {
                         const cell = this.cells[ri][row];
                         cell.node.active = true;
                         cell.node.setScale(1, 1, 1);
                         this.drawCell(cell, grid[ri][row]);
                         const targetY = this.rowToY(row, MAX_ROWS);
-                        // 動畫：格子從上方落下
-                        cell.node.setPosition(cell.node.position.x, targetY + (SYMBOL_H + SYMBOL_GAP) * 2, 0);
+                        cell.node.setPosition(cell.node.position.x, targetY + (SYMBOL_H + SYMBOL_GAP) * 3, 0);
                         tween(cell.node)
-                            .to(0.3, { position: new Vec3(cell.node.position.x, targetY, 0) },
+                            .to(0.28, { position: new Vec3(cell.node.position.x, targetY, 0) },
                                 { easing: 'bounceOut' })
                             .start();
                     }
-                    // 雲霧列：保持可見但不動畫（雲霧蓋住）
+                    // Cloud-hidden cells — keep in place, cloud covers them
                     for (let row = newRows; row < MAX_ROWS; row++) {
                         const cell = this.cells[ri][row];
                         cell.node.active = true;
                         cell.node.setScale(1, 1, 1);
-                        const targetY = this.rowToY(row, MAX_ROWS);
-                        cell.node.setPosition(cell.node.position.x, targetY, 0);
+                        cell.node.setPosition(cell.node.position.x, this.rowToY(row, MAX_ROWS), 0);
                     }
                 }
-                gs.grid = grid;
+                gs.grid     = grid;
                 gs.rowCount = Array(REEL_COUNT).fill(newRows);
-                this.setCloud(newRows);
-            }, 0.22);
 
-            this.scheduleOnce(resolve, 0.6);
+                if (expanding) {
+                    // Brief pause at old cloud position, then pull cloud back to reveal new row
+                    this.setCloud(oldRows);
+                    this.scheduleOnce(() => {
+                        this.setCloud(newRows);
+                        // Flash the newly-revealed row
+                        const revealRow = newRows - 1;
+                        for (let ri = 0; ri < REEL_COUNT; ri++) {
+                            tween(this.cells[ri][revealRow].node)
+                                .to(0.06, { scale: new Vec3(1.12, 1.12, 1) })
+                                .to(0.14, { scale: new Vec3(1,    1,    1) })
+                                .start();
+                        }
+                    }, 0.08);
+                } else {
+                    this.setCloud(newRows);
+                }
+            }, 0.20);
+
+            this.scheduleOnce(resolve, 0.58);
         });
     }
 
@@ -392,10 +490,11 @@ export class ReelManager extends Component {
             for (let row = 0; row < gs.currentRows; row++) {
                 if (grid[ri][row] !== gs.grid[ri][row]) {
                     this.drawCell(this.cells[ri][row], grid[ri][row]);
-                    // 金色閃爍效果
+                    // Flash cell: white burst → settle (Thunder Blessing transform)
                     tween(this.cells[ri][row].node)
-                        .to(0.12, { scale: new Vec3(1.25, 1.25, 1) })
-                        .to(0.15, { scale: new Vec3(1,    1,    1) })
+                        .to(0.06, { scale: new Vec3(1.3, 1.3, 1) })
+                        .to(0.10, { scale: new Vec3(0.9, 0.9, 1) })
+                        .to(0.10, { scale: new Vec3(1,   1,   1) })
                         .start();
                 }
             }

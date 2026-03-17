@@ -7,7 +7,7 @@ import { _decorator, Component, Node, Label, Button, Color, UITransform,
 import { gs }            from './GameState';
 import { ReelManager }   from './ReelManager';
 import { UIController }  from './UIController';
-import { checkWins, calcWinAmount, findScatters } from './WinChecker';
+import { checkWins, calcWinAmount, findScatters, WinResult } from './WinChecker';
 import {
     REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP, REEL_GAP,
     CANVAS_W, CANVAS_H, DEFAULT_BET, DEFAULT_BALANCE, MAX_WIN_MULT,
@@ -694,6 +694,9 @@ export class GameBootstrap extends Component {
             await this.checkThunderBlessing();
             return;
         }
+
+        // Gold flash + payline highlight before elimination
+        await this.reelMgr.flashWinCells(wins);
 
         let winAmt = 0;
         const winCells: CellPos[] = [];
