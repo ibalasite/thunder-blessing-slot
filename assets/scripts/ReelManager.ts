@@ -93,11 +93,11 @@ export class ReelManager extends Component {
         return { node: cellNode, bgGfx, label: lbl, markGfx, sym: SYM.L4 };
     }
 
-    /** row 轉換為 Y 座標 (中心=0，row=0在最上方) */
-    private rowToY(row: number, totalRows: number): number {
-        const totalH = totalRows * SYMBOL_H + (totalRows - 1) * SYMBOL_GAP;
-        const top    = totalH / 2 - SYMBOL_H / 2;
-        return top - row * (SYMBOL_H + SYMBOL_GAP);
+    /** row 轉換為 Y 座標（row=0 在最底部，row 增加 = 往上） */
+    private rowToY(row: number, _totalRows: number): number {
+        const totalH = MAX_ROWS * SYMBOL_H + (MAX_ROWS - 1) * SYMBOL_GAP;
+        const bottom = -(totalH / 2 - SYMBOL_H / 2);
+        return bottom + row * (SYMBOL_H + SYMBOL_GAP);
     }
 
     /** 更新符號格外觀 */
@@ -193,7 +193,7 @@ export class ReelManager extends Component {
         this.setCloud(BASE_ROWS);
     }
 
-    /** 依目前可見列數更新雲霧遮罩 */
+    /** 依目前可見列數更新雲霧遮罩（雲在上方，遮住頂部隱藏列） */
     setCloud(visibleRows: number): void {
         if (!this.cloudGfx || !this.cloudNode) return;
         const cloudRows = MAX_ROWS - visibleRows;
@@ -202,33 +202,37 @@ export class ReelManager extends Component {
         if (cloudRows <= 0) { this.cloudNode.active = false; return; }
         this.cloudNode.active = true;
 
-        const totalW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + REEL_GAP;
-        // 最後一列可見列的下緣 → 雲霧起始 Y
-        const lastVis = this.rowToY(visibleRows - 1, MAX_ROWS);
-        const cloudTop    = lastVis - SYMBOL_H / 2 - SYMBOL_GAP / 2;
-        // 最後一列雲霧列下緣
-        const lastCloud = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
-        const cloudBottom = lastCloud - SYMBOL_H / 2;
-        const cloudH = cloudTop - cloudBottom;
+        // 寬度覆蓋整個滾輪區（含左右各半格餘量）
+        const totalW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W;
+        // 雲霧覆蓋上方隱藏列（row visibleRows ~ MAX_ROWS-1）
+        // cloudBottom = 最後可見列頂邊 + 半行間距
+        const topVisY   = this.rowToY(visibleRows - 1, MAX_ROWS);
+        const cloudBottom = topVisY + SYMBOL_H / 2 + SYMBOL_GAP / 2;
+        // cloudTop = 最頂列頂邊 + 餘量
+        const topRowY   = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
+        const cloudTop  = topRowY + SYMBOL_H / 2 + 6;
+        const cloudH    = cloudTop - cloudBottom;
 
-        // 主體：深藍霧
-        g.fillColor = new Color(15, 35, 70, 235);
+        // ① 完全不透明底色 — 確保符號 100% 被遮住
+        g.fillColor = new Color(8, 16, 45, 255);
         g.rect(-totalW / 2, cloudBottom, totalW, cloudH);
         g.fill();
-        // 上緣漸層高亮（模擬雲頂）
-        const steps = 5;
+
+        // ② 雲朵羽化層：底部邊緣由透明漸變為不透明，製造霧氣感
+        const steps = 6;
         for (let i = 0; i < steps; i++) {
-            const alpha = Math.floor(180 - i * 36);
-            g.fillColor = new Color(60, 110, 180, alpha);
+            const alpha = Math.floor(220 - i * 30);   // 下→上：220→70
+            g.fillColor = new Color(35, 75, 165, alpha);
             const bandH = 18;
-            g.roundRect(-totalW / 2 + 4, cloudTop - bandH - i * bandH, totalW - 8, bandH, 4);
+            g.roundRect(-totalW / 2 + 4, cloudBottom + i * bandH, totalW - 8, bandH, 10);
             g.fill();
         }
-        // 下緣細線（區隔可見區）
-        g.strokeColor = new Color(80, 140, 220, 180);
+
+        // ③ 底邊分隔高光線
+        g.strokeColor = new Color(110, 175, 255, 180);
         g.lineWidth = 2;
-        g.moveTo(-totalW / 2, cloudTop);
-        g.lineTo(totalW / 2, cloudTop);
+        g.moveTo(-totalW / 2 + 8, cloudBottom);
+        g.lineTo(totalW / 2 - 8, cloudBottom);
         g.stroke();
     }
 
