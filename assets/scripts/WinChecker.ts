@@ -79,3 +79,4 @@ export function findScatters(grid: SymType[][], rows: number): CellPos[] {
     }
     return pos;
 }
+

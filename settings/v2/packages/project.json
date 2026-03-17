@@ -9,5 +9,14 @@
     "launchScene": "db://assets/scenes/Main.scene"
   },
   "physicsSystem": {},
-  "renderPipeline": ""
+  "renderPipeline": "",
+  "__version__": "1.0.6",
+  "fbx": {
+    "legacyFbxImporter": {
+      "visible": true
+    }
+  },
+  "script": {
+    "preserveSymlinks": true
+  }
 }

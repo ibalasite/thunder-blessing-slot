@@ -8,7 +8,8 @@
     "cocos-creator": "3.8.0"
   },
   "creator": {
-    "version": "3.8.0",
+    "version": "3.8.7",
     "dependencies": {}
-  }
+  },
+  "uuid": "1c530a7b-fff7-4a76-ac4b-51192b1d058c"
 }

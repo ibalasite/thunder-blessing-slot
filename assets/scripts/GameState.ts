@@ -56,3 +56,4 @@ export class GameState {
 
 // 單例
 export const gs = new GameState();
+

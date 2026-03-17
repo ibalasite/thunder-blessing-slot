@@ -1,13 +1,9 @@
 {
-  "ver": "4.0.23",
+  "ver": "4.0.24",
+  "importer": "typescript",
   "imported": true,
-  "uuid": "a937a8b30e664e6eb654e6",
-  "optimizeFor": "NONE",
-  "fastBuild": false,
-  "queryDependency": true,
-  "isNativeAsset": false,
-  "files": [
-    ".cjs"
-  ],
-  "subMetas": {}
+  "uuid": "23f6b5e5-104c-43d9-a38e-a91e33dea25f",
+  "files": [],
+  "subMetas": {},
+  "userData": {}
 }

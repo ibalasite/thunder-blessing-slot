@@ -33,7 +33,7 @@ export class ReelManager extends Component {
     // 是否正在旋轉
     private spinning = false;
 
-    onLoad() {
+    start() {
         this.buildGrid();
     }
 
@@ -342,3 +342,4 @@ export class ReelManager extends Component {
         }
     }
 }
+

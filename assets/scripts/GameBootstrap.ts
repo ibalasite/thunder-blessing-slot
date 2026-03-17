@@ -77,7 +77,7 @@ export class GameBootstrap extends Component {
     private tbPanel?:  Node;
 
     // ─── 場景建立 ───────────────────────────────────────
-    onLoad() {
+    start() {
         gs.balance  = DEFAULT_BALANCE;
         gs.totalBet = DEFAULT_BET;
         gs.computeTotalBet();
@@ -519,3 +519,6 @@ export class GameBootstrap extends Component {
         return new Promise<void>(resolve => this.scheduleOnce(resolve, sec));
     }
 }
+
+
+// rebuild trigger 00:12:58

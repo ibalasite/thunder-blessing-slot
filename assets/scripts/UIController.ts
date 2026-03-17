@@ -23,9 +23,10 @@ export class UIController extends Component {
     btnExtraBet!:  Node;
     extraBetBg!:   Graphics;
 
-    onLoad() { this.refresh(); }
+    onLoad() { /* labels 由 GameBootstrap 賦值後才能 refresh */ }
 
     refresh(): void {
+        if (!this.lblBalance) return;
         this.lblBalance.string   = `餘額: ${gs.balance.toFixed(2)}`;
         this.lblBet.string       = `投注: ${gs.totalBet.toFixed(2)}`;
         this.lblWin.string       = gs.roundWin > 0 ? `WIN: ${gs.roundWin.toFixed(2)}` : '';
@@ -69,3 +70,4 @@ export class UIController extends Component {
         this.extraBetBg.stroke();
     }
 }
+

@@ -121,3 +121,4 @@ export const MAX_WIN_MULT = 30000;
 // 預設投注額
 export const DEFAULT_BET = 0.25;
 export const DEFAULT_BALANCE = 1000;
+
