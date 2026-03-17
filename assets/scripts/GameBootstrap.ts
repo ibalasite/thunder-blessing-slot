@@ -3,7 +3,7 @@
  * ★ 主要遊戲Controller — 掛在 Canvas 的 GameView Node 上
  */
 import { _decorator, Component, Node, Label, Button, Color, UITransform,
-         Graphics, Vec3, tween } from 'cc';
+         Graphics, Vec3, tween, Mask } from 'cc';
 import { gs }            from './GameState';
 import { ReelManager }   from './ReelManager';
 import { UIController }  from './UIController';
@@ -153,12 +153,14 @@ export class GameBootstrap extends Component {
         this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342).node);
         this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320).node);
 
-        // Reel area
+        // Reel area (with Mask to clip symbols during drop-in animation)
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
         reelArea.setPosition(0, 60, 0);
         const reelUit = reelArea.addComponent(UITransform);
-        reelUit.setContentSize(CANVAS_W - 40, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP));
+        reelUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
+        const reelMask = reelArea.addComponent(Mask);
+        reelMask.type = Mask.Type.RECT;
         this.reelMgr = reelArea.addComponent(ReelManager);
 
         // Reel frame
@@ -716,7 +718,11 @@ export class GameBootstrap extends Component {
         this.reelMgr.refreshAllMarks();
 
         if (rows === MAX_ROWS) {
-            await this.doCoinTossAndMaybeFG();
+            // In Free Game, coin toss happens after the full spin (in freeGameLoop),
+            // NOT after each cascade. Only trigger from normal game cascade.
+            if (!gs.inFreeGame) {
+                await this.doCoinTossAndMaybeFG();
+            }
             return;
         }
         await this.cascadeLoop();
@@ -727,8 +733,10 @@ export class GameBootstrap extends Component {
         const scatters = findScatters(gs.grid, rows);
         if (scatters.length === 0 || gs.lightningMarks.size === 0) return;
 
-        await this.showThunderBlessing();
+        // Fire TB animation without blocking — plays as overlay while game continues
+        void this.showThunderBlessing();
         this.uiCtrl.setStatus('⚡ 雷霆祝福！標記格轉換中…', '#ff88ff');
+        await this.wait(0.25); // short pause so player sees the flash start
 
         const newGrid: SymType[][] = gs.grid.map(col => [...col]);
         for (let ri = 0; ri < REEL_COUNT; ri++)
