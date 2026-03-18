@@ -235,18 +235,12 @@ export class ReelManager extends Component {
         });
     }
     private randomizeGrid(): void {
-        const rows = gs.currentRows;
         const grid: SymType[][] = [];
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             grid[ri] = [];
-            for (let row = 0; row < rows; row++) {
+            for (let row = 0; row < MAX_ROWS; row++) {
                 const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
                 grid[ri][row] = sym;
-                this.drawCell(this.cells[ri][row], sym);
-            }
-            // 雲霧列：填入隨機符號（視覺預填，不計入 gs.grid）
-            for (let row = rows; row < MAX_ROWS; row++) {
-                const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
                 this.drawCell(this.cells[ri][row], sym);
             }
         }
@@ -287,16 +281,16 @@ export class ReelManager extends Component {
         const cloudTop  = topRowY + SYMBOL_H / 2 + 6;
         const cloudH    = cloudTop - cloudBottom;
 
-        // ① 完全不透明底色 — 確保符號 100% 被遮住
-        g.fillColor = new Color(8, 16, 45, 255);
+        // ① 半透明底色：符號仍可見，但有色調標示雲朵區域
+        g.fillColor = new Color(15, 30, 80, 155);
         g.rect(-totalW / 2, cloudBottom, totalW, cloudH);
         g.fill();
 
-        // ② 雲朵羽化層：底部邊緣由透明漸變為不透明，製造霧氣感
+        // ② 雲朵羽化層：底部邊緣由透明漸變，製造霧氣感（alpha 較低保持透明度）
         const steps = 6;
         for (let i = 0; i < steps; i++) {
-            const alpha = Math.floor(220 - i * 30);   // 下→上：220→70
-            g.fillColor = new Color(35, 75, 165, alpha);
+            const alpha = Math.floor(120 - i * 18);   // 下→上：120→12（保持半透明）
+            g.fillColor = new Color(60, 120, 220, alpha);
             const bandH = 18;
             g.roundRect(-totalW / 2 + 4, cloudBottom + i * bandH, totalW - 8, bandH, 10);
             g.fill();
@@ -311,15 +305,16 @@ export class ReelManager extends Component {
     }
 
     // ── 旋轉動畫 ─────────────────────────────────────────
-    spin(rows: number): Promise<void> {
+    /** 永遠旋轉完整 5×6，顯示列數由雲朵控制 */
+    spin(): Promise<void> {
         if (this.spinning) return Promise.resolve();
         this.spinning = true;
 
-        // 生成結果盤面
+        // 生成完整 6 列結果盤面（含雲朵遮蔽列）
         const resultGrid: SymType[][] = [];
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             resultGrid[ri] = [];
-            for (let row = 0; row < rows; row++) {
+            for (let row = 0; row < MAX_ROWS; row++) {
                 // Extra Bet: 保證滾輪3（index 2）一定有 Scatter（如果 extraBetOn）
                 if (gs.extraBetOn && ri === 2 && row === 0) {
                     resultGrid[ri][row] = SYM.SCATTER;
@@ -333,7 +328,7 @@ export class ReelManager extends Component {
             let done = 0;
             for (let ri = 0; ri < REEL_COUNT; ri++) {
                 const delay = ri * 0.12;
-                this.spinReel(ri, resultGrid[ri], rows, delay, () => {
+                this.spinReel(ri, resultGrid[ri], delay, () => {
                     done++;
                     if (done === REEL_COUNT) {
                         gs.grid = resultGrid;
@@ -345,51 +340,45 @@ export class ReelManager extends Component {
         });
     }
 
-    private spinReel(ri: number, result: SymType[], rows: number, delay: number, cb: () => void): void {
-        const spinDist = (SYMBOL_H + SYMBOL_GAP) * 3;
+    /** 所有 6 個格子全部從框外上方同時落下，雲朵在下方遮蔽上層 */
+    private spinReel(ri: number, result: SymType[], delay: number, cb: () => void): void {
+        const topRowY = this.rowToY(MAX_ROWS - 1, MAX_ROWS);   // +215
+        const entryY  = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;   // 框外上方，遮罩以外不可見
+        const spinDist = (SYMBOL_H + SYMBOL_GAP) * (MAX_ROWS + 2); // 足以清出底部
 
-        // 簡單做法：快速偏移再 snap 回正確符號
         this.scheduleOnce(() => {
             const reel = this.cells[ri];
-            // 向下偏移 (Y+)
+
             tween(this.node)
                 .delay(0)
                 .call(() => {
-                    for (let row = 0; row < rows; row++) {
+                    // 全 6 列舊符號向下退出（遮罩會裁切，框外不可見）
+                    for (let row = 0; row < MAX_ROWS; row++) {
                         const n = reel[row].node;
                         tween(n)
-                            .to(0.15, { position: new Vec3(n.position.x, n.position.y + spinDist, 0) })
-                            .to(0.0,  { position: new Vec3(n.position.x, -1000, 0) })
-                            .call(() => {})
+                            .to(0.18, { position: new Vec3(n.position.x, n.position.y - spinDist, 0) })
+                            .to(0.0,  { position: new Vec3(n.position.x, -1500, 0) })
                             .start();
                     }
                 })
-                .delay(0.16)
+                .delay(0.20)
                 .call(() => {
-                    // 可見列：設置結果並動畫落下（使用 MAX_ROWS 固定座標）
-                    for (let row = 0; row < rows; row++) {
+                    // 全 6 列新符號從框外上方同時落下
+                    for (let row = 0; row < MAX_ROWS; row++) {
                         const cell = reel[row];
                         this.drawCell(cell, result[row]);
                         const targetY = this.rowToY(row, MAX_ROWS);
                         cell.node.active = true;
-                        cell.node.setPosition(cell.node.position.x, targetY + spinDist, 0);
+                        cell.node.setPosition(cell.node.position.x, entryY, 0);
                         tween(cell.node)
-                            .to(0.25, { position: new Vec3(cell.node.position.x, targetY, 0) },
+                            .to(0.30, { position: new Vec3(cell.node.position.x, targetY, 0) },
                                 { easing: 'cubicOut' })
-                            .call(() => {})
                             .start();
                     }
-                    // 雲霧列：填入隨機符號並定位（固定座標，不動畫，雲霧蓋住）
-                    for (let row = rows; row < MAX_ROWS; row++) {
-                        const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
-                        this.drawCell(reel[row], sym);
-                        const targetY = this.rowToY(row, MAX_ROWS);
-                        reel[row].node.active = true;
-                        reel[row].node.setPosition(reel[row].node.position.x, targetY, 0);
-                    }
-                    this.setCloud(rows);
+                    // 重置雲朵：遮住上方 3 列（但半透明，符號仍可見）
+                    this.setCloud(BASE_ROWS);
                 })
-                .delay(0.28)
+                .delay(0.33)
                 .call(cb)
                 .start();
         }, delay);
@@ -411,7 +400,7 @@ export class ReelManager extends Component {
                     .start();
             }
 
-            // 2. Cloud shake when expanding — signals new row incoming
+            // 2. Cloud shake when expanding — signals cloud layer dissolving
             if (expanding && this.cloudNode) {
                 tween(this.cloudNode)
                     .to(0.05, { position: new Vec3(0,  8, 0) })
@@ -422,35 +411,73 @@ export class ReelManager extends Component {
             }
 
             this.scheduleOnce(() => {
-                const grid = gs.grid;
+                const grid    = gs.grid;  // 永遠包含全 6 列
+                // Entry Y: 框外上方，遮罩以外不可見
+                const topRowY = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
+                const entryY  = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;
+
                 for (let ri = 0; ri < REEL_COUNT; ri++) {
                     const removed = winCells
                         .filter(c => c.reel === ri)
                         .map(c => c.row)
                         .sort((a, b) => a - b);
 
-                    const col: (SymType | null)[] = [...grid[ri]];
+                    // 只處理可見列（0 ~ oldRows-1），雲朵遮蔽列（oldRows ~ MAX_ROWS-1）保持不變
+                    const col: (SymType | null)[] = grid[ri].slice(0, oldRows);
                     for (const r of removed) col[r] = null;
-                    const remaining = col.filter(s => s !== null) as SymType[];
-                    while (remaining.length < newRows) {
-                        remaining.unshift(REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
+                    const survivorOrigRows: number[] = [];
+                    for (let r = 0; r < col.length; r++) {
+                        if (col[r] !== null) survivorOrigRows.push(r);
                     }
-                    grid[ri] = remaining;
+                    const surviving = col.filter(s => s !== null) as SymType[];
 
-                    // Drop visible cells from above
+                    // Snapshot current cell screen positions before any moves
+                    const oldCellY: number[] = this.cells[ri].map(c => c.node.position.y);
+
+                    // 只填滿舊的可見範圍（不包含新解放列），新解放列保留 spin 時的預設符號
+                    while (surviving.length < oldRows) {
+                        surviving.push(REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
+                    }
+                    // 重建完整 grid：新可見列 + 保留雲朵遮蔽列的 spin 預設值
+                    grid[ri] = [...surviving, ...grid[ri].slice(oldRows)];
+
                     for (let row = 0; row < newRows; row++) {
                         const cell = this.cells[ri][row];
                         cell.node.active = true;
                         cell.node.setScale(1, 1, 1);
                         this.drawCell(cell, grid[ri][row]);
                         const targetY = this.rowToY(row, MAX_ROWS);
-                        cell.node.setPosition(cell.node.position.x, targetY + (SYMBOL_H + SYMBOL_GAP) * 3, 0);
-                        tween(cell.node)
-                            .to(0.28, { position: new Vec3(cell.node.position.x, targetY, 0) },
-                                { easing: 'bounceOut' })
-                            .start();
+
+                        if (row >= oldRows) {
+                            // 雲朵解放列：符號原本就在那，不需位移動畫，只做縮放提示
+                            cell.node.setPosition(cell.node.position.x, targetY, 0);
+                            tween(cell.node)
+                                .to(0.08, { scale: new Vec3(1.15, 1.15, 1) })
+                                .to(0.18, { scale: new Vec3(1,    1,    1) })
+                                .start();
+                        } else if (row < survivorOrigRows.length) {
+                            const origRow = survivorOrigRows[row];
+                            if (origRow === row) {
+                                // Symbol did not move — snap directly
+                                cell.node.setPosition(cell.node.position.x, targetY, 0);
+                            } else {
+                                // Symbol fell from above — animate from old Y down to new Y
+                                cell.node.setPosition(cell.node.position.x, oldCellY[origRow], 0);
+                                tween(cell.node)
+                                    .to(0.22, { position: new Vec3(cell.node.position.x, targetY, 0) },
+                                        { easing: 'cubicOut' })
+                                    .start();
+                            }
+                        } else {
+                            // 新符號從框外上方落入（補滿中獎消除的空位）
+                            cell.node.setPosition(cell.node.position.x, entryY, 0);
+                            tween(cell.node)
+                                .to(0.26, { position: new Vec3(cell.node.position.x, targetY, 0) },
+                                    { easing: 'cubicOut' })
+                                .start();
+                        }
                     }
-                    // Cloud-hidden cells — keep in place, cloud covers them
+                    // 仍在雲朵遮蔽列：確保位置正確，保留 spin 預設符號
                     for (let row = newRows; row < MAX_ROWS; row++) {
                         const cell = this.cells[ri][row];
                         cell.node.active = true;
@@ -462,11 +489,10 @@ export class ReelManager extends Component {
                 gs.rowCount = Array(REEL_COUNT).fill(newRows);
 
                 if (expanding) {
-                    // Brief pause at old cloud position, then pull cloud back to reveal new row
+                    // 先搖晃雲朵（已在上方），然後解放一層
                     this.setCloud(oldRows);
                     this.scheduleOnce(() => {
                         this.setCloud(newRows);
-                        // Flash the newly-revealed row
                         const revealRow = newRows - 1;
                         for (let ri = 0; ri < REEL_COUNT; ri++) {
                             tween(this.cells[ri][revealRow].node)
@@ -480,7 +506,7 @@ export class ReelManager extends Component {
                 }
             }, 0.20);
 
-            this.scheduleOnce(resolve, 0.58);
+            this.scheduleOnce(resolve, 0.54);
         });
     }
 

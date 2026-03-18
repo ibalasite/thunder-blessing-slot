@@ -681,7 +681,7 @@ export class GameBootstrap extends Component {
         this.reelMgr.reset();
         this.uiCtrl.refresh();
 
-        await this.reelMgr.spin(BASE_ROWS);
+        await this.reelMgr.spin();
         await this.cascadeLoop();
 
         this.uiCtrl.setStatus(
@@ -811,7 +811,7 @@ export class GameBootstrap extends Component {
         while (gs.inFreeGame) {
             this.uiCtrl.setStatus(`FREE GAME ×${gs.fgMultiplier} — 旋轉中…`, '#00cfff');
             this.reelMgr.reset();
-            await this.reelMgr.spin(BASE_ROWS);
+            await this.reelMgr.spin();
             await this.cascadeLoop();
 
             if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) {
