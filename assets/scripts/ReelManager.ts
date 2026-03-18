@@ -342,45 +342,42 @@ export class ReelManager extends Component {
 
     /** 所有 6 個格子全部從框外上方同時落下，雲朵在下方遮蔽上層 */
     private spinReel(ri: number, result: SymType[], delay: number, cb: () => void): void {
-        const topRowY = this.rowToY(MAX_ROWS - 1, MAX_ROWS);   // +215
-        const entryY  = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;   // 框外上方，遮罩以外不可見
-        const spinDist = (SYMBOL_H + SYMBOL_GAP) * (MAX_ROWS + 2); // 足以清出底部
+        const topRowY  = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
+        const entryY   = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;   // 框外上方，遮罩裁切不可見
+        const spinDist = (SYMBOL_H + SYMBOL_GAP) * (MAX_ROWS + 2);
 
         this.scheduleOnce(() => {
             const reel = this.cells[ri];
 
-            tween(this.node)
-                .delay(0)
-                .call(() => {
-                    // 全 6 列舊符號向下退出（遮罩會裁切，框外不可見）
-                    for (let row = 0; row < MAX_ROWS; row++) {
-                        const n = reel[row].node;
-                        tween(n)
-                            .to(0.18, { position: new Vec3(n.position.x, n.position.y - spinDist, 0) })
-                            .to(0.0,  { position: new Vec3(n.position.x, -1500, 0) })
-                            .start();
-                    }
-                })
-                .delay(0.20)
-                .call(() => {
-                    // 全 6 列新符號從框外上方同時落下
-                    for (let row = 0; row < MAX_ROWS; row++) {
-                        const cell = reel[row];
-                        this.drawCell(cell, result[row]);
-                        const targetY = this.rowToY(row, MAX_ROWS);
-                        cell.node.active = true;
-                        cell.node.setPosition(cell.node.position.x, entryY, 0);
-                        tween(cell.node)
-                            .to(0.30, { position: new Vec3(cell.node.position.x, targetY, 0) },
-                                { easing: 'cubicOut' })
-                            .start();
-                    }
-                    // 重置雲朵：遮住上方 3 列（但半透明，符號仍可見）
-                    this.setCloud(BASE_ROWS);
-                })
-                .delay(0.33)
-                .call(cb)
-                .start();
+            // ① 停止殘留 tween，快照各格 Y 後一起向下退出
+            for (let row = 0; row < MAX_ROWS; row++) {
+                const n  = reel[row].node;
+                const px = n.position.x;
+                const sy = n.position.y;   // 快照當前 Y，避免 tween 覆蓋
+                tween(n).stop();
+                tween(n)
+                    .to(0.18, { position: new Vec3(px, sy - spinDist, 0) })
+                    .call(() => { n.setPosition(px, -1500, 0); })
+                    .start();
+            }
+
+            // ② 0.20s 後新符號從框外上方落下（scheduleOnce 獨立計時，不共用 this.node）
+            this.scheduleOnce(() => {
+                for (let row = 0; row < MAX_ROWS; row++) {
+                    const cell    = reel[row];
+                    const px      = cell.node.position.x;
+                    const targetY = this.rowToY(row, MAX_ROWS);
+                    this.drawCell(cell, result[row]);
+                    tween(cell.node).stop();
+                    cell.node.active = true;
+                    cell.node.setPosition(px, entryY, 0);
+                    tween(cell.node)
+                        .to(0.30, { position: new Vec3(px, targetY, 0) }, { easing: 'cubicOut' })
+                        .start();
+                }
+                this.setCloud(BASE_ROWS);
+                this.scheduleOnce(cb, 0.32);
+            }, 0.20);
         }, delay);
     }
 
