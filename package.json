@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "description": "Thunder Blessing Slot Game",
   "main": "main.js",
-  "scripts": {},
+  "scripts": {
+    "test": "jest",
+    "test:unit": "jest --testPathPatterns=unit",
+    "test:integration": "jest --testPathPatterns=integration",
+    "test:coverage": "jest --coverage"
+  },
   "engines": {
     "cocos-creator": "3.8.0"
   },
@@ -11,5 +16,10 @@
     "version": "3.8.7",
     "dependencies": {}
   },
-  "uuid": "1c530a7b-fff7-4a76-ac4b-51192b1d058c"
+  "uuid": "1c530a7b-fff7-4a76-ac4b-51192b1d058c",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6"
+  }
 }

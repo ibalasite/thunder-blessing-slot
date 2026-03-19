@@ -2,7 +2,7 @@
  * WinChecker.ts
  * 純邏輯模組：掃描盤面連線中獎、並回傳中獎資訊
  */
-import { PAYTABLE, PAYLINES_25, SYM, SymType } from './GameConfig';
+import { PAYTABLE, PAYLINES_BY_ROWS, SYM, SymType } from './GameConfig';
 import { CellPos } from './GameState';
 
 export interface WinResult {
@@ -22,7 +22,7 @@ export interface WinResult {
  */
 export function checkWins(grid: SymType[][], rows: number, totalBet: number): WinResult[] {
     const results: WinResult[] = [];
-    const lines = PAYLINES_25;        // V1 先用25線（6列後應使用57線，TODO V2）
+    const lines = PAYLINES_BY_ROWS[rows] ?? PAYLINES_BY_ROWS[3];
 
     for (let li = 0; li < lines.length; li++) {
         const rowPath = lines[li];

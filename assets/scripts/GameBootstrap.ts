@@ -7,11 +7,12 @@ import { _decorator, Component, Node, Label, Button, Color, UITransform,
 import { gs }            from './GameState';
 import { ReelManager }   from './ReelManager';
 import { UIController }  from './UIController';
-import { checkWins, calcWinAmount, findScatters, WinResult } from './WinChecker';
+import { calcWinAmount, findScatters, WinResult } from './WinChecker';
+import { SlotEngine, createEngine }               from './SlotEngine';
 import {
     REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP, REEL_GAP,
     CANVAS_W, CANVAS_H, DEFAULT_BET, DEFAULT_BALANCE, MAX_WIN_MULT,
-    FG_MULTIPLIERS, SymType, SYMBOL_UPGRADE
+    FG_MULTIPLIERS, SymType,
 } from './GameConfig';
 import { CellPos } from './GameState';
 
@@ -94,6 +95,9 @@ export class GameBootstrap extends Component {
     private reelMgr!:   ReelManager;
     private uiCtrl!:    UIController;
     private busy        = false;
+
+    /** 機率核心引擎（純 TypeScript，無 Cocos 依賴）*/
+    private engine: SlotEngine = createEngine();
 
     // ── 타이틀 nodes (FG 중 숨김) ────────
     private titleNodes:     Node[] = [];
@@ -681,7 +685,10 @@ export class GameBootstrap extends Component {
         this.reelMgr.reset();
         this.uiCtrl.refresh();
 
-        await this.reelMgr.spin();
+        // ★ 引擎決定盤面，ReelManager 執行動畫
+        let grid = this.engine.generateGrid(gs.inFreeGame);
+        if (gs.extraBetOn) grid = this.engine.applyExtraBetSC(grid);
+        await this.reelMgr.spinWithGrid(grid);
         await this.cascadeLoop();
 
         this.uiCtrl.setStatus(
@@ -697,7 +704,8 @@ export class GameBootstrap extends Component {
 
     private async cascadeLoop(): Promise<void> {
         const rows = gs.currentRows;
-        const wins = checkWins(gs.grid, rows, gs.totalBet);
+        // ★ 引擎掃描連線（支援 PAYLINES_BY_ROWS，3→25 條，6→57 條）
+        const wins = this.engine.checkWins(gs.grid, rows);
 
         if (wins.length === 0) {
             await this.checkThunderBlessing();
@@ -705,17 +713,30 @@ export class GameBootstrap extends Component {
         }
 
         // Gold flash + payline highlight before elimination
-        await this.reelMgr.flashWinCells(wins);
+        await this.reelMgr.flashWinCells(wins as WinResult[]);
 
-        let winAmt = 0;
+        // ★ 引擎預先為每個中獎格抽取新符號（下一輪 cascade 用）
         const winCells: CellPos[] = [];
+        const newSyms  = new Map<string, SymType>();
+        const seenCell = new Set<string>();
+        let winAmt     = 0;
+
         for (const w of wins) {
-            winAmt += calcWinAmount(w, gs.totalBet);
-            w.cells.forEach(c => { winCells.push(c); gs.addMark(c); });
+            winAmt += calcWinAmount(w as WinResult, gs.totalBet);
+            for (const c of w.cells) {
+                const key = `${c.reel},${c.row}`;
+                if (!seenCell.has(key)) {
+                    seenCell.add(key);
+                    winCells.push(c);
+                    gs.addMark(c);
+                    // ★ 引擎抽取補充符號（FG 中使用FG權重）
+                    newSyms.set(key, this.engine.drawSymbol(gs.inFreeGame));
+                }
+            }
         }
 
-        const multiplier       = gs.inFreeGame ? gs.fgMultiplier : 1;
-        const stepWin          = parseFloat((winAmt * multiplier).toFixed(2));
+        const multiplier = gs.inFreeGame ? gs.fgMultiplier : 1;
+        const stepWin    = parseFloat((winAmt * multiplier).toFixed(2));
         gs.roundWin = parseFloat((gs.roundWin + stepWin).toFixed(2));
         gs.balance  = parseFloat((gs.balance  + stepWin).toFixed(2));
 
@@ -726,7 +747,8 @@ export class GameBootstrap extends Component {
 
         gs.cascadeCount++;
         const newRows = Math.min(rows + 1, MAX_ROWS);
-        await this.reelMgr.cascade(winCells, newRows);
+        // ★ 傳入引擎預抽符號，ReelManager 直接使用（確保視覺與邏輯一致）
+        await this.reelMgr.cascade(winCells, newRows, newSyms);
         this.reelMgr.refreshAllMarks();
 
         if (rows === MAX_ROWS) {
@@ -750,26 +772,18 @@ export class GameBootstrap extends Component {
         this.uiCtrl.setStatus('⚡ 雷霆祝福！標記格轉換中…', '#ff88ff');
         await this.wait(0.25);
 
-        // Transform marked cells
-        const newGrid: SymType[][] = gs.grid.map(col => [...col]);
-        for (let ri = 0; ri < REEL_COUNT; ri++)
-            for (let row = 0; row < rows; row++)
-                if (gs.hasMark({ reel: ri, row }))
-                    newGrid[ri][row] = (SYMBOL_UPGRADE[newGrid[ri][row] as string] ?? newGrid[ri][row]) as SymType;
+        // ★ 引擎執行 TB 升階（含第二擊機率 TB_SECOND_HIT_PROB）
+        const newGrid = this.engine.applyTB(
+            gs.grid.map(col => [...col]) as SymType[][],
+            gs.lightningMarks,
+            rows
+        );
 
-        if (Math.random() < 0.4)
-            for (let ri = 0; ri < REEL_COUNT; ri++)
-                for (let row = 0; row < rows; row++)
-                    if (gs.hasMark({ reel: ri, row }))
-                        newGrid[ri][row] = (SYMBOL_UPGRADE[newGrid[ri][row] as string] ?? newGrid[ri][row]) as SymType;
-
-        // Clear marks NOW — they've been consumed by the transformation.
-        // This prevents checkThunderBlessing from re-triggering on the same marks.
-        // New marks will be generated by any subsequent cascade wins.
+        // 消耗 marks — 已完成升階，清除避免重複觸發
         gs.clearMarks();
 
         this.reelMgr.updateGrid(newGrid);
-        this.reelMgr.refreshAllMarks();  // clears all mark overlays on cells
+        this.reelMgr.refreshAllMarks();
         await this.wait(0.4);
         await this.cascadeLoop();
     }
@@ -811,7 +825,9 @@ export class GameBootstrap extends Component {
         while (gs.inFreeGame) {
             this.uiCtrl.setStatus(`FREE GAME ×${gs.fgMultiplier} — 旋轉中…`, '#00cfff');
             this.reelMgr.reset();
-            await this.reelMgr.spin();
+            // ★ FG 中同樣由引擎生成盤面（使用 FG 權重）
+            const fgGrid = this.engine.generateGrid(true);
+            await this.reelMgr.spinWithGrid(fgGrid);
             await this.cascadeLoop();
 
             if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) {

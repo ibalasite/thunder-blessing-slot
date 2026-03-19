@@ -382,8 +382,12 @@ export class ReelManager extends Component {
     }
 
     // ── Cascade 動畫 ─────────────────────────────────────
-    /** 移除中獎符號、其餘下移、頂部補新符號，同時擴展1列 */
-    cascade(winCells: { reel: number; row: number }[], newRows: number): Promise<void> {
+    /** 移除中獎符號、其餘下移、頂部補新符號，同時擴展1列
+     *  @param newSyms 由引擎預先抽取的新符號（key = "ri,row" 指原始中獎格座標）
+     *                 若未提供則從 REEL_STRIP 隨機抽取（向下相容）
+     */
+    cascade(winCells: { reel: number; row: number }[], newRows: number,
+            newSyms?: Map<string, SymType>): Promise<void> {
         const oldRows = gs.currentRows;
         const expanding = newRows > oldRows;
 
@@ -432,8 +436,14 @@ export class ReelManager extends Component {
                     const oldCellY: number[] = this.cells[ri].map(c => c.node.position.y);
 
                     // 只填滿舊的可見範圍（不包含新解放列），新解放列保留 spin 時的預設符號
+                    const removedSorted = [...removed].sort((a, b) => a - b);
+                    let newSymFillIdx   = 0;
                     while (surviving.length < oldRows) {
-                        surviving.push(REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
+                        // 優先使用引擎預先抽取的符號，否則從 REEL_STRIP 隨機補充
+                        const origRow = removedSorted[newSymFillIdx++];
+                        const sym     = newSyms?.get(`${ri},${origRow}`)
+                            ?? REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                        surviving.push(sym);
                     }
                     // 重建完整 grid：新可見列 + 保留雲朵遮蔽列的 spin 預設值
                     grid[ri] = [...surviving, ...grid[ri].slice(oldRows)];
@@ -523,6 +533,27 @@ export class ReelManager extends Component {
             }
         }
         gs.grid = grid;
+    }
+
+    /** 使用引擎預先決定的盤面執行旋轉動畫（供 GameBootstrap 搭配 SlotEngine 使用）*/
+    spinWithGrid(resultGrid: SymType[][]): Promise<void> {
+        if (this.spinning) return Promise.resolve();
+        this.spinning = true;
+
+        return new Promise<void>(resolve => {
+            let done = 0;
+            for (let ri = 0; ri < REEL_COUNT; ri++) {
+                const delay = ri * 0.12;
+                this.spinReel(ri, resultGrid[ri], delay, () => {
+                    done++;
+                    if (done === REEL_COUNT) {
+                        gs.grid = resultGrid;
+                        this.spinning = false;
+                        resolve();
+                    }
+                });
+            }
+        });
     }
 
     /** 重置盤面到 BASE_ROWS */
