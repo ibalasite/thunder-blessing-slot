@@ -20,6 +20,7 @@ import {
     SYM, SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_FG,
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
     TB_SECOND_HIT_PROB, FG_MULTIPLIERS, MAX_WIN_MULT,
+    COIN_TOSS_HEADS_PROB, FG_TRIGGER_PROB,
 } from '../../assets/scripts/GameConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -321,5 +322,88 @@ describe('Max Win Cap', () => {
             if (!r.maxWinCapped)
                 expect(r.totalRawWin).toBeLessThanOrEqual(MAX_WIN_MULT);
         }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. 完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
+    it('Full-game RTP 高於純 Base RTP（FG chain 確實有貢獻）', () => {
+        const N        = 200_000;
+        const rng      = mulberry32(42);
+        const rngBase  = mulberry32(42);
+        const engine   = new SlotEngine(rng);
+        const eBase    = new SlotEngine(rngBase);
+        const totalBet = 1;
+        let fullPayout = 0, basePayout = 0;
+
+        for (let i = 0; i < N; i++) {
+            const base = engine.simulateSpin({ totalBet });
+            fullPayout += base.totalRawWin;
+            basePayout += eBase.simulateSpin({ totalBet }).totalRawWin;
+
+            if (!base.fgTriggered) continue;
+            if (rng() >= FG_TRIGGER_PROB) continue;   // FG 觸發門檻
+            if (rng() >= 0.50) continue;               // 進場 Coin Toss 50%
+
+            const fgMarks = new Set<string>();
+            let multIdx = 0;
+            while (true) {
+                const mult = FG_MULTIPLIERS[multIdx];
+                const fg   = engine.simulateSpin({
+                    inFreeGame: true, fgMultiplier: mult,
+                    totalBet, lightningMarks: fgMarks,
+                });
+                fullPayout += fg.totalRawWin * mult;
+                if (fg.maxWinCapped) break;
+                const headsProb = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
+                if (rng() >= headsProb) break;
+                if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
+            }
+        }
+
+        const fullRTP = fullPayout / N;
+        const baseRTP = basePayout / N;
+        // FG chain 必須比純 base 高
+        expect(fullRTP).toBeGreaterThan(baseRTP * 1.2);
+        // 不應超過 1000%（infinity guard）
+        expect(fullRTP).toBeLessThan(10.0);
+    });
+
+    it('Full-game RTP 在 [80%, 120%] 內（具體 RTP 驗證，500k spins, seed=42）', () => {
+        const N       = 500_000;
+        const rng     = mulberry32(42);
+        const engine  = new SlotEngine(rng);
+        const totalBet = 1;
+        let totalPayout = 0;
+
+        for (let i = 0; i < N; i++) {
+            const base = engine.simulateSpin({ totalBet });
+            totalPayout += base.totalRawWin;
+            if (!base.fgTriggered) continue;
+            if (rng() >= FG_TRIGGER_PROB) continue;
+            if (rng() >= 0.50) continue;
+
+            const fgMarks = new Set<string>();
+            let multIdx = 0;
+            while (true) {
+                const mult = FG_MULTIPLIERS[multIdx];
+                const fg   = engine.simulateSpin({
+                    inFreeGame: true, fgMultiplier: mult,
+                    totalBet, lightningMarks: fgMarks,
+                });
+                totalPayout += fg.totalRawWin * mult;
+                if (fg.maxWinCapped) break;
+                const headsProb = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
+                if (rng() >= headsProb) break;
+                if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
+            }
+        }
+
+        const rtp = totalPayout / N;
+        // 目標 97.5% ±20%
+        assertRate(rtp, 0.975, 20, 'Full-game RTP (base+FG chain, 500k spins, seed=42) ≈ 97.5%');
     });
 });

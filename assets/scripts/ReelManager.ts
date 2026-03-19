@@ -535,6 +535,15 @@ export class ReelManager extends Component {
         gs.grid = grid;
     }
 
+    /**
+     * Buy FG 表演用：將滾輪視覺擴展至指定列數（純動畫，不改變 gs.grid 內容）。
+     * TODO: 實作具體的逐列展開動畫；目前僅更新 gs.rowCount 供後續邏輯使用。
+     */
+    expandToRows(targetRows: number): void {
+        gs.rowCount = Array(REEL_COUNT).fill(targetRows);
+        // TODO: 播放滾輪向下展開動畫，揭示對應 FREE 字母
+    }
+
     /** 使用引擎預先決定的盤面執行旋轉動畫（供 GameBootstrap 搭配 SlotEngine 使用）*/
     spinWithGrid(resultGrid: SymType[][]): Promise<void> {
         if (this.spinning) return Promise.resolve();

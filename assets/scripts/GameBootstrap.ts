@@ -12,7 +12,7 @@ import { SlotEngine, createEngine }               from './SlotEngine';
 import {
     REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP, REEL_GAP,
     CANVAS_W, CANVAS_H, DEFAULT_BET, DEFAULT_BALANCE, MAX_WIN_MULT,
-    FG_MULTIPLIERS, SymType,
+    FG_MULTIPLIERS, SymType, COIN_TOSS_HEADS_PROB, FG_TRIGGER_PROB,
 } from './GameConfig';
 import { CellPos } from './GameState';
 
@@ -98,6 +98,7 @@ export class GameBootstrap extends Component {
 
     /** 機率核心引擎（純 TypeScript，無 Cocos 依賴）*/
     private engine: SlotEngine = createEngine();
+    private buyFGMode = false;  // Buy FG intro: skip Coin Toss at MAX_ROWS, enter FG directly
 
     // ── 타이틀 nodes (FG 중 숨김) ────────
     private titleNodes:     Node[] = [];
@@ -115,6 +116,7 @@ export class GameBootstrap extends Component {
     private coinTitleLbl?:  Label;
     private _coinResolve?:  (heads: boolean) => void;
     private _coinFlipped    = false;
+    private _coinIsFGContext = false;
     private multBarNode?:   Node;
     private multBarGfx?:    Graphics;
     private multBarLabels:  Label[] = [];
@@ -345,8 +347,9 @@ export class GameBootstrap extends Component {
 
     private showCoinToss(isFGContext: boolean): Promise<boolean> {
         return new Promise<boolean>(resolve => {
-            this._coinResolve = resolve;
-            this._coinFlipped = false;
+            this._coinResolve    = resolve;
+            this._coinFlipped    = false;
+            this._coinIsFGContext = isFGContext;
             if (this.coinTitleLbl) {
                 this.coinTitleLbl.string = isFGContext
                     ? 'FLIP TO CONTINUE' : 'FLIP TO ENTER FREE GAME';
@@ -374,7 +377,11 @@ export class GameBootstrap extends Component {
     private onCoinTap(): void {
         if (this._coinFlipped || !this.coinPanel?.active) return;
         this._coinFlipped = true;
-        const result    = Math.random() < 0.5;
+        // 局間 Coin Toss 使用 fgMultIndex 對應的機率；進場 Coin Toss（!isFGContext）固定 50%
+        const headsProb = this._coinIsFGContext
+            ? (COIN_TOSS_HEADS_PROB[gs.fgMultIndex] ?? 0.24)
+            : 0.50;
+        const result    = Math.random() < headsProb;
         const coinNode  = this.coinGfxNode!;
 
         // Upward lob tween (separate from Y-flip)
@@ -641,16 +648,52 @@ export class GameBootstrap extends Component {
             return;
         }
         gs.balance -= cost;
-        // 2. 直接進入 Free Game（買入保證進入 ×3，不需先投幣）
         this.busy = true;
         this.uiCtrl.enableSpin(false);
         gs.resetRound();
         gs.clearMarks();
+        this.reelMgr.reset();
         this.uiCtrl.refresh();
-        await this.enterFreeGame();
+        // 2. 真實引導 Spin：cascade 擴展至 MAX_ROWS，累積基本 BONUS
+        //    cascade 內部緩舎 MAX_ROWS 時直接呼叫 enterFreeGame（buyFGMode）
+        await this.playBuyFGIntro();
+        // enterFreeGame 已在 cascadeLoop 內部由 buyFGMode 路徑呼叫
         this.busy = false;
         this.uiCtrl.enableSpin(true);
         this.uiCtrl.refresh();
+    }
+
+    /**
+     * Buy FG 引導旋轉。
+     * 保證 Cascade 擴展至 MAX_ROWS，途中所有勝出累積為基本 BONUS。
+     * 每局旋轉使用保證有勝出的盤面；到達 MAX_ROWS 後由 cascadeLoop 被 buyFGMode 路徑直接呼叫 enterFreeGame。
+     */
+    private async playBuyFGIntro(): Promise<void> {
+        this.buyFGMode = true;
+        this.uiCtrl.setStatus('★ Buy Free Game — 旋轉中…', '#ffdd44');
+        let safety = 0;
+        while (this.buyFGMode && safety < 20) {
+            safety++;
+            this.reelMgr.reset();
+            const grid = this.generateGuaranteedWinGrid(gs.currentRows);
+            await this.reelMgr.spinWithGrid(grid);
+            await this.cascadeLoop();  // 自然 cascade + 擴列；到 MAX_ROWS 時自動 enterFreeGame
+        }
+        if (this.buyFGMode) {
+            // 安全 fallback：次數跛尾巨如未到達 MAX_ROWS
+            this.buyFGMode = false;
+            gs.rowCount = Array(REEL_COUNT).fill(MAX_ROWS);
+            await this.enterFreeGame();
+        }
+    }
+
+    /** 生成保證有連線中獎的盤面（最多嘗試 200 次）*/
+    private generateGuaranteedWinGrid(rows: number): SymType[][] {
+        for (let i = 0; i < 200; i++) {
+            const grid = this.engine.generateGrid(false);
+            if (this.engine.checkWins(grid, rows).length > 0) return grid;
+        }
+        return this.engine.generateGrid(false);  // fallback
     }
 
     // ══════════════════════════════════════════════════
@@ -738,9 +781,16 @@ export class GameBootstrap extends Component {
 
         if (rows === MAX_ROWS) {
             // In Free Game, coin toss happens after the full spin (in freeGameLoop).
-            // In base game, reaching MAX_ROWS directly enters FG at ×3 (no pre-entry coin toss).
             if (!gs.inFreeGame) {
-                await this.enterFreeGame();
+                if (this.buyFGMode) {
+                    // Buy FG intro: guaranteed entry, no Coin Toss, no trigger gate
+                    this.buyFGMode = false;
+                    await this.enterFreeGame();
+                } else if (Math.random() < FG_TRIGGER_PROB) {
+                    // Normal trigger: pass FG_TRIGGER_PROB gate, then Coin Toss
+                    await this.doCoinTossAndMaybeFG();
+                }
+                // else: gate not passed, player stays in base game (no visual feedback)
             }
             return;
         }
@@ -774,8 +824,22 @@ export class GameBootstrap extends Component {
     }
 
     /**
-     * MAX_ROWS 達成（或 Buy FG）：直接帶 ×3 進入 Free Game，不需先投幣。
-     * Coin Toss 只發生在每局 FG Spin 結束後（在 freeGameLoop 內）。
+     * 在 MAX_ROWS 時有新 Cascade 勝出（基礎遊戲）時呼叫。
+     * 先執行進場 Coin Toss；Heads 才進入 Free Game ×3，Tails 則不進入。
+     */
+    private async doCoinTossAndMaybeFG(): Promise<void> {
+        this.uiCtrl.setStatus('🪙 Coin Toss！', '#ffaa44');
+        const heads = await this.showCoinToss(false);
+        if (heads) {
+            await this.enterFreeGame();
+        } else {
+            this.uiCtrl.setStatus('反面——未進入 Free Game', '#ff8888');
+            await this.wait(0.5);
+        }
+    }
+
+    /**
+     * 進場 Coin Toss 通過後直接呼叫，設定 FG 狀態並啟動 freeGameLoop。
      */
     private async enterFreeGame(): Promise<void> {
         gs.inFreeGame  = true;
