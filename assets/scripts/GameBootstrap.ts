@@ -98,7 +98,8 @@ export class GameBootstrap extends Component {
 
     /** 機率核心引擎（純 TypeScript，無 Cocos 依賴）*/
     private engine: SlotEngine = createEngine();
-    private buyFGMode = false;  // Buy FG intro: skip Coin Toss at MAX_ROWS, enter FG directly
+    private buyFGMode = false;            // Buy FG intro: skip FG_TRIGGER_PROB gate; still goes through real Coin Toss
+    private _coinEntryHeadsProb = 0.50;   // entry Coin Toss prob: 0.50 for normal, COIN_TOSS_HEADS_PROB[0] for Buy FG
 
     // ── 타이틀 nodes (FG 중 숨김) ────────
     private titleNodes:     Node[] = [];
@@ -345,11 +346,12 @@ export class GameBootstrap extends Component {
         return p;
     }
 
-    private showCoinToss(isFGContext: boolean): Promise<boolean> {
+    private showCoinToss(isFGContext: boolean, entryHeadsProb = 0.50): Promise<boolean> {
         return new Promise<boolean>(resolve => {
-            this._coinResolve    = resolve;
-            this._coinFlipped    = false;
-            this._coinIsFGContext = isFGContext;
+            this._coinResolve       = resolve;
+            this._coinFlipped       = false;
+            this._coinIsFGContext   = isFGContext;
+            this._coinEntryHeadsProb = entryHeadsProb;
             if (this.coinTitleLbl) {
                 this.coinTitleLbl.string = isFGContext
                     ? 'FLIP TO CONTINUE' : 'FLIP TO ENTER FREE GAME';
@@ -377,10 +379,10 @@ export class GameBootstrap extends Component {
     private onCoinTap(): void {
         if (this._coinFlipped || !this.coinPanel?.active) return;
         this._coinFlipped = true;
-        // 局間 Coin Toss 使用 fgMultIndex 對應的機率；進場 Coin Toss（!isFGContext）固定 50%
+        // 局間 Coin Toss 使用 fgMultIndex 對應的機率；進場 Coin Toss 用 _coinEntryHeadsProb（正常與 Buy FG 都是 COIN_TOSS_HEADS_PROB[0]=80%）
         const headsProb = this._coinIsFGContext
-            ? (COIN_TOSS_HEADS_PROB[gs.fgMultIndex] ?? 0.24)
-            : 0.50;
+            ? (COIN_TOSS_HEADS_PROB[gs.fgMultIndex] ?? 0.40)
+            : this._coinEntryHeadsProb;
         const result    = Math.random() < headsProb;
         const coinNode  = this.coinGfxNode!;
 
@@ -666,7 +668,7 @@ export class GameBootstrap extends Component {
     /**
      * Buy FG 引導旋轉。
      * 保證 Cascade 擴展至 MAX_ROWS，途中所有勝出累積為基本 BONUS。
-     * 每局旋轉使用保證有勝出的盤面；到達 MAX_ROWS 後由 cascadeLoop 被 buyFGMode 路徑直接呼叫 enterFreeGame。
+     * 到達 MAX_ROWS 後跳過 FG_TRIGGER_PROB 門檻，直接進行真實 Coin Toss（80%~40%）。
      */
     private async playBuyFGIntro(): Promise<void> {
         this.buyFGMode = true;
@@ -677,13 +679,13 @@ export class GameBootstrap extends Component {
             this.reelMgr.reset();
             const grid = this.generateGuaranteedWinGrid(gs.currentRows);
             await this.reelMgr.spinWithGrid(grid);
-            await this.cascadeLoop();  // 自然 cascade + 擴列；到 MAX_ROWS 時自動 enterFreeGame
+            await this.cascadeLoop();  // 自然 cascade + 擴列；到 MAX_ROWS 時觸發 Coin Toss
         }
         if (this.buyFGMode) {
-            // 安全 fallback：次數跛尾巨如未到達 MAX_ROWS
+            // 安全 fallback：20 局仍未到達 MAX_ROWS
             this.buyFGMode = false;
             gs.rowCount = Array(REEL_COUNT).fill(MAX_ROWS);
-            await this.enterFreeGame();
+            await this.doCoinTossAndMaybeFG();  // entry: 80%
         }
     }
 
@@ -783,14 +785,14 @@ export class GameBootstrap extends Component {
             // In Free Game, coin toss happens after the full spin (in freeGameLoop).
             if (!gs.inFreeGame) {
                 if (this.buyFGMode) {
-                    // Buy FG intro: guaranteed entry, no Coin Toss, no trigger gate
+                    // Buy FG: skip FG_TRIGGER_PROB gate, entry Coin Toss same as normal (80%)
                     this.buyFGMode = false;
-                    await this.enterFreeGame();
+                    await this.doCoinTossAndMaybeFG();
                 } else if (Math.random() < FG_TRIGGER_PROB) {
-                    // Normal trigger: pass FG_TRIGGER_PROB gate, then Coin Toss
+                    // Normal trigger: pass FG_TRIGGER_PROB gate, entry Coin Toss 80%
                     await this.doCoinTossAndMaybeFG();
                 }
-                // else: gate not passed, player stays in base game (no visual feedback)
+                // else: gate not passed, player stays in base game
             }
             return;
         }
@@ -825,11 +827,13 @@ export class GameBootstrap extends Component {
 
     /**
      * 在 MAX_ROWS 時有新 Cascade 勝出（基礎遊戲）時呼叫。
-     * 先執行進場 Coin Toss；Heads 才進入 Free Game ×3，Tails 則不進入。
+     * 先執行進場 Coin Toss（×3 等級，80%）；Heads 才進入 Free Game ×3，Tails 則不進入。
+     * 正常觸發與 Buy FG 都使用相同的進場機率。
      */
     private async doCoinTossAndMaybeFG(): Promise<void> {
         this.uiCtrl.setStatus('🪙 Coin Toss！', '#ffaa44');
-        const heads = await this.showCoinToss(false);
+        // 進場永遠用 ×3 等級機率（80%）——正常觸發與 Buy FG 一樣
+        const heads = await this.showCoinToss(false, COIN_TOSS_HEADS_PROB[0]);
         if (heads) {
             await this.enterFreeGame();
         } else {

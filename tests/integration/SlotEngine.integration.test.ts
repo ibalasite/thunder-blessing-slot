@@ -346,7 +346,7 @@ describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
 
             if (!base.fgTriggered) continue;
             if (rng() >= FG_TRIGGER_PROB) continue;   // FG 觸發門檻
-            if (rng() >= 0.50) continue;               // 進場 Coin Toss 50%
+            if (rng() >= COIN_TOSS_HEADS_PROB[0]) continue;  // 進場 Coin Toss 80%（正常與 Buy FG 同）
 
             const fgMarks = new Set<string>();
             let multIdx = 0;
@@ -384,7 +384,7 @@ describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
             totalPayout += base.totalRawWin;
             if (!base.fgTriggered) continue;
             if (rng() >= FG_TRIGGER_PROB) continue;
-            if (rng() >= 0.50) continue;
+            if (rng() >= COIN_TOSS_HEADS_PROB[0]) continue;  // 進場 Coin Toss 80%
 
             const fgMarks = new Set<string>();
             let multIdx = 0;

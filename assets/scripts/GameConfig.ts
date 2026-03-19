@@ -147,18 +147,19 @@ export const PAYLINES_BY_ROWS: Record<number, number[][]> = {
     3: PAYLINES_25, 4: PAYLINES_33, 5: PAYLINES_45, 6: PAYLINES_57,
 };
 
-// Free Game 倍率升級序列（Phase 5 調整，加權平均 10.75×，較原版 11.875× 降 9.5%）
-export const FG_MULTIPLIERS = [3, 7, 15, 25, 65];
+// Free Game 倍率升級序列
+export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 
 /**
- * 每局 FG Spin 後 Coin Toss 翘到 ZEUS（Heads）的機率。
- * 最小倍率時最容易，每升一級漸難，讓玩家感受張力逐漸升高。
+ * 每局 FG Spin 後 Coin Toss 翻到 ZEUS（Heads）的機率。
+ * 進場 Coin Toss 也使用 index 0（80%），正常與 Buy FG 相同。
+ * 越低倍率越容易，每升一級漸難，讓玩家感受張力逐漸升高。
  * index 對應 FG_MULTIPLIERS 的倍率等級：
- *   [0] ×3  → 80%  (x3 後，很容易升到 x7)
- *   [1] ×7  → 68%  (x7 後)
- *   [2] ×15 → 56%  (x15 後)
- *   [3] ×25 → 48%  (x25 後)
- *   [4] ×65 → 40%  (最高等級，維持 x65 繼續)
+ *   [0] ×3  → 80%  (進場 & x3 後升到 x7)
+ *   [1] ×7  → 68%  (x7 後升到 x17)
+ *   [2] ×17 → 56%  (x17 後升到 x27)
+ *   [3] ×27 → 48%  (x27 後升到 x77)
+ *   [4] ×77 → 40%  (最高等級，維持 x77 繼續)
  */
 export const COIN_TOSS_HEADS_PROB = [0.80, 0.68, 0.56, 0.48, 0.40];
 /**
@@ -166,8 +167,10 @@ export const COIN_TOSS_HEADS_PROB = [0.80, 0.68, 0.56, 0.48, 0.40];
  * 基礎遊戲 Cascade 達到 MAX_ROWS 並再次勝出時，還需通過此機率檢查，才能進入 Coin Toss。
  * 調低此值可降低 FG 觸發頻率，是控制整體 RTP 的主要旋鈕。
  * Buy Free Game 不受此限制（付費保證）。
+ * 倒率序列改為 [3,7,17,27,77] 後重新測算：
+ * 設定 0.11（11%）→ 預估全局 RTP ≈ 97%
  */
-export const FG_TRIGGER_PROB = 0.20;
+export const FG_TRIGGER_PROB = 0.11;
 // 雷霆祝福：第二擊觸發機率（Phase 5 設定）
 export const TB_SECOND_HIT_PROB = 0.28;
 
