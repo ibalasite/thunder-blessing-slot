@@ -641,28 +641,13 @@ export class GameBootstrap extends Component {
             return;
         }
         gs.balance -= cost;
-        this.uiCtrl.refresh();
-        // 2. Coin Toss (first time, not in FG)
+        // 2. 直接進入 Free Game（買入保證進入 ×3，不需先投幣）
         this.busy = true;
         this.uiCtrl.enableSpin(false);
-        this.uiCtrl.setStatus('🪙 Coin Toss!', '#ffaa44');
-        const heads = await this.showCoinToss(false);
-        if (!heads) {
-            this.uiCtrl.setStatus('● 反面 — 未能進入 Free Game', '#ff6666');
-            this.busy = false;
-            this.uiCtrl.enableSpin(true);
-            this.uiCtrl.refresh();
-            return;
-        }
-        // 3. Enter Free Game
-        this.uiCtrl.setStatus('⊙ 正面 — 進入 Free Game!', '#00ff88');
-        gs.inFreeGame  = true;
-        gs.fgMultIndex = 0;
         gs.resetRound();
         gs.clearMarks();
         this.uiCtrl.refresh();
-        await this.wait(0.5);
-        await this.freeGameLoop();
+        await this.enterFreeGame();
         this.busy = false;
         this.uiCtrl.enableSpin(true);
         this.uiCtrl.refresh();
@@ -752,10 +737,10 @@ export class GameBootstrap extends Component {
         this.reelMgr.refreshAllMarks();
 
         if (rows === MAX_ROWS) {
-            // In Free Game, coin toss happens after the full spin (in freeGameLoop),
-            // NOT after each cascade. Only trigger from normal game cascade.
+            // In Free Game, coin toss happens after the full spin (in freeGameLoop).
+            // In base game, reaching MAX_ROWS directly enters FG at ×3 (no pre-entry coin toss).
             if (!gs.inFreeGame) {
-                await this.doCoinTossAndMaybeFG();
+                await this.enterFreeGame();
             }
             return;
         }
@@ -788,32 +773,15 @@ export class GameBootstrap extends Component {
         await this.cascadeLoop();
     }
 
-    /** Coin Toss triggered from Cascade at MAX_ROWS */
-    private async doCoinTossAndMaybeFG(): Promise<void> {
-        this.uiCtrl.setStatus('🪙 Coin Toss!', '#ffaa44');
-        const heads = await this.showCoinToss(gs.inFreeGame);
-
-        if (!heads) {
-            if (gs.inFreeGame) {
-                gs.inFreeGame = false;
-                gs.clearMarks();
-                this.hideFGBar();
-                this.uiCtrl.refresh();
-                if (gs.roundWin > 0) await this.showTotalWin(gs.roundWin);
-            } else {
-                this.uiCtrl.setStatus('● 反面 — 本輪結束', '#ff6666');
-            }
-            return;
-        }
-
-        if (!gs.inFreeGame) {
-            gs.inFreeGame  = true;
-            gs.fgMultIndex = 0;
-        } else {
-            if (gs.fgMultIndex < FG_MULTIPLIERS.length - 1) gs.fgMultIndex++;
-        }
+    /**
+     * MAX_ROWS 達成（或 Buy FG）：直接帶 ×3 進入 Free Game，不需先投幣。
+     * Coin Toss 只發生在每局 FG Spin 結束後（在 freeGameLoop 內）。
+     */
+    private async enterFreeGame(): Promise<void> {
+        gs.inFreeGame  = true;
+        gs.fgMultIndex = 0;
         this.showFGBar(gs.fgMultIndex);
-        this.uiCtrl.setStatus(`⊙ 正面 — Free Game x${gs.fgMultiplier}`, '#00ff88');
+        this.uiCtrl.setStatus(`⊙ 進入 Free Game ×${gs.fgMultiplier}！`, '#00ff88');
         this.uiCtrl.refresh();
         await this.wait(0.5);
         await this.freeGameLoop();
