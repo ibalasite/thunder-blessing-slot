@@ -243,7 +243,7 @@ export class GameBootstrap extends Component {
 
         const extraBetNode = new Node('ExtraBet');
         uiPanel.addChild(extraBetNode);
-        extraBetNode.setPosition(150, -5, 0);
+        extraBetNode.setPosition(200, -5, 0);
         extraBetNode.addComponent(UITransform).setContentSize(120, 36);
         this.uiCtrl.extraBetBg = extraBetNode.addComponent(Graphics);
         makeLabel(extraBetNode, 'EXTRA BET', 12, '#88aacc', 0, 0);
@@ -260,9 +260,9 @@ export class GameBootstrap extends Component {
         buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
 
         // Auto Spin 按鈕 + 剩餘次數標籤
-        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, 300, -5, '#1a3a3a', '#00cccc');
+        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, 350, -5, '#1a3a3a', '#00cccc');
         autoBtn.on(Button.EventType.CLICK, this.onAutoSpinClick, this);
-        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', 300, 18);
+        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', 350, 18);
 
         // Overlay panels (all hidden initially)
         this.autoSpinPanel = this.buildAutoSpinPanel(root); this.autoSpinPanel.active = false;
