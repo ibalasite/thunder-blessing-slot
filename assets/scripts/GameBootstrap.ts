@@ -804,7 +804,7 @@ export class GameBootstrap extends Component {
             // 安全 fallback：20 局仍未到達 MAX_ROWS
             this.buyFGMode = false;
             gs.rowCount = Array(REEL_COUNT).fill(MAX_ROWS);
-            await this.doCoinTossAndMaybeFG();  // entry: 80%
+            await this.doCoinTossAndMaybeFG(true);  // Buy FG 保證入場
         }
     }
 
@@ -919,8 +919,9 @@ export class GameBootstrap extends Component {
                 const triggerCoinToss = this.buyFGMode || Math.random() < FG_TRIGGER_PROB;
                 this.updateFreeLetters(newRows, triggerCoinToss);
                 if (triggerCoinToss) {
+                    const wasBuyFG = this.buyFGMode;   // 記住是否為 Buy FG 路徑
                     this.buyFGMode = false;
-                    await this.doCoinTossAndMaybeFG();
+                    await this.doCoinTossAndMaybeFG(wasBuyFG);  // Buy FG → guaranteed=true
                 }
             }
             return;
@@ -961,13 +962,19 @@ export class GameBootstrap extends Component {
 
     /**
      * 在 MAX_ROWS 時有新 Cascade 勝出（基礎遊戲）時呼叫。
-     * 先執行進場 Coin Toss（×3 等級，80%）；Heads 才進入 Free Game ×3，Tails 則不進入。
-     * 正常觸發與 Buy FG 都使用相同的進場機率。
+     * @param guaranteed Buy FG 購買路徑傳 true，保證 Coin Toss 必然正面（玩家已付費）。
+     *   正常自然觸發傳 false，使用 COIN_TOSS_HEADS_PROB[0]=80%。
      */
-    private async doCoinTossAndMaybeFG(): Promise<void> {
+    private async doCoinTossAndMaybeFG(guaranteed = false): Promise<void> {
+        // 顯示本輪累計基礎獎（Buy FG intro 各局累計 + 本局 cascade 獎）
+        if (gs.roundWin > 0) {
+            this.uiCtrl.setStatus(`基礎獎累計 ${gs.roundWin.toFixed(2)}`, '#ffd700');
+            await this.wait(0.8);
+        }
         this.uiCtrl.setStatus('🪙 Coin Toss！', '#ffaa44');
-        // 進場永遠用 ×3 等級機率（80%）——正常觸發與 Buy FG 一樣
-        const heads = await this.showCoinToss(false, COIN_TOSS_HEADS_PROB[0]);
+        // Buy FG 保證入場（機率 1.0）；正常觸發用 80%
+        const prob  = guaranteed ? 1.0 : COIN_TOSS_HEADS_PROB[0];
+        const heads = await this.showCoinToss(false, prob);
         if (heads) {
             await this.enterFreeGame();
         } else {
