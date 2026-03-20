@@ -818,26 +818,23 @@ export class GameBootstrap extends Component {
         await this.reelMgr.cascade(winCells, newRows, newSyms);
         this.reelMgr.refreshAllMarks();
 
-        // 更新 FREE 字母亮燈（rows 是擴列前的列數）
-        if (!gs.inFreeGame) {
-            const isFourthE = (rows === MAX_ROWS);  // 雲已全消，此次勝出亮起第4個E
-            this.updateFreeLetters(newRows, isFourthE);
-        }
-
         if (rows === MAX_ROWS) {
             // In Free Game, coin toss happens after the full spin (in freeGameLoop).
             if (!gs.inFreeGame) {
-                if (this.buyFGMode) {
-                    // Buy FG: skip FG_TRIGGER_PROB gate, entry Coin Toss same as normal (80%)
+                // 先決定是否觸發 Coin Toss，第 4 個 E 只在真的會進 Coin Toss 時才亮
+                const triggerCoinToss = this.buyFGMode || Math.random() < FG_TRIGGER_PROB;
+                this.updateFreeLetters(newRows, triggerCoinToss);
+                if (triggerCoinToss) {
                     this.buyFGMode = false;
                     await this.doCoinTossAndMaybeFG();
-                } else if (Math.random() < FG_TRIGGER_PROB) {
-                    // Normal trigger: pass FG_TRIGGER_PROB gate, entry Coin Toss 80%
-                    await this.doCoinTossAndMaybeFG();
                 }
-                // else: gate not passed, player stays in base game
             }
             return;
+        }
+
+        // 更新 FREE 字母亮燈（rows 是擴列前的列數，第4個E不在此處亮）
+        if (!gs.inFreeGame) {
+            this.updateFreeLetters(newRows, false);
         }
         await this.cascadeLoop();
     }
