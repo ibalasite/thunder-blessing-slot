@@ -3,15 +3,14 @@ body {
   padding: 0;
   border: 0;
   margin: 0;
-
-  text-align: center;
   background-color: #000;
   font-family: Helvetica, Verdana, Arial, sans-serif;
-  /* Vertically center the game on tall screens */
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 body, canvas, div {
@@ -36,16 +35,8 @@ canvas {
 }
 
 #GameDiv {
-    margin: 0 auto;
-    position:relative;
-    border:5px solid black;
-    border-radius: 10px;
-    box-shadow: 0 5px 50px #333;
-    /* Fit portrait 720×1280 into any screen without distortion */
-    width: min(100vw, calc(100vh * 720 / 1280)) !important;
-    height: min(100vh, calc(100vw * 1280 / 720)) !important;
-    max-width: 720px;
-    max-height: 1280px;
+    position: relative;
+    overflow: hidden;
 }
 
 #Cocos3dGameContainer, #GameCanvas {

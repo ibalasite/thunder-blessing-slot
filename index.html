@@ -21,16 +21,33 @@
     <link rel="icon" href="favicon.ico"/>
   </head>
   <body>
-    <h1 class="header">thunder-blessing-slot</h1>
 
     <div id="GameDiv" cc_exact_fit_screen="false" style="width: 720px; height: 1280px;">
       <div id="Cocos3dGameContainer">
         <canvas id="GameCanvas" width="720" height="1280" tabindex="99"></canvas>
       </div>
     </div>
-    <p class="footer">
-      Created with <a href="https://www.cocos.com/products" title="Cocos Creator">Cocos Creator</a>
-    </p>
+    <script>
+    (function() {
+      var DESIGN_W = 720, DESIGN_H = 1280;
+      function scaleGame() {
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var scale = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+        var w = Math.floor(DESIGN_W * scale);
+        var h = Math.floor(DESIGN_H * scale);
+        var d = document.getElementById('GameDiv');
+        if (d) {
+          d.style.cssText = 'width:' + w + 'px;height:' + h + 'px;' +
+            'position:relative;border:none;box-shadow:none;margin:auto;';
+        }
+      }
+      window.addEventListener('resize', scaleGame);
+      window.addEventListener('orientationchange', function(){ setTimeout(scaleGame, 200); });
+      // Run after Cocos sets its own size
+      window.addEventListener('load', function(){ setTimeout(scaleGame, 100); });
+      scaleGame();
+    })();
+    </script>
     <!-- Polyfills bundle. -->
 
 <script src="src/polyfills.bundle.js" charset="utf-8"> </script>    
