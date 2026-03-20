@@ -28,10 +28,9 @@ export class UIController extends Component {
     refresh(): void {
         if (!this.lblBalance) return;
         this.lblBalance.string   = `餘額: ${gs.balance.toFixed(2)}`;
-        this.lblBet.string       = `投注 押注:${gs.totalBet.toFixed(2)}`;
-        this.lblWin.string       = `WIN: ${gs.roundWin.toFixed(2)}`;
-        const lines              = gs.currentRows <= 3 ? 25 : 57;
-        this.lblLines.string     = `${lines} LINES`;
+        this.lblBet.string       = `押注:${gs.totalBet.toFixed(2)}`;
+        this.lblWin.string       = `WIN:${gs.roundWin.toFixed(2)}`;
+        this.lblLines.string     = '';
         this.lblMultiplier.string= gs.inFreeGame
             ? `FREE GAME  ×${gs.fgMultiplier}` : '';
     }
@@ -43,7 +42,7 @@ export class UIController extends Component {
 
     /** amount = 累計 roundWin（非單步），讓 WIN label 始終顯示本輪/本 FG session 總獎 */
     showWinPop(cumulativeWin: number): void {
-        this.lblWin.string = `WIN: ${cumulativeWin.toFixed(2)}`;
+        this.lblWin.string = `WIN:${cumulativeWin.toFixed(2)}`;
         this.lblWin.node.setScale(1, 1, 1);
         tween(this.lblWin.node)
             .to(0.18, { scale: new Vec3(1.5, 1.5, 1) })

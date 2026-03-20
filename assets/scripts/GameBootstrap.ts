@@ -223,13 +223,12 @@ export class GameBootstrap extends Component {
         panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
         panelGfx.stroke();
 
-        // WIN 獨立一行（panel 外），不與 balance/bet 互搶空間
-        this.uiCtrl.lblWin        = makeLabel(root,    '', 26, '#ffd700',    0, -205, 500);
-        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -228, 560);
+        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -205, 560);
 
         // panel 內：balance / bet 各自靠邊，lines / multiplier 第二行，按鈕第三行
         this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -280, 30, 260);
-        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',  280, 30, 260);
+        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',   90, 30, 170);
+        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  260, 30, 200);
         this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899', -280,  8, 260);
         this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',   80,  8, 300);
 
