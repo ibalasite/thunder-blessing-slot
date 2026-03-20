@@ -251,8 +251,8 @@ export class GameBootstrap extends Component {
         extraBetNode.on(Button.EventType.CLICK, this.onExtraBetClick, this);
         this.uiCtrl.btnExtraBet = extraBetNode;
 
-        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,  -80, -5, '#1a3a1a');
-        const betMinusBtn = makeButton(uiPanel, '−', 36, 36, -130, -5, '#3a1a1a');
+        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,   80, -5, '#1a3a1a');
+        const betMinusBtn = makeButton(uiPanel, '−', 36, 36,  -80, -5, '#3a1a1a');
         betPlusBtn.on(Button.EventType.CLICK,  () => this.changeBet( 0.25), this);
         betMinusBtn.on(Button.EventType.CLICK, () => this.changeBet(-0.25), this);
 
