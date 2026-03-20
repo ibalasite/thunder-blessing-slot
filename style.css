@@ -46,15 +46,18 @@ canvas {
   }
 }
 
-/* ── 直向（手機直拿）：旋轉 90°，遊戲填滿短邊，長邊縮放 ── */
+/* ── 直向（手機直拿）：旋轉 90°，讓橫向遊戲填滿直向螢幕 ──
+   rotate(90deg) 後：DOM width → 視覺高度，DOM height → 視覺寬度
+   所以要確保 DOM height ≤ vw（填滿手機短邊），DOM width = DOM height × 960/1280 ── */
 @media (orientation: portrait) {
   #GameDiv {
     position: fixed;
     left: 50%;
     top:  50%;
-    /* DOM 寬 = 旋轉後的視覺高，DOM 高 = 旋轉後的視覺寬 */
-    width:  min(100vw, calc(100svh * 960 / 1280));
-    height: min(100svh, calc(100vw * 1280 / 960));
+    /* DOM height 對應旋轉後的視覺寬，限制在 vw 以內 */
+    height: min(100vw,  calc(100svh * 1280 / 960));
+    /* DOM width  對應旋轉後的視覺高，依比例計算，限制在 svh 以內 */
+    width:  min(100svh, calc(100vw  * 960  / 1280));
     transform: translate(-50%, -50%) rotate(90deg);
     border: none;
     box-shadow: none;
