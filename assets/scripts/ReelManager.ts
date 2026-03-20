@@ -85,7 +85,7 @@ export class ReelManager extends Component {
         const lblNode = new Node('lbl');
         cellNode.addChild(lblNode);
         const lbl = lblNode.addComponent(Label);
-        lbl.fontSize = 22;
+        lbl.fontSize = 16;
         lbl.isBold   = true;
         lbl.color    = new Color(255, 255, 255, 255);
         const lblUit = lblNode.addComponent(UITransform);
