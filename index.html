@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
 
-    <title>Cocos Creator | thunder-blessing-slot</title>
+    <title>⚡ Thunder Blessing</title>
 
     <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true"/>
     <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -12,22 +12,90 @@
     <meta name="screen-orientation" content="portrait"/>
     <meta name="x5-fullscreen" content="true"/>
     <meta name="360-fullscreen" content="true"/>
-
     <meta name="renderer" content="webkit"/>
     <meta name="force-rendering" content="webkit"/>
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
 
     <link rel="stylesheet" type="text/css" href="./style.css"/>
     <link rel="icon" href="favicon.ico"/>
+
+    <style>
+      /* ── Loading overlay ── */
+      #LoadingScreen {
+        position: fixed; inset: 0; z-index: 9999;
+        background: #04080f;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        transition: opacity 0.5s ease;
+      }
+      #LoadingScreen.fade-out { opacity: 0; pointer-events: none; }
+      #LoadingTitle {
+        font-family: Arial, sans-serif;
+        font-size: clamp(22px, 6vw, 36px);
+        font-weight: bold;
+        color: #ffe066;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        text-shadow: 0 0 20px #ffaa00;
+      }
+      #LoadingSubtitle {
+        font-family: Arial, sans-serif;
+        font-size: clamp(12px, 3vw, 16px);
+        color: #88aacc;
+        margin-bottom: 40px;
+      }
+      #LoadingBarWrap {
+        width: min(320px, 70vw);
+        height: 8px;
+        background: #1a1a3a;
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid #2a2a5a;
+      }
+      #LoadingBar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #3a88ff, #00cfff);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+      }
+      #LoadingPct {
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        color: #557799;
+        margin-top: 10px;
+      }
+      /* Lightning bolt pulse */
+      #LoadingBolt {
+        font-size: clamp(48px, 14vw, 80px);
+        margin-bottom: 16px;
+        animation: bolt-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes bolt-pulse {
+        0%, 100% { opacity: 1; transform: scale(1);   text-shadow: 0 0 30px #ffcc00; }
+        50%       { opacity: .7; transform: scale(.9); text-shadow: 0 0 60px #ff8800; }
+      }
+    </style>
   </head>
   <body>
+
+    <!-- Loading overlay (shown until Cocos is ready) -->
+    <div id="LoadingScreen">
+      <div id="LoadingBolt">⚡</div>
+      <div id="LoadingTitle">THUNDER BLESSING</div>
+      <div id="LoadingSubtitle">Zeus Slot Game</div>
+      <div id="LoadingBarWrap"><div id="LoadingBar"></div></div>
+      <div id="LoadingPct">載入中…</div>
+    </div>
 
     <div id="GameDiv" cc_exact_fit_screen="false" style="width: 720px; height: 1280px;">
       <div id="Cocos3dGameContainer">
         <canvas id="GameCanvas" width="720" height="1280" tabindex="99"></canvas>
       </div>
     </div>
+
     <script>
+    // ── Scale game to fit screen ──────────────────────────────────
     (function() {
       var DESIGN_W = 720, DESIGN_H = 1280;
       function scaleGame() {
@@ -36,31 +104,72 @@
         var w = Math.floor(DESIGN_W * scale);
         var h = Math.floor(DESIGN_H * scale);
         var d = document.getElementById('GameDiv');
-        if (d) {
-          d.style.cssText = 'width:' + w + 'px;height:' + h + 'px;' +
-            'position:relative;border:none;box-shadow:none;margin:auto;';
-        }
+        if (d) d.style.cssText = 'width:'+w+'px;height:'+h+'px;position:relative;margin:auto;';
       }
       window.addEventListener('resize', scaleGame);
       window.addEventListener('orientationchange', function(){ setTimeout(scaleGame, 200); });
-      // Run after Cocos sets its own size
       window.addEventListener('load', function(){ setTimeout(scaleGame, 100); });
       scaleGame();
     })();
+
+    // ── Loading progress + hide overlay ──────────────────────────
+    (function() {
+      var bar  = document.getElementById('LoadingBar');
+      var pct  = document.getElementById('LoadingPct');
+      var screen = document.getElementById('LoadingScreen');
+
+      function setProgress(p) {
+        var v = Math.round(p * 100);
+        if (bar) bar.style.width = v + '%';
+        if (pct) pct.textContent = v + '%';
+      }
+      function hideLoading() {
+        if (!screen) return;
+        screen.classList.add('fade-out');
+        setTimeout(function(){ screen.style.display = 'none'; }, 550);
+      }
+
+      // Cocos Creator 3.x exposes window.cc after engine init;
+      // hook onProgress / onComplete via the boot module event
+      var _origImport = window.System && window.System.import.bind(window.System);
+      // Fake progress while scripts load (0→60%)
+      var fakeP = 0;
+      var fakeTimer = setInterval(function() {
+        fakeP = Math.min(fakeP + (Math.random() * 0.04), 0.6);
+        setProgress(fakeP);
+      }, 200);
+
+      // After Cocos starts, it dispatches 'load' on window or we poll cc.director
+      var pollStart = Date.now();
+      var poll = setInterval(function() {
+        try {
+          if (window.cc && window.cc.director) {
+            clearInterval(fakeTimer);
+            clearInterval(poll);
+            setProgress(1);
+            setTimeout(hideLoading, 300);
+          }
+          // Safety: hide after 15 s regardless
+          if (Date.now() - pollStart > 15000) {
+            clearInterval(fakeTimer); clearInterval(poll);
+            setProgress(1); hideLoading();
+          }
+        } catch(e) {}
+      }, 300);
+    })();
     </script>
+
     <!-- Polyfills bundle. -->
+    <script src="src/polyfills.bundle.js" charset="utf-8"> </script>
 
-<script src="src/polyfills.bundle.js" charset="utf-8"> </script>    
+    <!-- SystemJS support. -->
+    <script src="src/system.bundle.js" charset="utf-8"> </script>
 
+    <!-- Import map -->
+    <script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
 
-<!-- SystemJS support. -->
-<script src="src/system.bundle.js" charset="utf-8"> </script>
-
-<!-- Import map -->
-<script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
-
-<script>
-    System.import('./index.js').catch(function(err) { console.error(err); })
-</script>
+    <script>
+        System.import('./index.js').catch(function(err) { console.error(err); })
+    </script>
   </body>
 </html>
