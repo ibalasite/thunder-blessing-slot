@@ -705,6 +705,9 @@ export class GameBootstrap extends Component {
             }
         });
     }
+
+    /** 購買 FG 入場動畫：跑 cascade loop 直到擴至 MAX_ROWS 觸發 Coin Toss */
+    private async playBuyFGIntro(): Promise<void> {
         this.buyFGMode = true;
         this.updateFreeLetters(BASE_ROWS);   // Buy FG 開始重置 FREE 燅燅
         this.uiCtrl.setStatus('★ Buy Free Game — 旋轉中…', '#ffdd44');
