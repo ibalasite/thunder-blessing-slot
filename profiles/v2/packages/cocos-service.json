@@ -1,0 +1,22 @@
+{
+  "__version__": "3.0.9",
+  "builder": {
+    "options": {
+      "web-desktop": {
+        "configID": "c19048",
+        "services": []
+      }
+    },
+    "taskOptionsMap": {
+      "1773998429595": {
+        "configID": "c19048",
+        "services": []
+      }
+    },
+    "__version__": "1.3.9"
+  },
+  "builder-options": {
+    "configID": "c19048",
+    "services": []
+  }
+}

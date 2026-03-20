@@ -87,14 +87,14 @@ export const SYMBOL_DARK: Record<SymType, string> = {
 export const REEL_COUNT  = 5;
 export const BASE_ROWS   = 3;
 export const MAX_ROWS    = 6;
-export const SYMBOL_W    = 100;
-export const SYMBOL_H    = 76;
-export const SYMBOL_GAP  = 4;
+export const SYMBOL_W    = 110;  // square cell
+export const SYMBOL_H    = 110;  // square cell
+export const SYMBOL_GAP  = 6;
 export const REEL_GAP    = 6;
 export const CANVAS_W    = 720;
 export const CANVAS_H    = 1280;
-export const REEL_TOP_Y  = 329;    // reel area top Y from canvas center
-export const REEL_START_X = -212;  // leftmost reel center X
+export const REEL_TOP_Y  = 380;    // reel area top Y from canvas center (frame top)
+export const REEL_START_X = -232;  // leftmost reel center X
 
 // ─── 25 條連線定義 (每個值 = 第N滾輪在第幾列，從0開始)  ──
 // ─── 連線定義（row 0 = 底部，row 增加 = 往上；與 Python simulator 完全同步）──────
@@ -125,18 +125,18 @@ export const PAYLINES_33: number[][] = [...PAYLINES_25,
 // 5 列可見（+12 條，含 row 4）
 export const PAYLINES_45: number[][] = [...PAYLINES_33,
     [4,4,4,4,4], [0,1,2,3,4], [4,3,2,1,0],
-    [2,2,2,3,4], [2,2,2,1,0],
+    [2,2,2,3,4],
     [0,0,1,2,3], [4,4,3,2,1],
     [1,2,3,4,4], [3,2,1,0,0],
     [0,2,4,2,0], [4,2,0,2,4],
-    [2,3,4,3,2], [2,1,0,1,2],
+    [2,3,4,3,2], [4,3,2,3,4],
 ];
 
 // 6 列可見（+12 條，含 row 5）
 export const PAYLINES_57: number[][] = [...PAYLINES_45,
     [5,5,5,5,5], [0,1,2,3,5], [5,3,2,1,0],
     [0,0,0,1,5], [5,5,5,4,0],
-    [2,3,4,5,5], [3,2,1,0,0],
+    [2,3,4,5,5], [5,4,3,4,5],
     [1,2,3,4,5], [5,4,3,2,1],
     [0,2,5,2,0], [5,3,0,3,5],
     [3,4,5,4,3],

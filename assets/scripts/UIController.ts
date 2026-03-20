@@ -29,10 +29,10 @@ export class UIController extends Component {
     refresh(): void {
         if (!this.lblBalance) return;
         this.lblBalance.string   = `餘額: ${gs.balance.toFixed(2)}`;
-        this.lblBet.string       = `押注:${gs.totalBet.toFixed(2)}`;
-        this.lblWin.string       = `WIN:${gs.roundWin.toFixed(2)}`;
+        this.lblBet.string       = `押分: ${gs.totalBet.toFixed(2)}`;
+        this.lblWin.string       = `WIN: ${gs.roundWin > 0 ? gs.roundWin.toFixed(2) : '0'}`;
         this.lblLines.string     = '';
-        this.lblMultiplier.string= gs.inFreeGame
+        this.lblMultiplier.string = gs.inFreeGame
             ? `FREE GAME  ×${gs.fgMultiplier}` : '';
     }
 
@@ -62,7 +62,7 @@ export class UIController extends Component {
         }
         // ② 押注旁小字：更新為累計值
         if (this.lblWin) {
-            this.lblWin.string = `WIN:${roundWin.toFixed(2)}`;
+            this.lblWin.string = `WIN: ${roundWin.toFixed(2)}`;
         }
     }
 
@@ -75,15 +75,28 @@ export class UIController extends Component {
         const on = gs.extraBetOn;
         if (!this.extraBetBg) return;
         this.extraBetBg.clear();
-        const c = Color.fromHEX(new Color(), on ? '#1a4a88' : '#222233');
+        // Main background (268×42)
+        const c = Color.fromHEX(new Color(), on ? '#0e2a60' : '#14142e');
         this.extraBetBg.fillColor = c;
-        this.extraBetBg.roundRect(-60, -18, 120, 36, 8);
+        this.extraBetBg.roundRect(-134, -21, 268, 42, 10);
         this.extraBetBg.fill();
-        const border = Color.fromHEX(new Color(), on ? '#00cfff' : '#444466');
+        // Border
+        const border = Color.fromHEX(new Color(), on ? '#00cfff' : '#333355');
         this.extraBetBg.strokeColor = border;
         this.extraBetBg.lineWidth   = on ? 2 : 1;
-        this.extraBetBg.roundRect(-60, -18, 120, 36, 8);
+        this.extraBetBg.roundRect(-134, -21, 268, 42, 10);
         this.extraBetBg.stroke();
+        // ON/OFF badge (right side)
+        this.extraBetBg.fillColor = Color.fromHEX(new Color(), on ? '#006622' : '#2a0a0a');
+        this.extraBetBg.roundRect(66, -12, 58, 24, 6);
+        this.extraBetBg.fill();
+        this.extraBetBg.strokeColor = Color.fromHEX(new Color(), on ? '#00cc44' : '#664444');
+        this.extraBetBg.lineWidth = 1;
+        this.extraBetBg.roundRect(66, -12, 58, 24, 6);
+        this.extraBetBg.stroke();
+        // Update label text
+        const lbl = this.btnExtraBet?.getChildByName('lbl')?.getComponent(Label);
+        if (lbl) lbl.string = `EXTRA BET  ${on ? 'ON' : 'OFF'}`;
     }
 }
 

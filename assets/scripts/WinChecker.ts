@@ -30,26 +30,27 @@ export function checkWins(grid: SymType[][], rows: number, totalBet: number): Wi
         if (rowPath.some(r => r >= rows)) continue;
 
         const firstSym = grid[0][rowPath[0]];
-        // 計算從左邊連續幾個符號相同（Wild 可替換）
+        // 先決定比對符號：Wild 必須替換同一種符號，找第一個非 Wild
+        let matchSym: SymType = firstSym;
+        if (firstSym === SYM.WILD) {
+            for (let ri = 1; ri < 5; ri++) {
+                const s = grid[ri][rowPath[ri]];
+                if (s !== SYM.WILD) { matchSym = s; break; }
+            }
+        }
+        if (matchSym === SYM.SCATTER) continue;  // Scatter 不計一般連線
+
+        // 計算從左連續 matchSym 或 Wild 的數量
         let count = 1;
         for (let ri = 1; ri < 5; ri++) {
             const sym = grid[ri][rowPath[ri]];
-            if (sym === firstSym || sym === SYM.WILD || firstSym === SYM.WILD) {
+            if (sym === matchSym || sym === SYM.WILD) {
                 count = ri + 1;
             } else {
                 break;
             }
         }
         if (count < 3) continue;
-
-        // 決定實際中獎符號（Wild 連線時，看第一個非 Wild 符號）
-        let matchSym: SymType = firstSym;
-        if (firstSym === SYM.WILD) {
-            for (let ri = 1; ri < count; ri++) {
-                if (grid[ri][rowPath[ri]] !== SYM.WILD) { matchSym = grid[ri][rowPath[ri]]; break; }
-            }
-        }
-        if (matchSym === SYM.SCATTER) continue;  // Scatter 不計一般連線
 
         const multiplier = PAYTABLE[matchSym][count];
         if (multiplier <= 0) continue;

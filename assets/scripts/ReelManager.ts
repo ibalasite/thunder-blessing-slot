@@ -567,6 +567,7 @@ export class ReelManager extends Component {
 
     /** 重置盤面到 BASE_ROWS */
     reset(): void {
+        this.clearPreviewExtraBet();   // restore any preview SC cells before redraw
         gs.rowCount = Array(REEL_COUNT).fill(BASE_ROWS);
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             for (let row = 0; row < MAX_ROWS; row++) {
@@ -578,6 +579,65 @@ export class ReelManager extends Component {
             }
         }
         this.setCloud(BASE_ROWS);
+    }
+
+    // ── Extra Bet 預覽 ───────────────────────────────────────────
+    private _previewCells: { reel: number; row: number; origSym: SymType; lifted: boolean }[] = [];
+
+    /**
+     * Extra Bet ON 視覺預覽：5 個 SC 在全 5×6 隨機跳出再消失，純動畫不留殘留。
+     * 動畫結束後自動還原原始符號；若 SPIN 提前觸發，clearPreviewExtraBet() 立即取消。
+     */
+    previewExtraBet(): void {
+        this.clearPreviewExtraBet();
+        // All 30 cells (5 reels × 6 rows) are candidates
+        const candidates: { reel: number; row: number }[] = [];
+        for (let ri = 0; ri < REEL_COUNT; ri++)
+            for (let row = 0; row < MAX_ROWS; row++)
+                candidates.push({ reel: ri, row });
+        // Fisher-Yates shuffle then take first 5
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (const { reel, row } of candidates.slice(0, 5)) {
+            const cell = this.cells[reel]?.[row];
+            if (!cell) continue;
+            const origSym = cell.sym;
+            const lifted  = row >= BASE_ROWS && !!this.cloudNode;
+            this._previewCells.push({ reel, row, origSym, lifted });
+            this.drawCell(cell, SYM.SCATTER);
+            if (lifted) cell.node.setSiblingIndex(this.node.children.length);
+            // Bounce animation → restore original symbol on completion
+            tween(cell.node)
+                .to(0.10, { scale: new Vec3(1.25, 1.25, 1) })
+                .to(0.12, { scale: new Vec3(0.92, 0.92, 1) })
+                .to(0.10, { scale: new Vec3(1,    1,    1) })
+                .call(() => {
+                    // Restore this cell (only if still in preview list)
+                    const idx = this._previewCells.findIndex(p => p.reel === reel && p.row === row);
+                    if (idx === -1) return;  // already cleared by clearPreviewExtraBet()
+                    this.drawCell(cell, origSym);
+                    if (lifted && this.cloudNode)
+                        cell.node.setSiblingIndex(this.cloudNode.getSiblingIndex());
+                    this._previewCells.splice(idx, 1);
+                })
+                .start();
+        }
+    }
+
+    /** SPIN 開始 / Extra Bet 關閉時立即取消尚未完成的預覽動畫並還原 */
+    clearPreviewExtraBet(): void {
+        for (const { reel, row, origSym, lifted } of this._previewCells) {
+            const cell = this.cells[reel]?.[row];
+            if (!cell) continue;
+            tween(cell.node).stop();
+            cell.node.setScale(1, 1, 1);
+            this.drawCell(cell, origSym);
+            if (lifted && this.cloudNode)
+                cell.node.setSiblingIndex(this.cloudNode.getSiblingIndex());
+        }
+        this._previewCells = [];
     }
 }
 

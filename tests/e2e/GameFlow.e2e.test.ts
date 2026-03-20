@@ -113,7 +113,8 @@ describe('E2E — 完整 Session 流程', () => {
         const SPINS = 1000;
         const { totalWin } = runSession(engine, state, SPINS);
         const rtp = totalWin / SPINS;
-        expect(rtp).toBeGreaterThan(0.20);
+        // Wild-chain 修正後實測 base RTP ≈ 16~17%；1000 局樣本允許較大波動
+        expect(rtp).toBeGreaterThan(0.05);
         expect(rtp).toBeLessThan(1.80);
     });
 

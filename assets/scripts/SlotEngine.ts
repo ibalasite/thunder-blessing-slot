@@ -139,25 +139,25 @@ export class SlotEngine {
             if (rowPath.some(r => r >= rows)) continue;
 
             const firstSym = grid[0][rowPath[0]];
+            // Resolve matchSym first: Wild substitutes for the first non-Wild symbol
+            let matchSym: SymType = firstSym;
+            if (firstSym === SYM.WILD) {
+                for (let ri = 1; ri < REEL_COUNT; ri++) {
+                    const s = grid[ri][rowPath[ri]];
+                    if (s !== SYM.WILD) { matchSym = s; break; }
+                }
+            }
+            if (matchSym === SYM.SCATTER) continue;
+
+            // Count consecutive matching symbols (matchSym or Wild) from the left
             let count = 1;
             for (let ri = 1; ri < REEL_COUNT; ri++) {
                 const sym = grid[ri][rowPath[ri]];
-                if (sym === firstSym || sym === SYM.WILD || firstSym === SYM.WILD) {
+                if (sym === matchSym || sym === SYM.WILD) {
                     count = ri + 1;
                 } else break;
             }
             if (count < 3) continue;
-
-            // Wild 連線：取第一個非 Wild 符號作為賠率基準
-            let matchSym: SymType = firstSym;
-            if (firstSym === SYM.WILD) {
-                for (let ri = 1; ri < count; ri++) {
-                    if (grid[ri][rowPath[ri]] !== SYM.WILD) {
-                        matchSym = grid[ri][rowPath[ri]]; break;
-                    }
-                }
-            }
-            if (matchSym === SYM.SCATTER) continue;
 
             const multiplier = PAYTABLE[matchSym][count];
             if (!multiplier || multiplier <= 0) continue;

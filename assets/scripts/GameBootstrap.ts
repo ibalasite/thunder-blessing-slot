@@ -168,103 +168,150 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 24, '#ffe066', 0, 590).node);
-        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 14, '#88aacc', 0, 562).node);
+        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 24, '#ffe066', 0, 530).node);
+        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 14, '#88aacc', 0, 506).node);
 
-        // ── FREE 字母收集指示器 (滾輪區上方) ───────────────────────
+        // ── FREE 字母收集指示器 (滾輪框上方) ───────────────────────
         const freeLetters = ['F', 'R', 'E', 'E'];
         const freeColors  = { off: '#2a2a44', on: '#ffe066' };
-        const freeBarY    = 400;   // THUNDER(590)→Zeus(562)→FREE(400)→reel頂(329)
         const letterSpacing = 50;
-        const totalW = (freeLetters.length - 1) * letterSpacing;
+        const freeTotalW = (freeLetters.length - 1) * letterSpacing;
         freeLetters.forEach((ch, i) => {
             const lbl = makeLabel(root, ch, 20, freeColors.off,
-                -totalW / 2 + i * letterSpacing, freeBarY);
+                -freeTotalW / 2 + i * letterSpacing, 452);
             lbl.isBold = true;
             this.freeLbls.push(lbl);
         });
 
-        // Reel area (with Mask to clip symbols during drop-in animation)
+        // Reel area (Mask; reel center y=72 → frame top≈427, bottom≈−283)
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
-        reelArea.setPosition(0, 70, 0);
+        reelArea.setPosition(0, 72, 0);
         const reelUit = reelArea.addComponent(UITransform);
-        reelUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
+        reelUit.setContentSize(
+            REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W,
+            MAX_ROWS  * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
         const reelMask = reelArea.addComponent(Mask);
         reelMask.type = Mask.Type.RECT;
         this.reelMgr = reelArea.addComponent(ReelManager);
 
-        // Reel frame
+        // Reel frame — tight wrap around all MAX_ROWS cells
         const reelFrame = new Node('ReelFrame');
         root.addChild(reelFrame);
-        reelFrame.setPosition(0, 70, 1);
+        reelFrame.setPosition(0, 72, 1);
+        const rfW = REEL_COUNT * SYMBOL_W + (REEL_COUNT - 1) * REEL_GAP + 20;
+        const rfH = MAX_ROWS  * SYMBOL_H + (MAX_ROWS  - 1) * SYMBOL_GAP + 20;
         const rfUit = reelFrame.addComponent(UITransform);
-        rfUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + 20, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + 20);
+        rfUit.setContentSize(rfW, rfH);
         const rfGfx = reelFrame.addComponent(Graphics);
-        const fw = rfUit.contentSize.width, fh = rfUit.contentSize.height;
         rfGfx.strokeColor = Color.fromHEX(new Color(), '#8b6914');
         rfGfx.lineWidth   = 3;
-        rfGfx.roundRect(-fw/2, -fh/2, fw, fh, 14);
+        rfGfx.roundRect(-rfW/2, -rfH/2, rfW, rfH, 14);
+        rfGfx.stroke();
+        rfGfx.strokeColor = Color.fromHEX(new Color(), '#cc9900');
+        rfGfx.lineWidth   = 1;
+        rfGfx.roundRect(-rfW/2 + 4, -rfH/2 + 4, rfW - 8, rfH - 8, 12);
         rfGfx.stroke();
 
-        // Multiplier bar (hidden initially)
+        // Multiplier bar (hidden initially; overlaps title area which is hidden during FG)
         this.multBarNode = this.buildMultBar(root);
         this.multBarNode.active = false;
 
-        // UI panel
+        // ════════════════════════════════════════════════
+        // UIController initialised here so BuyExtraRow and lblStatus
+        // sections below can safely write to this.uiCtrl.*
+        // ════════════════════════════════════════════════
         const uiPanel = new Node('UIPanel');
         root.addChild(uiPanel);
-        uiPanel.setPosition(0, -470, 0);
+        uiPanel.setPosition(0, -530, 0);
         this.uiCtrl = uiPanel.addComponent(UIController);
-        const panelGfx = uiPanel.addComponent(Graphics);
-        panelGfx.fillColor = Color.fromHEX(new Color(), '#0f0f28');
-        panelGfx.roundRect(-350, -110, 700, 220, 12);
-        panelGfx.fill();
-        panelGfx.strokeColor = Color.fromHEX(new Color(), '#2a2a44');
-        panelGfx.lineWidth   = 1.5;
-        panelGfx.roundRect(-350, -110, 700, 220, 12);
-        panelGfx.stroke();
 
-        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -295, 560);
+        // ════════════════════════════════════════════════
+        // BUY FREE GAME  |  EXTRA BET  — single row below reel
+        // Frame bottom = 72 − rfH/2 ≈ −283; strip centre at −330
+        // ════════════════════════════════════════════════
+        const buyExtraRow = new Node('BuyExtraRow');
+        root.addChild(buyExtraRow);
+        buyExtraRow.setPosition(0, -330, 2);
+        buyExtraRow.addComponent(UITransform).setContentSize(720, 52);
+        const barBg = buyExtraRow.addComponent(Graphics);
+        // Strip background
+        barBg.fillColor = Color.fromHEX(new Color(), '#0c0c1c');
+        barBg.roundRect(-360, -26, 720, 52, 0);
+        barBg.fill();
+        // Top & bottom border rules
+        barBg.strokeColor = Color.fromHEX(new Color(), '#4a3800');
+        barBg.lineWidth   = 2;
+        barBg.moveTo(-360, 26);  barBg.lineTo(360, 26);  barBg.stroke();
+        barBg.moveTo(-360, -26); barBg.lineTo(360, -26); barBg.stroke();
+        // Divider between BUY and EXTRA BET
+        barBg.strokeColor = Color.fromHEX(new Color(), '#2a2a44');
+        barBg.lineWidth   = 1;
+        barBg.moveTo(-12, -22); barBg.lineTo(-12, 22); barBg.stroke();
 
-        // 中央大字：每步 cascade 獎金彈出，初始隱藏
-        const stepWinLbl = makeLabel(root, '', 48, '#ffe566', 0, 0, 600);
-        stepWinLbl.node.active = false;
-        this.uiCtrl.lblStepWin = stepWinLbl;
+        // BUY FREE GAME — left side (x=−160 centre, w=316)
+        const buyBtn = makeButton(buyExtraRow, 'BUY FREE GAME', 316, 42, -160, 0, '#08185c', '#3a88ff');
+        buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
 
-        // panel 內：balance / bet 各自靠邊，lines / multiplier 第二行，按鈕第三行
-        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -230, 80, 240);
-        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',   10, 80, 160);
-        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  230, 80, 200);
-        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899', -230, 50, 240);
-        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',   80, 50, 300);
-
-        const spinBtn = makeButton(uiPanel, 'SPIN', 120, 56, 0, 12, '#cc3300');
-        this.uiCtrl.btnSpin = spinBtn;
-        spinBtn.on(Button.EventType.CLICK, this.onSpinClick, this);
-
+        // EXTRA BET — right side (x=+182 centre, w=268)
         const extraBetNode = new Node('ExtraBet');
-        uiPanel.addChild(extraBetNode);
-        extraBetNode.setPosition(248, 12, 0);
-        extraBetNode.addComponent(UITransform).setContentSize(120, 36);
+        buyExtraRow.addChild(extraBetNode);
+        extraBetNode.setPosition(182, 0, 0);
+        extraBetNode.addComponent(UITransform).setContentSize(268, 42);
         this.uiCtrl.extraBetBg = extraBetNode.addComponent(Graphics);
-        makeLabel(extraBetNode, 'EXTRA BET', 12, '#88aacc', 0, 0);
+        makeLabel(extraBetNode, 'EXTRA BET  OFF', 14, '#88aacc', 0, 0, 268);
         extraBetNode.addComponent(Button);
         extraBetNode.on(Button.EventType.CLICK, this.onExtraBetClick, this);
         this.uiCtrl.btnExtraBet = extraBetNode;
 
-        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,  130, 12, '#1a3a1a');
-        const betMinusBtn = makeButton(uiPanel, '−', 36, 36, -130, 12, '#3a1a1a');
-        betPlusBtn.on(Button.EventType.CLICK,  () => this.changeBet( 0.25), this);
+        // ════════════════════════════════════════════════
+        // Status message label — sits in gap between BuyExtraRow (−356) and UIPanel top
+        // ════════════════════════════════════════════════
+        this.uiCtrl.lblStatus = makeLabel(root, '', 13, '#88aacc', 0, -392, 600);
+
+        // 中央大字：每步 cascade 獎金彈出，初始隱藏
+        const stepWinLbl = makeLabel(root, '', 48, '#ffe566', 0, 72, 600);
+        stepWinLbl.node.active = false;
+        this.uiCtrl.lblStepWin = stepWinLbl;
+
+        // ════════════════════════════════════════════════
+        // UIPanel — info row + function bar  (y=−530)
+        // UIPanel top = −430; status label at −392 sits 38 px above
+        // ════════════════════════════════════════════════
+        const panelGfx = uiPanel.addComponent(Graphics);
+        panelGfx.fillColor = Color.fromHEX(new Color(), '#07071a');
+        panelGfx.roundRect(-360, -100, 720, 200, 0);
+        panelGfx.fill();
+        panelGfx.fillColor = Color.fromHEX(new Color(), '#1a1a3a');
+        panelGfx.roundRect(-360, 98, 720, 4, 0);
+        panelGfx.fill();
+        // Separator between info row and function bar
+        panelGfx.strokeColor = Color.fromHEX(new Color(), '#1c1c38');
+        panelGfx.lineWidth   = 1;
+        panelGfx.moveTo(-360, 18); panelGfx.lineTo(360, 18); panelGfx.stroke();
+
+        // ── Info row (UIPanel local y=+52): balance | bet | win ──────────────
+        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 15, '#ccccdd', -215, 52, 200);
+        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 15, '#ccccdd',    0, 52, 140);
+        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  215, 52, 190);
+        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899',    0, 32, 400);
+        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',    0, 32, 400);
+
+        // ── Function bar (UIPanel local y=−44): ⚡ − ↺SPIN + ▶ ≡ ─────────────
+        makeButton(uiPanel, '⚡', 62, 62, -295, -44, '#1a1508', '#ffcc22')
+            .on(Button.EventType.CLICK, () => {}, this);
+        const betMinusBtn = makeButton(uiPanel, '−', 62, 62, -175, -44, '#2a1200', '#ff8800');
         betMinusBtn.on(Button.EventType.CLICK, () => this.changeBet(-0.25), this);
-
-        const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -268, 12, '#1a1a4a', '#4444ff');
-        buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
-
-        // Auto Spin 按鈕 + 剩餘次數標籤
-        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, -220, -62, '#1a3a3a', '#00cccc');
+        const spinBtn = makeButton(uiPanel, '↺', 106, 106, 0, -44, '#cc3300');
+        this.uiCtrl.btnSpin = spinBtn;
+        spinBtn.on(Button.EventType.CLICK, this.onSpinClick, this);
+        const betPlusBtn = makeButton(uiPanel, '+', 62, 62, 175, -44, '#001830', '#2299ff');
+        betPlusBtn.on(Button.EventType.CLICK, () => this.changeBet(0.25), this);
+        const autoBtn = makeButton(uiPanel, '▶', 62, 62, 255, -44, '#001a14', '#00cc88');
         autoBtn.on(Button.EventType.CLICK, this.onAutoSpinClick, this);
-        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', -220, -40);
+        this.autoSpinCountLbl = makeLabel(uiPanel, '', 12, '#00cc88', 255, -82);
+        makeButton(uiPanel, '≡', 62, 62, 325, -44, '#14141e', '#8888aa')
+            .on(Button.EventType.CLICK, () => {}, this);
 
         // Overlay panels (all hidden initially)
         this.autoSpinPanel = this.buildAutoSpinPanel(root); this.autoSpinPanel.active = false;
@@ -455,7 +502,7 @@ export class GameBootstrap extends Component {
         const n = new Node('MultBar');
         root.addChild(n);
         // y=590 → near top of 720x1280 portrait canvas (top edge = y=640)
-        n.setPosition(0, 590, 5);
+        n.setPosition(0, 520, 5);  // covers title area (titles hidden during FG)
         const barW = 720;
         n.addComponent(UITransform).setContentSize(barW, 52);
         this.multBarGfx    = n.addComponent(Graphics);
@@ -735,6 +782,12 @@ export class GameBootstrap extends Component {
         gs.computeTotalBet();
         this.uiCtrl.updateExtraBetUI();
         this.uiCtrl.refresh();
+        // Visual preview: scatter 5 SC symbols randomly across the full grid
+        if (gs.extraBetOn) {
+            this.reelMgr.previewExtraBet();
+        } else {
+            this.reelMgr.clearPreviewExtraBet();
+        }
     }
 
     private changeBet(delta: number): void {
