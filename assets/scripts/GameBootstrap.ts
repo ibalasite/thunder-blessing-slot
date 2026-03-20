@@ -901,7 +901,7 @@ export class GameBootstrap extends Component {
         gs.roundWin = parseFloat((gs.roundWin + stepWin).toFixed(2));
         gs.balance  = parseFloat((gs.balance  + stepWin).toFixed(2));
 
-        this.uiCtrl.showWinPop(stepWin);
+        this.uiCtrl.showWinPop(gs.roundWin);   // 累計值，讓 WIN label 持續增長
         this.uiCtrl.setStatus(`中獎 +${stepWin.toFixed(2)}${gs.inFreeGame ? ` (×${multiplier})` : ''}`, '#ffd700');
 
         if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) return;
@@ -1000,6 +1000,7 @@ export class GameBootstrap extends Component {
         this.showFGBar(gs.fgMultIndex);
 
         while (gs.inFreeGame) {
+            this.uiCtrl.refresh();   // 每輪開始前更新 WIN 顯示（帶入跨輪累計值）
             this.uiCtrl.setStatus(`FREE GAME ×${gs.fgMultiplier} — 旋轉中…`, '#00cfff');
             this.reelMgr.reset();
             // ★ FG 中同樣由引擎生成盤面（使用 FG 權重）
