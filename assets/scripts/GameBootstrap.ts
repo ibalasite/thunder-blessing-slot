@@ -128,6 +128,11 @@ export class GameBootstrap extends Component {
     private _totalWinLbl?:  Label;
     private _collectResolve?: () => void;
 
+    // ── Auto Spin ────────────────────────
+    private autoSpinCount   = 0;    // 0 = 停止; -1 = 無限
+    private autoSpinPanel?: Node;
+    private autoSpinCountLbl?: Label;   // UIPanel 上顯示剩餘次數
+
     // ─── 場景建立 ─────────────────────
     start() {
         gs.balance  = DEFAULT_BALANCE;
@@ -250,7 +255,13 @@ export class GameBootstrap extends Component {
         const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -220, -5, '#1a1a4a', '#4444ff');
         buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
 
+        // Auto Spin 按鈕 + 剩餘次數標籤
+        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, 300, -5, '#1a3a3a', '#00cccc');
+        autoBtn.on(Button.EventType.CLICK, this.onAutoSpinClick, this);
+        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', 300, 18);
+
         // Overlay panels (all hidden initially)
+        this.autoSpinPanel = this.buildAutoSpinPanel(root); this.autoSpinPanel.active = false;
         this.buyPanel      = this.buildBuyPanel(root);      this.buyPanel.active      = false;
         this.coinPanel     = this.buildCoinPanel(root);     this.coinPanel.active     = false;
         this.tbPanel       = this.buildTBPanel(root);       this.tbPanel.active       = false;
@@ -528,7 +539,62 @@ export class GameBootstrap extends Component {
         }
     }
 
-    /** Show the FG multiplier bar and hide game title */
+    private updateAutoSpinLabel(): void {
+        if (!this.autoSpinCountLbl) return;
+        if (this.autoSpinCount === 0)  this.autoSpinCountLbl.string = '';
+        else if (this.autoSpinCount === -1) this.autoSpinCountLbl.string = '∞';
+        else this.autoSpinCountLbl.string = String(this.autoSpinCount);
+    }
+
+    // ══════════════════════════════════════════════════
+    // AUTO SPIN 選擇面板
+    // ══════════════════════════════════════════════════
+    private buildAutoSpinPanel(root: Node): Node {
+        const p = new Node('AutoSpinPanel');
+        root.addChild(p);
+        p.setPosition(0, 0, 10);
+        p.addComponent(UITransform).setContentSize(CANVAS_W, CANVAS_H);
+        const dim = p.addComponent(Graphics);
+        dim.fillColor = new Color(0, 0, 0, 180);
+        dim.rect(-CANVAS_W/2, -CANVAS_H/2, CANVAS_W, CANVAS_H);
+        dim.fill();
+
+        const card = new Node('card');
+        p.addChild(card);
+        card.addComponent(UITransform).setContentSize(480, 300);
+        const cg = card.addComponent(Graphics);
+        cg.fillColor = Color.fromHEX(new Color(), '#0d1130');
+        cg.roundRect(-240, -150, 480, 300, 18);
+        cg.fill();
+        cg.strokeColor = Color.fromHEX(new Color(), '#00cccc');
+        cg.lineWidth = 2;
+        cg.roundRect(-240, -150, 480, 300, 18);
+        cg.stroke();
+
+        makeLabel(card, 'AUTO SPIN', 20, '#00cccc', 0, 120);
+
+        const options = [10, 25, 50, 100, 200, 500, -1];
+        const labels  = ['10', '25', '50', '100', '200', '500', '∞'];
+        const cols = 4, btnW = 96, btnH = 44, gapX = 12, gapY = 10;
+        const startX = -((cols - 1) * (btnW + gapX)) / 2;
+        options.forEach((val, i) => {
+            const col = i % cols, row = Math.floor(i / cols);
+            const bx  = startX + col * (btnW + gapX);
+            const by  = 60 - row * (btnH + gapY);
+            const btn = makeButton(card, labels[i], btnW, btnH, bx, by, '#1a3a3a', '#00cccc');
+            btn.on(Button.EventType.CLICK, () => {
+                this.autoSpinCount = val;
+                this.updateAutoSpinLabel();
+                p.active = false;
+                if (!this.busy) this.doSpin();
+            }, this);
+        });
+
+        const cancelBtn = makeButton(card, '✕ 取消', 120, 38, 0, -110, '#3a1a1a', '#ff6666');
+        cancelBtn.on(Button.EventType.CLICK, () => { p.active = false; }, this);
+
+        return p;
+    }
     private showFGBar(activeIdx: number): void {
         for (const n of this.titleNodes) n.active = false;
         this.multBarNode!.active = true;
@@ -640,7 +706,21 @@ export class GameBootstrap extends Component {
     // ══════════════════════════════════════════════════
     private onSpinClick(): void {
         if (this.busy) return;
+        // 手動按 SPIN 時停止 Auto Spin
+        this.autoSpinCount = 0;
+        this.updateAutoSpinLabel();
         this.doSpin();
+    }
+
+    private onAutoSpinClick(): void {
+        if (this.autoSpinCount !== 0) {
+            // 正在 Auto Spin → 立即停止
+            this.autoSpinCount = 0;
+            this.updateAutoSpinLabel();
+            return;
+        }
+        if (this.busy) return;
+        this.autoSpinPanel!.active = true;
     }
 
     private onExtraBetClick(): void {
@@ -770,6 +850,17 @@ export class GameBootstrap extends Component {
         this.busy = false;
         this.uiCtrl.enableSpin(true);
         this.uiCtrl.refresh();
+
+        // Auto Spin 繼續
+        if (this.autoSpinCount !== 0 && !gs.inFreeGame && gs.balance >= gs.totalBet) {
+            if (this.autoSpinCount > 0) this.autoSpinCount--;
+            this.updateAutoSpinLabel();
+            this.doSpin();
+        } else if (this.autoSpinCount !== 0) {
+            // 餘額不足或進入 FG，停止
+            this.autoSpinCount = 0;
+            this.updateAutoSpinLabel();
+        }
     }
 
     private async cascadeLoop(): Promise<void> {
