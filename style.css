@@ -35,33 +35,12 @@ canvas {
   background-color: rgba(0, 0, 0, 0);
 }
 
-/* ── 橫向：直接填滿螢幕，維持 4:3 ── */
-@media (orientation: landscape) {
-  #GameDiv {
-    position: relative;
-    width:  min(100vw, calc(100svh * 1280 / 960));
-    height: min(100svh, calc(100vw  * 960 / 1280));
-    border: none;
-    box-shadow: none;
-  }
-}
-
-/* ── 直向（手機直拿）：旋轉 90°，讓橫向遊戲填滿直向螢幕 ──
-   rotate(90deg) 後：DOM width → 視覺高度，DOM height → 視覺寬度
-   所以要確保 DOM height ≤ vw（填滿手機短邊），DOM width = DOM height × 960/1280 ── */
-@media (orientation: portrait) {
-  #GameDiv {
-    position: fixed;
-    left: 50%;
-    top:  50%;
-    /* DOM height 對應旋轉後的視覺寬，限制在 vw 以內 */
-    height: min(100vw,  calc(100svh * 1280 / 960));
-    /* DOM width  對應旋轉後的視覺高，依比例計算，限制在 svh 以內 */
-    width:  min(100svh, calc(100vw  * 960  / 1280));
-    transform: translate(-50%, -50%) rotate(90deg);
-    border: none;
-    box-shadow: none;
-  }
+/* ── 直向遊戲（720×1280）等比縮放，無旋轉，手機直拿即填滿，桌面置中 ── */
+#GameDiv {
+  width:  min(100vw,  calc(100svh * 720 / 1280));
+  height: min(100svh, calc(100vw  * 1280 / 720));
+  border: none;
+  box-shadow: none;
 }
 
 #Cocos3dGameContainer, #GameCanvas {
