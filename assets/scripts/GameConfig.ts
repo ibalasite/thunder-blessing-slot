@@ -87,14 +87,14 @@ export const SYMBOL_DARK: Record<SymType, string> = {
 export const REEL_COUNT  = 5;
 export const BASE_ROWS   = 3;
 export const MAX_ROWS    = 6;
-export const SYMBOL_W    = 84;
-export const SYMBOL_H    = 64;
+export const SYMBOL_W    = 100;
+export const SYMBOL_H    = 76;
 export const SYMBOL_GAP  = 4;
 export const REEL_GAP    = 6;
-export const CANVAS_W    = 960;
-export const CANVAS_H    = 720;
-export const REEL_TOP_Y  = 260;    // reel area top Y from canvas center
-export const REEL_START_X = -238;  // leftmost reel center X
+export const CANVAS_W    = 720;
+export const CANVAS_H    = 1280;
+export const REEL_TOP_Y  = 329;    // reel area top Y from canvas center
+export const REEL_START_X = -212;  // leftmost reel center X
 
 // ─── 25 條連線定義 (每個值 = 第N滾輪在第幾列，從0開始)  ──
 // ─── 連線定義（row 0 = 底部，row 增加 = 往上；與 Python simulator 完全同步）──────

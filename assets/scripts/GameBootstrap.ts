@@ -166,14 +166,14 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 335).node);
-        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 314).node);
+        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 24, '#ffe066', 0, 590).node);
+        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 14, '#88aacc', 0, 562).node);
 
         // ── FREE 字母收集指示器 (滾輪區上方) ───────────────────────
         const freeLetters = ['F', 'R', 'E', 'E'];
         const freeColors  = { off: '#2a2a44', on: '#ffe066' };
-        const freeBarY    = 293;   // THUNDER(335)→Zeus(314)→FREE(293)→reel頂(250)
-        const letterSpacing = 34;
+        const freeBarY    = 400;   // THUNDER(590)→Zeus(562)→FREE(400)→reel頂(329)
+        const letterSpacing = 50;
         const totalW = (freeLetters.length - 1) * letterSpacing;
         freeLetters.forEach((ch, i) => {
             const lbl = makeLabel(root, ch, 20, freeColors.off,
@@ -185,7 +185,7 @@ export class GameBootstrap extends Component {
         // Reel area (with Mask to clip symbols during drop-in animation)
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
-        reelArea.setPosition(0, 30, 0);
+        reelArea.setPosition(0, 70, 0);
         const reelUit = reelArea.addComponent(UITransform);
         reelUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
         const reelMask = reelArea.addComponent(Mask);
@@ -195,7 +195,7 @@ export class GameBootstrap extends Component {
         // Reel frame
         const reelFrame = new Node('ReelFrame');
         root.addChild(reelFrame);
-        reelFrame.setPosition(0, 30, 1);
+        reelFrame.setPosition(0, 70, 1);
         const rfUit = reelFrame.addComponent(UITransform);
         rfUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + 20, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + 20);
         const rfGfx = reelFrame.addComponent(Graphics);
@@ -212,18 +212,18 @@ export class GameBootstrap extends Component {
         // UI panel
         const uiPanel = new Node('UIPanel');
         root.addChild(uiPanel);
-        uiPanel.setPosition(0, -308, 0);
+        uiPanel.setPosition(0, -470, 0);
         this.uiCtrl = uiPanel.addComponent(UIController);
         const panelGfx = uiPanel.addComponent(Graphics);
         panelGfx.fillColor = Color.fromHEX(new Color(), '#0f0f28');
-        panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
+        panelGfx.roundRect(-350, -110, 700, 220, 12);
         panelGfx.fill();
         panelGfx.strokeColor = Color.fromHEX(new Color(), '#2a2a44');
         panelGfx.lineWidth   = 1.5;
-        panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
+        panelGfx.roundRect(-350, -110, 700, 220, 12);
         panelGfx.stroke();
 
-        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -205, 560);
+        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -295, 560);
 
         // 中央大字：每步 cascade 獎金彈出，初始隱藏
         const stepWinLbl = makeLabel(root, '', 48, '#ffe566', 0, 0, 600);
@@ -231,19 +231,19 @@ export class GameBootstrap extends Component {
         this.uiCtrl.lblStepWin = stepWinLbl;
 
         // panel 內：balance / bet 各自靠邊，lines / multiplier 第二行，按鈕第三行
-        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -280, 30, 260);
-        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',   90, 30, 170);
-        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  260, 30, 200);
-        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899', -280,  8, 260);
-        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',   80,  8, 300);
+        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -230, 80, 240);
+        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',   10, 80, 160);
+        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  230, 80, 200);
+        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899', -230, 50, 240);
+        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',   80, 50, 300);
 
-        const spinBtn = makeButton(uiPanel, 'SPIN', 110, 56, 0, -5, '#cc3300');
+        const spinBtn = makeButton(uiPanel, 'SPIN', 120, 56, 0, 12, '#cc3300');
         this.uiCtrl.btnSpin = spinBtn;
         spinBtn.on(Button.EventType.CLICK, this.onSpinClick, this);
 
         const extraBetNode = new Node('ExtraBet');
         uiPanel.addChild(extraBetNode);
-        extraBetNode.setPosition(200, -5, 0);
+        extraBetNode.setPosition(248, 12, 0);
         extraBetNode.addComponent(UITransform).setContentSize(120, 36);
         this.uiCtrl.extraBetBg = extraBetNode.addComponent(Graphics);
         makeLabel(extraBetNode, 'EXTRA BET', 12, '#88aacc', 0, 0);
@@ -251,18 +251,18 @@ export class GameBootstrap extends Component {
         extraBetNode.on(Button.EventType.CLICK, this.onExtraBetClick, this);
         this.uiCtrl.btnExtraBet = extraBetNode;
 
-        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,   80, -5, '#1a3a1a');
-        const betMinusBtn = makeButton(uiPanel, '−', 36, 36,  -80, -5, '#3a1a1a');
+        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,  130, 12, '#1a3a1a');
+        const betMinusBtn = makeButton(uiPanel, '−', 36, 36, -130, 12, '#3a1a1a');
         betPlusBtn.on(Button.EventType.CLICK,  () => this.changeBet( 0.25), this);
         betMinusBtn.on(Button.EventType.CLICK, () => this.changeBet(-0.25), this);
 
-        const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -220, -5, '#1a1a4a', '#4444ff');
+        const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -268, 12, '#1a1a4a', '#4444ff');
         buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
 
         // Auto Spin 按鈕 + 剩餘次數標籤
-        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, 350, -5, '#1a3a3a', '#00cccc');
+        const autoBtn = makeButton(uiPanel, 'AUTO', 80, 36, -220, -62, '#1a3a3a', '#00cccc');
         autoBtn.on(Button.EventType.CLICK, this.onAutoSpinClick, this);
-        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', 350, 18);
+        this.autoSpinCountLbl = makeLabel(uiPanel, '', 13, '#00cccc', -220, -40);
 
         // Overlay panels (all hidden initially)
         this.autoSpinPanel = this.buildAutoSpinPanel(root); this.autoSpinPanel.active = false;
@@ -355,13 +355,13 @@ export class GameBootstrap extends Component {
         dim.fill();
 
         // "FLIP TO CONTINUE" at BOTTOM of screen (matches reference screenshot)
-        this.coinTitleLbl = makeLabel(p, 'FLIP TO ENTER FREE GAME', 26, '#ff8800', 0, -248, 780);
-        makeLabel(p, 'WITH INCREASED MULTIPLIER', 22, '#ffcc00', 0, -278, 780);
+        this.coinTitleLbl = makeLabel(p, 'FLIP TO ENTER FREE GAME', 26, '#ff8800', 0, 300, 680);
+        makeLabel(p, 'WITH INCREASED MULTIPLIER', 22, '#ffcc00', 0, 264, 680);
 
         // Coin node
         const coinNode = new Node('Coin');
         p.addChild(coinNode);
-        coinNode.setPosition(0, -40, 0);
+        coinNode.setPosition(0, 40, 0);
         coinNode.addComponent(UITransform).setContentSize(240, 240);
         const cGfx = coinNode.addComponent(Graphics);
         drawCoinFace(cGfx, true);
@@ -372,7 +372,7 @@ export class GameBootstrap extends Component {
         this.coinFaceLbl = makeLabel(coinNode, 'ZEUS', 22, '#5a2800', 0, -8, 140);
 
         // Tap hint
-        makeLabel(p, '▲  TAP COIN TO FLIP  ▲', 15, '#ffffff88', 0, -195, 500);
+        makeLabel(p, '▲  TAP COIN TO FLIP  ▲', 15, '#ffffff88', 0, -130, 500);
 
         // Whole panel is clickable
         p.addComponent(Button);
@@ -401,9 +401,9 @@ export class GameBootstrap extends Component {
             }
             if (this.coinGfxNode) {
                 this.coinGfxNode.setScale(1, 1, 1);
-                this.coinGfxNode.setPosition(0, -200, 0);
+                this.coinGfxNode.setPosition(0, -500, 0);
                 tween(this.coinGfxNode)
-                    .to(0.45, { position: new Vec3(0, -40, 0) }, { easing: 'backOut' })
+                    .to(0.45, { position: new Vec3(0, 40, 0) }, { easing: 'backOut' })
                     .start();
             }
             this.coinPanel!.active = true;
@@ -422,8 +422,8 @@ export class GameBootstrap extends Component {
 
         // Upward lob tween (separate from Y-flip)
         tween(coinNode)
-            .to(0.18, { position: new Vec3(0,  30, 0) }, { easing: 'cubicOut' })
-            .to(0.18, { position: new Vec3(0, -40, 0) }, { easing: 'cubicIn'  })
+            .to(0.18, { position: new Vec3(0,  90, 0) }, { easing: 'cubicOut' })
+            .to(0.18, { position: new Vec3(0,  40, 0) }, { easing: 'cubicIn'  })
             .start();
 
         // Y-scale flip: squash to 0, swap face, unsquash
@@ -452,8 +452,8 @@ export class GameBootstrap extends Component {
     private buildMultBar(root: Node): Node {
         const n = new Node('MultBar');
         root.addChild(n);
-        // y=328 → near top of 960x720 canvas (top edge = y=360)
-        n.setPosition(0, 328, 5);
+        // y=590 → near top of 720x1280 portrait canvas (top edge = y=640)
+        n.setPosition(0, 590, 5);
         const barW = 720;
         n.addComponent(UITransform).setContentSize(barW, 52);
         this.multBarGfx    = n.addComponent(Graphics);
