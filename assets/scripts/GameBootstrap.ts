@@ -3,7 +3,7 @@
  * ★ 主要遊戲Controller — 掛在 Canvas 的 GameView Node 上
  */
 import { _decorator, Component, Node, Label, Button, Color, UITransform,
-         Graphics, Vec3, tween, Mask } from 'cc';
+         Graphics, Vec3, tween, Mask, view, ResolutionPolicy } from 'cc';
 import { gs }            from './GameState';
 import { ReelManager }   from './ReelManager';
 import { UIController }  from './UIController';
@@ -135,6 +135,8 @@ export class GameBootstrap extends Component {
 
     // ─── 場景建立 ─────────────────────
     start() {
+        // 強制直向 720×1280，覆蓋場景內舊設定，讓 Editor Preview 與 Build 都一致
+        view.setDesignResolutionSize(CANVAS_W, CANVAS_H, ResolutionPolicy.SHOW_ALL);
         gs.balance  = DEFAULT_BALANCE;
         gs.totalBet = DEFAULT_BET;
         gs.computeTotalBet();
