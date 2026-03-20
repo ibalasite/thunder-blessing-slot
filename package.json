@@ -8,7 +8,8 @@
     "test:unit": "jest --testPathPatterns=unit",
     "test:integration": "jest --testPathPatterns=integration",
     "test:e2e": "jest --testPathPatterns=e2e",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "deploy": "gh-pages -d build/web-desktop"
   },
   "engines": {
     "cocos-creator": "3.8.0"
@@ -20,6 +21,7 @@
   "uuid": "1c530a7b-fff7-4a76-ac4b-51192b1d058c",
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "gh-pages": "^6.3.0",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.6"
   }
