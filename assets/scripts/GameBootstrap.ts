@@ -161,13 +161,13 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342).node);
-        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320).node);
+        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 348).node);
+        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 328).node);
 
         // ── FREE 字母收集指示器 (滾輪區上方) ───────────────────────
         const freeLetters = ['F', 'R', 'E', 'E'];
         const freeColors  = { off: '#2a2a44', on: '#ffe066' };  // 暗小 / 亮黃
-        const freeBarY    = 298;   // 標題 (y=320) 和滾輪區 (y=60+top) 之間
+        const freeBarY    = 308;   // THUNDER(348)→Zeus(328)→FREE(308)→reel頂端(278)
         const letterSpacing = 34;
         const totalW = (freeLetters.length - 1) * letterSpacing;
         freeLetters.forEach((ch, i) => {
@@ -176,13 +176,11 @@ export class GameBootstrap extends Component {
             lbl.isBold = true;
             this.freeLbls.push(lbl);
         });
-        // 輔助說明文字
-        makeLabel(root, 'FREE', 9, '#444466', 0, freeBarY - 18);
 
         // Reel area (with Mask to clip symbols during drop-in animation)
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
-        reelArea.setPosition(0, 60, 0);
+        reelArea.setPosition(0, 0, 0);
         const reelUit = reelArea.addComponent(UITransform);
         reelUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
         const reelMask = reelArea.addComponent(Mask);
@@ -192,7 +190,7 @@ export class GameBootstrap extends Component {
         // Reel frame
         const reelFrame = new Node('ReelFrame');
         root.addChild(reelFrame);
-        reelFrame.setPosition(0, 60, 1);
+        reelFrame.setPosition(0, 0, 1);
         const rfUit = reelFrame.addComponent(UITransform);
         rfUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + 20, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + 20);
         const rfGfx = reelFrame.addComponent(Graphics);
