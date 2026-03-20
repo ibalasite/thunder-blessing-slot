@@ -1,5 +1,7 @@
 # Thunder Blessing Slot
 
+🎮 **Demo：[https://ibalasite.github.io/thunder-blessing-slot/](https://ibalasite.github.io/thunder-blessing-slot/)**
+
 希臘神話風格老虎機遊戲，以 Cocos Creator 3.8 開發。
 
 高賠符號為宙斯（Zeus）、天馬（Pegasus）、雅典娜（Athena）、雄鷹（Eagle）；低賠符號為英文字母 Z、E、U、S。
