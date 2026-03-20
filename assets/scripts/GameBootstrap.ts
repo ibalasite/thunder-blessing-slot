@@ -207,7 +207,7 @@ export class GameBootstrap extends Component {
         // UI panel
         const uiPanel = new Node('UIPanel');
         root.addChild(uiPanel);
-        uiPanel.setPosition(0, -300, 0);
+        uiPanel.setPosition(0, -308, 0);
         this.uiCtrl = uiPanel.addComponent(UIController);
         const panelGfx = uiPanel.addComponent(Graphics);
         panelGfx.fillColor = Color.fromHEX(new Color(), '#0f0f28');
@@ -218,12 +218,15 @@ export class GameBootstrap extends Component {
         panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
         panelGfx.stroke();
 
-        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 15, '#aaaacc', -390, 28);
-        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 15, '#aaaacc',  390, 28);
-        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 24, '#ffd700',    0, 28);
-        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 13, '#888899', -390, -28);
-        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 18, '#00cfff',    0, -28);
-        this.uiCtrl.lblStatus     = makeLabel(root,    '', 14, '#88aacc',    0, -232);
+        // WIN 獨立一行（panel 外），不與 balance/bet 互搶空間
+        this.uiCtrl.lblWin        = makeLabel(root,    '', 26, '#ffd700',    0, -205, 500);
+        this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -228, 560);
+
+        // panel 內：balance / bet 各自靠邊，lines / multiplier 第二行，按鈕第三行
+        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -280, 30, 260);
+        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',  280, 30, 260);
+        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899', -280,  8, 260);
+        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',   80,  8, 300);
 
         const spinBtn = makeButton(uiPanel, 'SPIN', 110, 56, 0, -5, '#cc3300');
         this.uiCtrl.btnSpin = spinBtn;
