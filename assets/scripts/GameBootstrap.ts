@@ -101,6 +101,9 @@ export class GameBootstrap extends Component {
     private buyFGMode = false;            // Buy FG intro: skip FG_TRIGGER_PROB gate; still goes through real Coin Toss
     private _coinEntryHeadsProb = 0.50;   // entry Coin Toss prob: 0.50 for normal, COIN_TOSS_HEADS_PROB[0] for Buy FG
 
+    // ── FREE 字母指示器 F‧R‧E‧E ───────────────
+    private freeLbls:       Label[] = [];   // [0]=F [1]=R [2]=E(3rd) [3]=E(4th)
+
     // ── 타이틀 nodes (FG 중 숨김) ────────
     private titleNodes:     Node[] = [];
 
@@ -160,6 +163,21 @@ export class GameBootstrap extends Component {
 
         this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 342).node);
         this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 320).node);
+
+        // ── FREE 字母收集指示器 (滾輪區上方) ───────────────────────
+        const freeLetters = ['F', 'R', 'E', 'E'];
+        const freeColors  = { off: '#2a2a44', on: '#ffe066' };  // 暗小 / 亮黃
+        const freeBarY    = 298;   // 標題 (y=320) 和滾輪區 (y=60+top) 之間
+        const letterSpacing = 34;
+        const totalW = (freeLetters.length - 1) * letterSpacing;
+        freeLetters.forEach((ch, i) => {
+            const lbl = makeLabel(root, ch, 20, freeColors.off,
+                -totalW / 2 + i * letterSpacing, freeBarY);
+            lbl.isBold = true;
+            this.freeLbls.push(lbl);
+        });
+        // 輔助說明文字
+        makeLabel(root, 'FREE', 9, '#444466', 0, freeBarY - 18);
 
         // Reel area (with Mask to clip symbols during drop-in animation)
         const reelArea = new Node('ReelArea');
@@ -666,12 +684,29 @@ export class GameBootstrap extends Component {
     }
 
     /**
-     * Buy FG 引導旋轉。
-     * 保證 Cascade 擴展至 MAX_ROWS，途中所有勝出累積為基本 BONUS。
-     * 到達 MAX_ROWS 後跳過 FG_TRIGGER_PROB 門檻，直接進行真實 Coin Toss（80%~40%）。
+     * 根據滾輪目前列數更新 FREE 字母亮燈狀態。
+     * rows=3:全燅 | rows=4:F亮 | rows=5:FR亮 | rows>=6:FRE亮，並在下次cascade勝出時亮第4個。
+     * @param rows 當前列數
+     * @param fourthE 是否亮起第 4 個 E（最後一個，觸發 Coin Toss 時）
      */
-    private async playBuyFGIntro(): Promise<void> {
+    private updateFreeLetters(rows: number, fourthE = false): void {
+        const ON  = '#ffe066';
+        const OFF = '#2a2a44';
+        // F: rows >= 4, R: rows >= 5, 3rd E: rows >= 6, 4th E: explicit flag
+        const states = [
+            rows >= 4,          // F
+            rows >= 5,          // R
+            rows >= MAX_ROWS,   // 3rd E
+            fourthE,            // 4th E (FREE all lit)
+        ];
+        states.forEach((on, i) => {
+            if (this.freeLbls[i]) {
+                this.freeLbls[i].color = Color.fromHEX(new Color(), on ? ON : OFF);
+            }
+        });
+    }
         this.buyFGMode = true;
+        this.updateFreeLetters(BASE_ROWS);   // Buy FG 開始重置 FREE 燅燅
         this.uiCtrl.setStatus('★ Buy Free Game — 旋轉中…', '#ffdd44');
         let safety = 0;
         while (this.buyFGMode && safety < 20) {
@@ -713,6 +748,7 @@ export class GameBootstrap extends Component {
         gs.resetRound();
         if (!gs.inFreeGame) gs.clearMarks();
         this.reelMgr.reset();
+        this.updateFreeLetters(BASE_ROWS);   // 每局開始重置 FREE 燅燅
         this.uiCtrl.refresh();
 
         // ★ 引擎決定盤面，ReelManager 執行動畫
@@ -780,6 +816,12 @@ export class GameBootstrap extends Component {
         // ★ 傳入引擎預抽符號，ReelManager 直接使用（確保視覺與邏輯一致）
         await this.reelMgr.cascade(winCells, newRows, newSyms);
         this.reelMgr.refreshAllMarks();
+
+        // 更新 FREE 字母亮燈（rows 是擴列前的列數）
+        if (!gs.inFreeGame) {
+            const isFourthE = (rows === MAX_ROWS);  // 雲已全消，此次勝出亮起第4個E
+            this.updateFreeLetters(newRows, isFourthE);
+        }
 
         if (rows === MAX_ROWS) {
             // In Free Game, coin toss happens after the full spin (in freeGameLoop).
