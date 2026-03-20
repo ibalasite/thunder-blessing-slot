@@ -796,26 +796,27 @@ Free Game 中：<code>獎金 = 總投注額 × 賠率倍數 × 當前倍率(x3~x
 </div>
 
 <table>
-<tr><th>事件</th><th>結果</th></tr>
-<tr><td>第1次Cascade成功</td><td>滾輪從3列→4列</td></tr>
-<tr><td>第2次Cascade成功</td><td>滾輪從4列→5列</td></tr>
-<tr><td>第3次Cascade成功</td><td>滾輪從5列→6列，連線數達57條</td></tr>
-<tr><td>第4次（或更多次）Cascade成功，且滾輪已在6列</td><td>通過 <b class="highlight">FG_TRIGGER_PROB</b> 門檻後 → <b class="highlight">觸發 Coin Toss 硬幣翻轉！</b></td></tr>
+<tr><th>Cascade 次數</th><th>事件</th><th>FREE 字母</th></tr>
+<tr><td>第1次</td><td>滾輪 3列 → 4列，衝破第1層雲</td><td><b class="highlight">F</b> 亮燈</td></tr>
+<tr><td>第2次</td><td>滾輪 4列 → 5列，衝破第2層雲</td><td><b class="highlight">R</b> 亮燈</td></tr>
+<tr><td>第3次</td><td>滾輪 5列 → 6列，衝破第3層雲（三層雲全清）</td><td><b class="highlight">E</b> 亮燈</td></tr>
+<tr><td>第4次（及以後）</td><td>滾輪已在6列，下一個Cascade勝出</td><td>最後<b class="highlight">E</b> 亮燈！FREE全亮 → 觸發 Coin Toss</td></tr>
 </table>
+<div class="tip">FREE 字母收集<b>不是</b>純視覺裝飾——它是進度追蹤指示器。3層雲對應3個字母（F、R、E），第4個E在雲全消後的下一次Cascade才亮，代表真正的Coin Toss觸發條件。</div>
 
 <h3>8-2. FG 觸發門檻（FG_TRIGGER_PROB）</h3>
-<div class="flow-code">滾輪已在 6 列（MAX_ROWS），且本次 Cascade 有新的連線勝出
+<div class="flow-code">滾輪已在 6 列（MAX_ROWS），且本次 Cascade 有新的連線勝出（FREE 全亮）
    ↓
-觸發門檻機率檢查（FG_TRIGGER_PROB = 20%）
-   ├── 未通過（80%）→ 本輪繼續，不進入 Coin Toss
-   └── 通過（20%）↓
+觸發門檻機率檢查（FG_TRIGGER_PROB = 11%）
+   ├── 未通過（89%）→ 本輪繼續，等待下次 Cascade
+   └── 通過（11%）↓
        觸發【Coin Toss 硬幣翻轉】
           ↓
        Heads（正面）→ 進入 Free Game，初始倍率 ×3
        Tails（反面）→ 未能進入 Free Game，本輪結束</div>
-<div class="info"><b>FG_TRIGGER_PROB（20%）</b> 是 RTP 控制旋鈕：調低可降低整體 RTP，調高可提升。<br>
+<div class="info"><b>FG_TRIGGER_PROB（11%）</b> 是 RTP 控制旋鈕：調低可降低整體 RTP，調高可提升。<br>
 計算公式：<code>totalRTP ≈ baseRTP + FG_TRIGGER_PROB × fgContribution</code><br>
-<b>Buy Free Game 不受此門檻限制</b>——付費即保證進入 Free Game。</div>
+<b>Buy Free Game 不受此門檻限制</b>——付費即保證進入 Coin Toss 流程。</div>
 </section>
 
 <!-- ═══ SECTION 9 ═══ -->
