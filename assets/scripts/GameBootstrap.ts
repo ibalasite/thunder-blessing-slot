@@ -225,6 +225,11 @@ export class GameBootstrap extends Component {
 
         this.uiCtrl.lblStatus     = makeLabel(root,    '', 13, '#88aacc',    0, -205, 560);
 
+        // 中央大字：每步 cascade 獎金彈出，初始隱藏
+        const stepWinLbl = makeLabel(root, '', 48, '#ffe566', 0, 0, 600);
+        stepWinLbl.node.active = false;
+        this.uiCtrl.lblStepWin = stepWinLbl;
+
         // panel 內：balance / bet 各自靠邊，lines / multiplier 第二行，按鈕第三行
         this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 14, '#aaaacc', -280, 30, 260);
         this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 14, '#aaaacc',   90, 30, 170);
@@ -900,7 +905,7 @@ export class GameBootstrap extends Component {
         gs.roundWin = parseFloat((gs.roundWin + stepWin).toFixed(2));
         gs.balance  = parseFloat((gs.balance  + stepWin).toFixed(2));
 
-        this.uiCtrl.showWinPop(gs.roundWin);   // 累計值，讓 WIN label 持續增長
+        this.uiCtrl.showWinPop(stepWin, gs.roundWin);   // stepWin→大字彈出, roundWin→旁邊小字
         this.uiCtrl.setStatus(`中獎 +${stepWin.toFixed(2)}${gs.inFreeGame ? ` (×${multiplier})` : ''}`, '#ffd700');
 
         if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) return;

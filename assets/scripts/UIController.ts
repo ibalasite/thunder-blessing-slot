@@ -15,7 +15,8 @@ export class UIController extends Component {
     // 由 GameBootstrap 外部賦值
     lblBalance!:   Label;
     lblBet!:       Label;
-    lblWin!:       Label;
+    lblWin!:       Label;       // 押注旁小字：本輪累計 WIN
+    lblStepWin!:   Label;       // 畫面中央大字：每步 cascade 獎金彈出
     lblLines!:     Label;
     lblMultiplier!:Label;
     lblStatus!:    Label;
@@ -40,14 +41,29 @@ export class UIController extends Component {
         this.lblStatus.color  = Color.fromHEX(new Color(), color);
     }
 
-    /** amount = 累計 roundWin（非單步），讓 WIN label 始終顯示本輪/本 FG session 總獎 */
-    showWinPop(cumulativeWin: number): void {
-        this.lblWin.string = `WIN:${cumulativeWin.toFixed(2)}`;
-        this.lblWin.node.setScale(1, 1, 1);
-        tween(this.lblWin.node)
-            .to(0.18, { scale: new Vec3(1.5, 1.5, 1) })
-            .to(0.18, { scale: new Vec3(1,   1,   1) })
-            .start();
+    /**
+     * stepWin  = 每步 cascade 的個別獎金 → 中央大字彈出動畫
+     * roundWin = 本輪累計           → 押注旁小字同步更新
+     */
+    showWinPop(stepWin: number, roundWin: number): void {
+        // ① 中央大字：顯示本步驟獎金，彈跳後淡出
+        if (this.lblStepWin) {
+            this.lblStepWin.string = `+${stepWin.toFixed(2)}`;
+            this.lblStepWin.node.active = true;
+            this.lblStepWin.node.setScale(0.5, 0.5, 1);
+            this.lblStepWin.node.setPosition(0, 0, 0);
+            tween(this.lblStepWin.node)
+                .to(0.15, { scale: new Vec3(1.3, 1.3, 1) })
+                .to(0.12, { scale: new Vec3(1.0, 1.0, 1) })
+                .delay(0.5)
+                .to(0.25, { scale: new Vec3(0, 0, 1) })
+                .call(() => { if (this.lblStepWin) this.lblStepWin.node.active = false; })
+                .start();
+        }
+        // ② 押注旁小字：更新為累計值
+        if (this.lblWin) {
+            this.lblWin.string = `WIN:${roundWin.toFixed(2)}`;
+        }
     }
 
     enableSpin(enabled: boolean): void {
