@@ -161,13 +161,13 @@ export class GameBootstrap extends Component {
         bgGfx.roundRect(-CANVAS_W/2+18, -CANVAS_H/2+18, CANVAS_W-36, CANVAS_H-36, 4);
         bgGfx.stroke();
 
-        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 22, '#ffe066', 0, 348).node);
-        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 12, '#88aacc', 0, 328).node);
+        this.titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 26, '#ffe066', 0, 600).node);
+        this.titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 13, '#88aacc', 0, 572).node);
 
         // ── FREE 字母收集指示器 (滾輪區上方) ───────────────────────
         const freeLetters = ['F', 'R', 'E', 'E'];
         const freeColors  = { off: '#2a2a44', on: '#ffe066' };  // 暗小 / 亮黃
-        const freeBarY    = 308;   // THUNDER(348)→Zeus(328)→FREE(308)→reel頂端(278)
+        const freeBarY    = 544;   // THUNDER(600)→Zeus(572)→FREE(544)→reel頂端(368)
         const letterSpacing = 34;
         const totalW = (freeLetters.length - 1) * letterSpacing;
         freeLetters.forEach((ch, i) => {
@@ -180,7 +180,7 @@ export class GameBootstrap extends Component {
         // Reel area (with Mask to clip symbols during drop-in animation)
         const reelArea = new Node('ReelArea');
         root.addChild(reelArea);
-        reelArea.setPosition(0, 0, 0);
+        reelArea.setPosition(0, 90, 0);
         const reelUit = reelArea.addComponent(UITransform);
         reelUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
         const reelMask = reelArea.addComponent(Mask);
@@ -190,7 +190,7 @@ export class GameBootstrap extends Component {
         // Reel frame
         const reelFrame = new Node('ReelFrame');
         root.addChild(reelFrame);
-        reelFrame.setPosition(0, 0, 1);
+        reelFrame.setPosition(0, 90, 1);
         const rfUit = reelFrame.addComponent(UITransform);
         rfUit.setContentSize(REEL_COUNT * (SYMBOL_W + REEL_GAP) + 20, MAX_ROWS * (SYMBOL_H + SYMBOL_GAP) + 20);
         const rfGfx = reelFrame.addComponent(Graphics);
@@ -207,31 +207,31 @@ export class GameBootstrap extends Component {
         // UI panel
         const uiPanel = new Node('UIPanel');
         root.addChild(uiPanel);
-        uiPanel.setPosition(0, -283, 0);
+        uiPanel.setPosition(0, -395, 0);
         this.uiCtrl = uiPanel.addComponent(UIController);
         const panelGfx = uiPanel.addComponent(Graphics);
         panelGfx.fillColor = Color.fromHEX(new Color(), '#0f0f28');
-        panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
+        panelGfx.roundRect(-CANVAS_W/2 + 10, -70, CANVAS_W - 20, 140, 12);
         panelGfx.fill();
         panelGfx.strokeColor = Color.fromHEX(new Color(), '#2a2a44');
         panelGfx.lineWidth   = 1.5;
-        panelGfx.roundRect(-CANVAS_W/2 + 10, -50, CANVAS_W - 20, 100, 12);
+        panelGfx.roundRect(-CANVAS_W/2 + 10, -70, CANVAS_W - 20, 140, 12);
         panelGfx.stroke();
 
-        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 15, '#aaaacc', -340, 28);
-        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 15, '#aaaacc',  340, 28);
-        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 24, '#ffd700',    0, 30);
-        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 13, '#888899', -340, -28);
-        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 18, '#00cfff',    0, -30);
-        this.uiCtrl.lblStatus     = makeLabel(root,    '', 14, '#88aacc',    0, -218);
+        this.uiCtrl.lblBalance    = makeLabel(uiPanel, '', 15, '#aaaacc', -290, 48);
+        this.uiCtrl.lblBet        = makeLabel(uiPanel, '', 15, '#aaaacc',  290, 48);
+        this.uiCtrl.lblWin        = makeLabel(uiPanel, '', 24, '#ffd700',    0, 48);
+        this.uiCtrl.lblLines      = makeLabel(uiPanel, '', 13, '#888899', -290, 18);
+        this.uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 18, '#00cfff',   70, 18);
+        this.uiCtrl.lblStatus     = makeLabel(root,    '', 14, '#88aacc',    0, -240);
 
-        const spinBtn = makeButton(uiPanel, 'SPIN', 110, 56, 0, -5, '#cc3300');
+        const spinBtn = makeButton(uiPanel, 'SPIN', 110, 56, 0, -28, '#cc3300');
         this.uiCtrl.btnSpin = spinBtn;
         spinBtn.on(Button.EventType.CLICK, this.onSpinClick, this);
 
         const extraBetNode = new Node('ExtraBet');
         uiPanel.addChild(extraBetNode);
-        extraBetNode.setPosition(150, -5, 0);
+        extraBetNode.setPosition(150, -28, 0);
         extraBetNode.addComponent(UITransform).setContentSize(120, 36);
         this.uiCtrl.extraBetBg = extraBetNode.addComponent(Graphics);
         makeLabel(extraBetNode, 'EXTRA BET', 12, '#88aacc', 0, 0);
@@ -239,12 +239,12 @@ export class GameBootstrap extends Component {
         extraBetNode.on(Button.EventType.CLICK, this.onExtraBetClick, this);
         this.uiCtrl.btnExtraBet = extraBetNode;
 
-        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,  -80, -5, '#1a3a1a');
-        const betMinusBtn = makeButton(uiPanel, '−', 36, 36, -130, -5, '#3a1a1a');
+        const betPlusBtn  = makeButton(uiPanel, '+', 36, 36,  -80, -28, '#1a3a1a');
+        const betMinusBtn = makeButton(uiPanel, '−', 36, 36, -130, -28, '#3a1a1a');
         betPlusBtn.on(Button.EventType.CLICK,  () => this.changeBet( 0.25), this);
         betMinusBtn.on(Button.EventType.CLICK, () => this.changeBet(-0.25), this);
 
-        const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -220, -5, '#1a1a4a', '#4444ff');
+        const buyBtn = makeButton(uiPanel, 'BUY FREE', 100, 36, -220, -28, '#1a1a4a', '#4444ff');
         buyBtn.on(Button.EventType.CLICK, this.onBuyFreeGame, this);
 
         // Overlay panels (all hidden initially)
@@ -434,9 +434,9 @@ export class GameBootstrap extends Component {
     private buildMultBar(root: Node): Node {
         const n = new Node('MultBar');
         root.addChild(n);
-        // y=335 → spans y=309–361, sits flush at top of canvas (top edge = y=360)
-        n.setPosition(0, 335, 5);
-        const barW = 720;
+        // y=590 → near top of portrait canvas (top edge = y=640)
+        n.setPosition(0, 590, 5);
+        const barW = 700;
         n.addComponent(UITransform).setContentSize(barW, 52);
         this.multBarGfx    = n.addComponent(Graphics);
         this.multBarLabels = [];
@@ -463,7 +463,7 @@ export class GameBootstrap extends Component {
         const startX = -((mults.length - 1) * (boxW + gap)) / 2;
 
         g.clear();
-        const totalW = 720;
+        const totalW = 700;
         // Full-width stone bar background
         g.fillColor = new Color(20, 18, 14, 255);
         g.roundRect(-totalW/2, -26, totalW, 52, 0);
