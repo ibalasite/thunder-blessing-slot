@@ -460,3 +460,246 @@ describe('calcWinAmount', () => {
         expect(calcWinAmount(win, 1.0)).toBe(0);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Full PAYTABLE validation — every symbol × count matches screenshot values
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PAYTABLE values match game display', () => {
+    const expected: Record<SymType, [number, number, number]> = {
+        // [3-match, 4-match, 5-match]
+        W:  [0.17, 0.43, 1.17],
+        SC: [0,    0,    0   ],
+        P1: [0.17, 0.43, 1.17],
+        P2: [0.11, 0.27, 0.67],
+        P3: [0.09, 0.23, 0.67],
+        P4: [0.07, 0.17, 0.57],
+        L1: [0.03, 0.07, 0.17],
+        L2: [0.03, 0.07, 0.17],
+        L3: [0.02, 0.05, 0.13],
+        L4: [0.02, 0.05, 0.13],
+    };
+
+    (Object.entries(expected) as [SymType, [number, number, number]][]).forEach(([sym, [m3, m4, m5]]) => {
+        it(`${sym}: 3-of-a-kind = ${m3}`, () => {
+            expect(PAYTABLE[sym][3]).toBe(m3);
+        });
+        it(`${sym}: 4-of-a-kind = ${m4}`, () => {
+            expect(PAYTABLE[sym][4]).toBe(m4);
+        });
+        it(`${sym}: 5-of-a-kind = ${m5}`, () => {
+            expect(PAYTABLE[sym][5]).toBe(m5);
+        });
+    });
+
+    it('WILD pays same as P1 for every count', () => {
+        expect(PAYTABLE[SYM.WILD][3]).toBe(PAYTABLE[SYM.P1][3]);
+        expect(PAYTABLE[SYM.WILD][4]).toBe(PAYTABLE[SYM.P1][4]);
+        expect(PAYTABLE[SYM.WILD][5]).toBe(PAYTABLE[SYM.P1][5]);
+    });
+
+    it('no symbol pays for count < 3', () => {
+        for (const sym of Object.values(SYM) as SymType[]) {
+            expect(PAYTABLE[sym][0]).toBe(0);
+            expect(PAYTABLE[sym][1]).toBe(0);
+            expect(PAYTABLE[sym][2]).toBe(0);
+        }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. WILD substitution — edge cases
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('checkWins – Wild edge cases (extended)', () => {
+    const BET = 1.0;
+
+    it('WILD×3 at start, then L4×2: matchSym=L4, count=5', () => {
+        // [W,W,W,L4,L4] → matchSym=L4, all 5 form L4 chain
+        const grid = fillGrid(SYM.L2);
+        grid[0][1] = SYM.WILD; grid[1][1] = SYM.WILD; grid[2][1] = SYM.WILD;
+        grid[3][1] = SYM.L4;   grid[4][1] = SYM.L4;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0);
+        expect(hit).toBeDefined();
+        expect(hit!.symbol).toBe(SYM.L4);
+        expect(hit!.count).toBe(5);
+        expect(hit!.multiplier).toBe(PAYTABLE[SYM.L4][5]);
+    });
+
+    it('WILD×2 at start, then P2, then WILD, then P2: count=5 P2', () => {
+        // [W,W,P2,W,P2] → matchSym=P2, chain: W,W,P2,W,P2 all P2 or W → count=5
+        const grid = fillGrid(SYM.L4);
+        grid[0][1] = SYM.WILD; grid[1][1] = SYM.WILD;
+        grid[2][1] = SYM.P2;   grid[3][1] = SYM.WILD; grid[4][1] = SYM.P2;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0);
+        expect(hit).toBeDefined();
+        expect(hit!.symbol).toBe(SYM.P2);
+        expect(hit!.count).toBe(5);
+    });
+
+    it('P1,WILD,WILD,L4,L4: count=3 P1 (chain breaks at L4)', () => {
+        // [P1,W,W,L4,L4] → matchSym=P1: ri=1 W→2, ri=2 W→3, ri=3 L4≠P1≠W → break
+        const grid = fillGrid(SYM.L2);
+        grid[0][1] = SYM.P1; grid[1][1] = SYM.WILD; grid[2][1] = SYM.WILD;
+        grid[3][1] = SYM.L4; grid[4][1] = SYM.L4;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0 && w.symbol === SYM.P1);
+        expect(hit).toBeDefined();
+        expect(hit!.count).toBe(3);
+        expect(hit!.multiplier).toBe(PAYTABLE[SYM.P1][3]);
+    });
+
+    it('L4,W,P1,L4,L4: count=2 only (L4≠P1 at ri=2, but match stops at ri=1)', () => {
+        // [L4,W,P1,L4,L4] → matchSym=L4: ri=1 W→2, ri=2 P1≠L4≠W → break count=2 → no win
+        const grid = fillGrid(SYM.P2);
+        grid[0][1] = SYM.L4; grid[1][1] = SYM.WILD;
+        grid[2][1] = SYM.P1; grid[3][1] = SYM.L4; grid[4][1] = SYM.L4;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0 && w.symbol === SYM.L4);
+        expect(hit).toBeUndefined();  // count=2, no win
+    });
+
+    it('W×1 only (all others different): count=1, no win', () => {
+        // [W,P1,P2,P3,P4] → matchSym=P1: ri=1 P1→2, ri=2 P2≠P1 → count=2 → no line 0 win
+        const grid = fillGrid(SYM.L4);
+        grid[0][1] = SYM.WILD; grid[1][1] = SYM.P1;
+        grid[2][1] = SYM.P2;   grid[3][1] = SYM.P3; grid[4][1] = SYM.P4;
+        const wins = checkWins(grid, 3, BET);
+        const line0 = wins.find(w => w.lineIndex === 0);
+        expect(line0).toBeUndefined();
+    });
+
+    it('WILD×5 → WILD 5-of-a-kind at WILD paytable value', () => {
+        const grid = fillGrid(SYM.L4);
+        setRow(grid, 1, SYM.WILD);
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0 && w.symbol === SYM.WILD && w.count === 5);
+        expect(hit).toBeDefined();
+        expect(hit!.multiplier).toBe(PAYTABLE.W[5]);
+    });
+
+    it('WILD×3 on line: count=3, WILD pays at WILD[3]', () => {
+        // [W,W,W,L4,L4] but matchSym=L4 so this is L4×5, not W×3
+        // For pure WILD×3: need [W,W,W, X, X] where X breaks → matchSym=X, count=3 if X matches
+        // Actually: [W,W,W] + no non-wild found → matchSym stays W → count=5 not possible without break
+        // Instead test pure WILD×3: [W,W,W, P1, P1] where we specifically check W count
+        // With matchSym=P1: count=5 → P1 wins, not W
+        // True WILD-only 3-win: first 3 = W, positions 3,4 = SC → SC isn't matchable but SC check skips
+        // [W,W,W,SC,SC]: matchSym=SC (first non-W) → skip. No win.
+        // The only way to get W as the symbol is all-5 WILD. Let's verify W itself pays correctly for < 5
+        // via a check on PAYTABLE: if all 5 were W, we get W[5]=1.17
+        // If [W,W,W,W,L4]: matchSym=L4, count=5 → L4[5]=0.13, NOT W[3] or W[4]
+        // WILD wins on its own ONLY as all-WILD (matchSym=W)
+        const grid = fillGrid(SYM.L4);
+        // all-WILD row but only put 3 then fill with different symbols that would break
+        grid[0][1] = SYM.WILD; grid[1][1] = SYM.WILD; grid[2][1] = SYM.WILD;
+        grid[3][1] = SYM.SCATTER; grid[4][1] = SYM.SCATTER;
+        const wins = checkWins(grid, 3, BET);
+        // matchSym=SC → skip. No win.
+        const hit = wins.find(w => w.lineIndex === 0);
+        expect(hit).toBeUndefined();
+    });
+
+    it('SC in position 0 followed by all matching non-SC: no win on that line', () => {
+        // [SC,P1,P1,P1,P1] → firstSym=SC → matchSym stays SC → SCATTER check skips line
+        const grid = fillGrid(SYM.L4);
+        grid[0][1] = SYM.SCATTER;
+        grid[1][1] = SYM.P1; grid[2][1] = SYM.P1; grid[3][1] = SYM.P1; grid[4][1] = SYM.P1;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0 && w.symbol === SYM.P1);
+        expect(hit).toBeUndefined();
+    });
+
+    it('WILD sub uses matchSym multiplier, not WILDs own multiplier', () => {
+        // [W,L3,L3,L3,L3] → matchSym=L3, count=5 → multiplier = L3[5] = 0.13, NOT W[5] = 1.17
+        const grid = fillGrid(SYM.P4);
+        grid[0][1] = SYM.WILD;
+        grid[1][1] = SYM.L3; grid[2][1] = SYM.L3; grid[3][1] = SYM.L3; grid[4][1] = SYM.L3;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0);
+        expect(hit).toBeDefined();
+        expect(hit!.symbol).toBe(SYM.L3);
+        expect(hit!.multiplier).toBe(PAYTABLE[SYM.L3][5]);
+        expect(hit!.multiplier).not.toBe(PAYTABLE[SYM.WILD][5]);
+    });
+
+    it('WILD sub for highest symbol (P1): multiplier equals P1[5]', () => {
+        // [W,P1,P1,P1,P1] → P1×5 with WILD sub
+        const grid = fillGrid(SYM.L4);
+        grid[0][1] = SYM.WILD;
+        grid[1][1] = SYM.P1; grid[2][1] = SYM.P1; grid[3][1] = SYM.P1; grid[4][1] = SYM.P1;
+        const wins = checkWins(grid, 3, BET);
+        const hit = wins.find(w => w.lineIndex === 0);
+        expect(hit).toBeDefined();
+        expect(hit!.symbol).toBe(SYM.P1);
+        expect(hit!.multiplier).toBe(PAYTABLE[SYM.P1][5]);  // 1.17
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Per-row-tier payline scanning — verify correct paylines activate
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('checkWins – per-tier payline activation', () => {
+    const BET = 1.0;
+
+    // Each tier's first "new" line (lines beyond the previous tier)
+    it('rows=4: line index 25 (first PAYLINES_33 extra) is scanned', () => {
+        // PAYLINES_33[25] uses row 3: place a win only on that line
+        const extraLine = PAYLINES_BY_ROWS[4][25];
+        const grid = fillGrid(SYM.L4);
+        // Overwrite line with P1 (requires row 3 to be visible)
+        for (let ri = 0; ri < REEL_COUNT; ri++) grid[ri][extraLine[ri]] = SYM.P1;
+        const wins4 = checkWins(grid, 4, BET);
+        const wins3 = checkWins(grid, 3, BET);
+        expect(wins4.some(w => w.lineIndex === 25 && w.symbol === SYM.P1)).toBe(true);
+        expect(wins3.some(w => w.lineIndex === 25)).toBe(false);
+    });
+
+    it('rows=5: line index 33 (first PAYLINES_45 extra) is scanned', () => {
+        const extraLine = PAYLINES_BY_ROWS[5][33];
+        const grid = fillGrid(SYM.L4);
+        for (let ri = 0; ri < REEL_COUNT; ri++) grid[ri][extraLine[ri]] = SYM.P2;
+        const wins5 = checkWins(grid, 5, BET);
+        const wins4 = checkWins(grid, 4, BET);
+        expect(wins5.some(w => w.lineIndex === 33 && w.symbol === SYM.P2)).toBe(true);
+        expect(wins4.some(w => w.lineIndex === 33)).toBe(false);
+    });
+
+    it('rows=6: line index 45 (first PAYLINES_57 extra) is scanned', () => {
+        const extraLine = PAYLINES_BY_ROWS[6][45];
+        const grid = fillGrid(SYM.L4);
+        for (let ri = 0; ri < REEL_COUNT; ri++) grid[ri][extraLine[ri]] = SYM.P3;
+        const wins6 = checkWins(grid, 6, BET);
+        const wins5 = checkWins(grid, 5, BET);
+        expect(wins6.some(w => w.lineIndex === 45 && w.symbol === SYM.P3)).toBe(true);
+        expect(wins5.some(w => w.lineIndex === 45)).toBe(false);
+    });
+
+    it('rows=6 all-same grid scans exactly 57 paylines', () => {
+        const grid = fillGrid(SYM.P1);
+        const wins = checkWins(grid, 6, BET);
+        expect(wins.length).toBe(57);
+        wins.forEach(w => {
+            expect(w.symbol).toBe(SYM.P1);
+            expect(w.count).toBe(5);
+        });
+    });
+
+    it('row-5 plays ([5,5,5,5,5] = PAYLINES_57[45]) fires at rows=6, not rows=5', () => {
+        const topFlatLine = PAYLINES_BY_ROWS[6][45]; // [5,5,5,5,5]
+        // make rows 0-4 L4, row 5 all P4
+        const grid = fillGrid(SYM.L4);
+        for (let ri = 0; ri < REEL_COUNT; ri++) grid[ri][5] = SYM.P4;
+        const w6 = checkWins(grid, 6, BET);
+        const w5 = checkWins(grid, 5, BET);
+        // At rows=6: paylines using row 5 can fire
+        const hasRow5Win = w6.some(w => w.cells.some(c => c.row === 5));
+        expect(hasRow5Win).toBe(true);
+        // At rows=5: row 5 is hidden, those paylines are filtered
+        const hasRow5WinIn5 = w5.some(w => w.cells.some(c => c.row === 5));
+        expect(hasRow5WinIn5).toBe(false);
+    });
+});

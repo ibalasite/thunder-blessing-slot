@@ -956,9 +956,11 @@ export class GameBootstrap extends Component {
         }
 
         const multiplier = gs.inFreeGame ? gs.fgMultiplier : 1;
-        const stepWin    = parseFloat((winAmt * multiplier).toFixed(2));
-        gs.roundWin = parseFloat((gs.roundWin + stepWin).toFixed(2));
-        gs.balance  = parseFloat((gs.balance  + stepWin).toFixed(2));
+        // Math.round + EPSILON avoids the toFixed(2) floor-bias on values like
+        // 0.25 × 0.02 = 0.004999… (fp) → was rounding to 0.00 instead of 0.01
+        const stepWin = Math.round(winAmt * multiplier * 100 + Number.EPSILON) / 100;
+        gs.roundWin = Math.round((gs.roundWin + stepWin) * 100) / 100;
+        gs.balance  = Math.round((gs.balance  + stepWin) * 100) / 100;
 
         this.uiCtrl.showWinPop(stepWin, gs.roundWin);   // stepWin→大字彈出, roundWin→旁邊小字
         this.uiCtrl.setStatus(`中獎 +${stepWin.toFixed(2)}${gs.inFreeGame ? ` (×${multiplier})` : ''}`, '#ffd700');
@@ -982,7 +984,11 @@ export class GameBootstrap extends Component {
                     this.buyFGMode = false;
                     await this.doCoinTossAndMaybeFG(wasBuyFG);  // Buy FG → guaranteed=true
                 }
+                return;  // Base game: cascade terminates after MAX_ROWS win (coin toss is the cap)
             }
+            // FG at MAX_ROWS: cascade continues until no more wins, matching simulateSpin behaviour.
+            // 57 paylines remain active; new fill symbols are evaluated for further wins.
+            await this.cascadeLoop();
             return;
         }
 
@@ -1064,7 +1070,7 @@ export class GameBootstrap extends Component {
             this.reelMgr.reset();
             // ★ FG 中同樣由引擎生成盤面（使用 FG 權重）
             const fgGrid = this.engine.generateGrid(true);
-            await this.reelMgr.spinWithGrid(fgGrid);
+            await this.reelMgr.spinWithGrid(fgGrid, true); // FG: stop reels left→right
             await this.cascadeLoop();
 
             if (gs.roundWin >= gs.totalBet * MAX_WIN_MULT) {

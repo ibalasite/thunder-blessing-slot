@@ -484,3 +484,135 @@ describe('createEngine()', () => {
         expect(e.drawSymbol()).toBe(SYM.WILD);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateSpin — cascade behaviour at MAX_ROWS (57 lines)
+//
+//  SlotEngine.simulateSpin CORRECTLY chains cascades at rows=6 (loop continues
+//  until wins === 0).  GameBootstrap.cascadeLoop used to stop after one cascade
+//  at MAX_ROWS in FG — now fixed.  These tests verify the simulation model.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('simulateSpin() — cascade continues at MAX_ROWS', () => {
+
+    function mulberry32(seed: number): () => number {
+        return () => {
+            seed |= 0;
+            seed = seed + 0x6D2B79F5 | 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    it('cascadeSteps can have rowsAfter=MAX_ROWS for more than one step', () => {
+        // Run many spins; at least one should show ≥2 cascade steps at MAX_ROWS
+        let found = false;
+        for (let seed = 0; seed < 500 && !found; seed++) {
+            const e = new SlotEngine(mulberry32(seed));
+            for (let i = 0; i < 200 && !found; i++) {
+                const r = e.simulateSpin({ totalBet: 1 });
+                const stepsAtMax = r.cascadeSteps.filter(s => s.rowsAfter === MAX_ROWS);
+                if (stepsAtMax.length >= 2) found = true;
+            }
+        }
+        expect(found).toBe(true);
+    });
+
+    it('FG simulateSpin with rows reaching MAX_ROWS can still accumulate wins', () => {
+        // Run FG spins and confirm some reach MAX_ROWS with wins beyond first step
+        let maxRowsWinCount = 0;
+        const e = new SlotEngine(mulberry32(77));
+        for (let i = 0; i < 5_000; i++) {
+            const r = e.simulateSpin({ inFreeGame: true, totalBet: 1 });
+            if (r.finalRows === MAX_ROWS && r.cascadeSteps.length > 1) {
+                maxRowsWinCount++;
+            }
+        }
+        // With FG weights, cascades to MAX_ROWS should occur regularly
+        expect(maxRowsWinCount).toBeGreaterThan(0);
+    });
+
+    it('rowsAfter in cascadeSteps increases monotonically (no row shrinkage)', () => {
+        const e = new SlotEngine(mulberry32(42));
+        for (let i = 0; i < 200; i++) {
+            const r = e.simulateSpin({ totalBet: 1 });
+            for (let j = 1; j < r.cascadeSteps.length; j++) {
+                expect(r.cascadeSteps[j].rowsAfter).toBeGreaterThanOrEqual(
+                    r.cascadeSteps[j - 1].rowsAfter
+                );
+            }
+        }
+    });
+
+    it('at MAX_ROWS wins accumulate beyond initial MAX_ROWS entry step', () => {
+        // Find a spin where cascadeSteps includes a step entering MAX_ROWS AND
+        // further steps that remain at MAX_ROWS (i.e. continued cascading)
+        let found = false;
+        for (let seed = 0; seed < 300 && !found; seed++) {
+            const e = new SlotEngine(mulberry32(seed));
+            for (let i = 0; i < 300 && !found; i++) {
+                const r = e.simulateSpin({ inFreeGame: true, totalBet: 1 });
+                // Find first step that reaches MAX_ROWS
+                const firstMaxIdx = r.cascadeSteps.findIndex(s => s.rowsAfter === MAX_ROWS);
+                if (firstMaxIdx !== -1 && r.cascadeSteps.length > firstMaxIdx + 1) {
+                    // At least one more step AFTER reaching MAX_ROWS
+                    found = true;
+                }
+            }
+        }
+        expect(found).toBe(true);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WILD symbol appearance rate
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('WILD symbol appearance rate', () => {
+    it('main game: WILD appears at ~2.2% per cell (weight 2/90)', () => {
+        const e = createEngine();
+        let wildCount = 0;
+        const N = 100_000;
+        for (let i = 0; i < N; i++) {
+            if (e.drawSymbol() === SYM.WILD) wildCount++;
+        }
+        const rate = wildCount / N;
+        // 2/90 ≈ 0.0222; allow ±30% relative tolerance
+        expect(rate).toBeGreaterThan(0.0222 * 0.70);
+        expect(rate).toBeLessThan(0.0222 * 1.30);
+    });
+
+    it('FG: WILD appears at ~3.3% per cell (weight 3/90)', () => {
+        const e = createEngine();
+        let wildCount = 0;
+        const N = 100_000;
+        for (let i = 0; i < N; i++) {
+            if (e.drawSymbol(true) === SYM.WILD) wildCount++;
+        }
+        const rate = wildCount / N;
+        // 3/90 ≈ 0.0333; allow ±30% relative tolerance
+        expect(rate).toBeGreaterThan(0.0333 * 0.70);
+        expect(rate).toBeLessThan(0.0333 * 1.30);
+    });
+
+    it('5×3 base grid: P(no WILD at all) ≈ 71% (theoretical (88/90)^15)', () => {
+        const e = createEngine();
+        let noWildSpins = 0;
+        const N = 50_000;
+        for (let i = 0; i < N; i++) {
+            const grid = e.generateGrid(false);
+            let hasWild = false;
+            outer: for (let ri = 0; ri < REEL_COUNT; ri++) {
+                for (let row = 0; row < 3; row++) {
+                    if (grid[ri][row] === SYM.WILD) { hasWild = true; break outer; }
+                }
+            }
+            if (!hasWild) noWildSpins++;
+        }
+        const noWildRate = noWildSpins / N;
+        // (88/90)^15 ≈ 0.713; allow ±10% absolute
+        expect(noWildRate).toBeGreaterThan(0.60);
+        expect(noWildRate).toBeLessThan(0.82);
+    });
+});

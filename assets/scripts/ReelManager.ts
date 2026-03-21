@@ -305,17 +305,204 @@ export class ReelManager extends Component {
     }
 
     // ── 旋轉動畫 ─────────────────────────────────────────
-    /** 永遠旋轉完整 5×6，顯示列數由雲朵控制 */
-    spin(): Promise<void> {
+
+    // 每個滾輪的捲動狀態 (used by scrollReel internals)
+    private _scrolling: boolean[] = Array(REEL_COUNT).fill(false);
+
+    /**
+     * 捲動式無縫旋轉：畫面始終保持 5×6 符號，滾輪如傳送帶般由上往下捲動。
+     * @param fgMode true = 自由遊戲模式，由左至右逐欄停止
+     */
+    spinWithScrollStrip(resultGrid: SymType[][], fgMode = false): Promise<void> {
         if (this.spinning) return Promise.resolve();
         this.spinning = true;
 
+        // 捲動速度：每格 (SYMBOL_H + SYMBOL_GAP) 耗時 0.09s → 約 1280 px/s
+        const STEP_T  = 0.09;
+        const STEP_PX = SYMBOL_H + SYMBOL_GAP;  // 116 px
+
+        // 準備所有滾輪的捲動狀態
+        // vStrip[ri] = 目前虛擬帶子上的符號（從頂部向外，index 0 = 最上方不可見）
+        const vStrip: SymType[][] = [];
+        for (let ri = 0; ri < REEL_COUNT; ri++) {
+            // 初始帶 = 1 個補充格 + 目前顯示的 MAX_ROWS 格（由上到下）
+            vStrip[ri] = [
+                REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)],
+                ...Array.from({ length: MAX_ROWS }, (_, r) => gs.grid[ri][MAX_ROWS - 1 - r] as SymType),
+            ];
+            this._scrolling[ri] = true;
+        }
+
+        // 各欄節點 X 位置快取
+        const reelX: number[] = [];
+        for (let ri = 0; ri < REEL_COUNT; ri++)
+            reelX[ri] = this.cells[ri][0].node.position.x;
+
+        // 框外上方補充位置（雲朵遮罩上方不可見）
+        const topRowY = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
+        const entryY  = topRowY + SYMBOL_H + SYMBOL_GAP;   // 剛好在框外一格
+
+        // 初始化節點位置：row=0(底) ~ row=MAX_ROWS-1(頂)，並在頂部再放一個隱藏補充格
+        // 使用 cells[ri][MAX_ROWS-1] 以外的「虛擬格」是不存在的，
+        // 所以我們直接讓頂格從 entryY 開始，視覺上在雲朵後方不可見。
+        for (let ri = 0; ri < REEL_COUNT; ri++) {
+            for (let row = 0; row < MAX_ROWS; row++) {
+                const cell = this.cells[ri][row];
+                tween(cell.node).stop();
+                cell.node.setPosition(reelX[ri], this.rowToY(row, MAX_ROWS), 0);
+                cell.node.setScale(1, 1, 1);
+                cell.node.active = true;
+                this.drawCell(cell, gs.grid[ri][row]);
+            }
+        }
+
+        // 停止各欄的時間點
+        // Normal mode: 最短旋轉 0.54s，各欄加 0.06s 偏移
+        // FG mode    : 各欄依序停止，間隔 0.22s，最短 0.54s 後開始停第0欄
+        const MIN_SPIN_T = 0.54;
+        const stopTimes: number[] = Array.from({ length: REEL_COUNT }, (_, ri) =>
+            fgMode ? MIN_SPIN_T + ri * 0.22 : MIN_SPIN_T + ri * 0.06
+        );
+
+        // 記錄每欄已捲動的累計格數
+        const stepsDone: number[] = Array(REEL_COUNT).fill(0);
+        // 記錄每欄的「停止請求時間」（在那步之後的整步捲完時停）
+        const stopRequested: boolean[] = Array(REEL_COUNT).fill(false);
+
+        return new Promise<void>(resolve => {
+            let doneCnt = 0;
+
+            const doOneStep = (ri: number) => {
+                if (!this._scrolling[ri]) return;
+
+                // 每步：所有格子向下移動 STEP_PX，底格移出螢幕後遞補到頂部
+                const reel = this.cells[ri];
+                const px   = reelX[ri];
+
+                // 頂格當前 Y（它在 entryY 或更高處，捲動後移到 row=MAX_ROWS-1 的位置）
+                // 策略：每步把 node 往下 tweenSTEP_PX，底格（row=0 方向最低的）若 Y <= 螢幕底
+                // 就把它重設到 entryY 並換符號。
+                // 簡化：每格都 tween(位移-STEP_PX)，tween 結束後判斷最底格是否超出，若超出
+                // 則把它重設到頂部。
+                // 但 MAX_ROWS 個 tween 同時結束時只有最後一個 call() 觸發下一步會漏失。
+                // ✅ 改為：只追蹤「計時排程」來驅動每步，不依賴 tween call()。
+
+                // 把所有格子 +1 step 往下
+                for (let row = 0; row < MAX_ROWS; row++) {
+                    const node = reel[row].node;
+                    const curY = node.position.y;
+                    tween(node).stop();
+                    tween(node)
+                        .to(STEP_T, { position: new Vec3(px, curY - STEP_PX, 0) })
+                        .start();
+                }
+
+                // 在 STEP_T 後結算：把已掉到最底部的格子搬到頂部
+                this.scheduleOnce(() => {
+                    // 找出哪個 node 的 Y 最低
+                    let minY = Infinity, minRow = 0;
+                    for (let row = 0; row < MAX_ROWS; row++) {
+                        const y = reel[row].node.position.y;
+                        if (y < minY) { minY = y; minRow = row; }
+                    }
+                    // 如果最低格超出底部閾值，移到頂部並換符號
+                    const bottomThreshold = this.rowToY(0, MAX_ROWS) - STEP_PX * 0.5;
+                    if (minY <= bottomThreshold) {
+                        const cell = reel[minRow];
+                        tween(cell.node).stop();
+                        // 找到目前最高格的 Y，新格放在它的上方一格
+                        let maxY = -Infinity;
+                        for (let row = 0; row < MAX_ROWS; row++) {
+                            if (row !== minRow)
+                                maxY = Math.max(maxY, reel[row].node.position.y);
+                        }
+                        cell.node.setPosition(px, maxY + STEP_PX, 0);
+                        // 填入隨機符號（尚未到停止時間）或最終符號（停止時替換）
+                        const newSym = stopRequested[ri]
+                            ? null   // 先填隨機，最後再 snap（見下方停止邏輯）
+                            : REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                        this.drawCell(cell, newSym ?? REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
+                    }
+
+                    stepsDone[ri]++;
+
+                    // 是否到了停止時間？
+                    const elapsed = stepsDone[ri] * STEP_T;
+                    if (!stopRequested[ri] && elapsed >= stopTimes[ri]) {
+                        stopRequested[ri] = true;
+                        // 再做最後 MAX_ROWS 步讓結果符號依序進入視野，然後 snap
+                        // 做一次 "landing" 動畫：更新所有格為最終結果，然後 tween snap 到正確位置
+                        this.scheduleOnce(() => {
+                            this._scrolling[ri] = false;
+                            this.snapReelToResult(ri, resultGrid[ri], reelX[ri], () => {
+                                doneCnt++;
+                                if (doneCnt === REEL_COUNT) {
+                                    gs.grid = resultGrid;
+                                    this.spinning = false;
+                                    resolve();
+                                }
+                            });
+                        }, STEP_T * (MAX_ROWS + 1));
+                    } else if (!stopRequested[ri]) {
+                        // 繼續下一步
+                        this.scheduleOnce(() => doOneStep(ri), 0);
+                    }
+                }, STEP_T);
+            };
+
+            // 啟動所有欄的捲動
+            for (let ri = 0; ri < REEL_COUNT; ri++) {
+                doOneStep(ri);
+            }
+        });
+    }
+
+    /**
+     * 將一欄的格子 snap 到最終結果位置（帶彈跳緩動）
+     */
+    private snapReelToResult(ri: number, result: SymType[], px: number, cb: () => void): void {
+        const reel = this.cells[ri];
+        // 停止所有正在進行的 tween
+        for (let row = 0; row < MAX_ROWS; row++) {
+            tween(reel[row].node).stop();
+        }
+        // 直接設定最終符號與位置
+        for (let row = 0; row < MAX_ROWS; row++) {
+            const cell = reel[row];
+            this.drawCell(cell, result[row]);
+            cell.node.active = true;
+            cell.node.setScale(1, 1, 1);
+        }
+        // 從目前 Y 各自平滑緩入到目標 Y（彈跳結束感）
+        let pending = MAX_ROWS;
+        for (let row = 0; row < MAX_ROWS; row++) {
+            const cell    = reel[row];
+            const targetY = this.rowToY(row, MAX_ROWS);
+            const curY    = cell.node.position.y;
+            if (Math.abs(curY - targetY) < 2) {
+                cell.node.setPosition(px, targetY, 0);
+                pending--;
+                if (pending === 0) cb();
+            } else {
+                tween(cell.node)
+                    .to(0.14, { position: new Vec3(px, targetY - 8, 0) }, { easing: 'cubicOut' })
+                    .to(0.07, { position: new Vec3(px, targetY + 4, 0) })
+                    .to(0.05, { position: new Vec3(px, targetY,     0) })
+                    .call(() => { pending--; if (pending === 0) cb(); })
+                    .start();
+            }
+        }
+        this.setCloud(BASE_ROWS);
+    }
+
+    /** 永遠旋轉完整 5×6，顯示列數由雲朵控制（保留向下相容，內部轉發） */
+    spin(): Promise<void> {
+        if (this.spinning) return Promise.resolve();
         // 生成完整 6 列結果盤面（含雲朵遮蔽列）
         const resultGrid: SymType[][] = [];
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             resultGrid[ri] = [];
             for (let row = 0; row < MAX_ROWS; row++) {
-                // Extra Bet: 保證滾輪3（index 2）一定有 Scatter（如果 extraBetOn）
                 if (gs.extraBetOn && ri === 2 && row === 0) {
                     resultGrid[ri][row] = SYM.SCATTER;
                 } else {
@@ -323,62 +510,7 @@ export class ReelManager extends Component {
                 }
             }
         }
-
-        return new Promise<void>(resolve => {
-            let done = 0;
-            for (let ri = 0; ri < REEL_COUNT; ri++) {
-                const delay = ri * 0.12;
-                this.spinReel(ri, resultGrid[ri], delay, () => {
-                    done++;
-                    if (done === REEL_COUNT) {
-                        gs.grid = resultGrid;
-                        this.spinning = false;
-                        resolve();
-                    }
-                });
-            }
-        });
-    }
-
-    /** 所有 6 個格子全部從框外上方同時落下，雲朵在下方遮蔽上層 */
-    private spinReel(ri: number, result: SymType[], delay: number, cb: () => void): void {
-        const topRowY  = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
-        const entryY   = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;   // 框外上方，遮罩裁切不可見
-        const spinDist = (SYMBOL_H + SYMBOL_GAP) * (MAX_ROWS + 2);
-
-        this.scheduleOnce(() => {
-            const reel = this.cells[ri];
-
-            // ① 停止殘留 tween，快照各格 Y 後一起向下退出
-            for (let row = 0; row < MAX_ROWS; row++) {
-                const n  = reel[row].node;
-                const px = n.position.x;
-                const sy = n.position.y;   // 快照當前 Y，避免 tween 覆蓋
-                tween(n).stop();
-                tween(n)
-                    .to(0.18, { position: new Vec3(px, sy - spinDist, 0) })
-                    .call(() => { n.setPosition(px, -1500, 0); })
-                    .start();
-            }
-
-            // ② 0.20s 後新符號從框外上方落下（scheduleOnce 獨立計時，不共用 this.node）
-            this.scheduleOnce(() => {
-                for (let row = 0; row < MAX_ROWS; row++) {
-                    const cell    = reel[row];
-                    const px      = cell.node.position.x;
-                    const targetY = this.rowToY(row, MAX_ROWS);
-                    this.drawCell(cell, result[row]);
-                    tween(cell.node).stop();
-                    cell.node.active = true;
-                    cell.node.setPosition(px, entryY, 0);
-                    tween(cell.node)
-                        .to(0.30, { position: new Vec3(px, targetY, 0) }, { easing: 'cubicOut' })
-                        .start();
-                }
-                this.setCloud(BASE_ROWS);
-                this.scheduleOnce(cb, 0.32);
-            }, 0.20);
-        }, delay);
+        return this.spinWithScrollStrip(resultGrid, false);
     }
 
     // ── Cascade 動畫 ─────────────────────────────────────
@@ -432,8 +564,11 @@ export class ReelManager extends Component {
                     }
                     const surviving = col.filter(s => s !== null) as SymType[];
 
-                    // Snapshot current cell screen positions before any moves
-                    const oldCellY: number[] = this.cells[ri].map(c => c.node.position.y);
+                    // Use canonical rowToY positions (not live node Y) to avoid timing
+                    // artifacts where a cell mid-animation has Y below its intended row,
+                    // which would cause the survivor to tween upward instead of downward.
+                    const oldCellY: number[] = Array.from(
+                        { length: MAX_ROWS }, (_, r) => this.rowToY(r, MAX_ROWS));
 
                     // 只填滿舊的可見範圍（不包含新解放列），新解放列保留 spin 時的預設符號
                     const removedSorted = [...removed].sort((a, b) => a - b);
@@ -455,6 +590,7 @@ export class ReelManager extends Component {
                         this.drawCell(cell, grid[ri][row]);
                         const targetY = this.rowToY(row, MAX_ROWS);
 
+                        tween(cell.node).stop();  // cancel any residual tween before repositioning
                         if (row >= oldRows) {
                             // 雲朵解放列：符號原本就在那，不需位移動畫，只做縮放提示
                             cell.node.setPosition(cell.node.position.x, targetY, 0);
@@ -468,7 +604,7 @@ export class ReelManager extends Component {
                                 // Symbol did not move — snap directly
                                 cell.node.setPosition(cell.node.position.x, targetY, 0);
                             } else {
-                                // Symbol fell from above — animate from old Y down to new Y
+                                // Symbol fell from — animate from canonical row Y downward to new Y
                                 cell.node.setPosition(cell.node.position.x, oldCellY[origRow], 0);
                                 tween(cell.node)
                                     .to(0.22, { position: new Vec3(cell.node.position.x, targetY, 0) },
@@ -544,25 +680,12 @@ export class ReelManager extends Component {
         // TODO: 播放滾輪向下展開動畫，揭示對應 FREE 字母
     }
 
-    /** 使用引擎預先決定的盤面執行旋轉動畫（供 GameBootstrap 搭配 SlotEngine 使用）*/
-    spinWithGrid(resultGrid: SymType[][]): Promise<void> {
-        if (this.spinning) return Promise.resolve();
-        this.spinning = true;
-
-        return new Promise<void>(resolve => {
-            let done = 0;
-            for (let ri = 0; ri < REEL_COUNT; ri++) {
-                const delay = ri * 0.12;
-                this.spinReel(ri, resultGrid[ri], delay, () => {
-                    done++;
-                    if (done === REEL_COUNT) {
-                        gs.grid = resultGrid;
-                        this.spinning = false;
-                        resolve();
-                    }
-                });
-            }
-        });
+    /**
+     * 使用引擎預先決定的盤面執行旋轉動畫（供 GameBootstrap 搭配 SlotEngine 使用）
+     * @param fgMode true = 自由遊戲，滾輪由左至右逐欄停止
+     */
+    spinWithGrid(resultGrid: SymType[][], fgMode = false): Promise<void> {
+        return this.spinWithScrollStrip(resultGrid, fgMode);
     }
 
     /** 重置盤面到 BASE_ROWS */
