@@ -63,9 +63,32 @@ export interface TBStep {
     gridAfter:   SymType[][];                       // 升階後盤面
 }
 
+/**
+ * WinResult — WinLine 的別名，向後相容 WinChecker 的使用方
+ * （WinChecker.ts 已合併至此檔案）
+ */
+export type WinResult = WinLine;
+
+/** 計算獎金：totalBet × multiplier */
+export function calcWinAmount(res: WinLine, totalBet: number): number {
+    return parseFloat((totalBet * res.multiplier).toFixed(4));
+}
+
+/** 取得盤面上所有 Scatter 位置 */
+export function findScatters(grid: SymType[][], rows: number): { reel: number; row: number }[] {
+    const pos: { reel: number; row: number }[] = [];
+    for (let ri = 0; ri < grid.length; ri++) {
+        for (let row = 0; row < rows; row++) {
+            if (grid[ri][row] === SYM.SCATTER) pos.push({ reel: ri, row });
+        }
+    }
+    return pos;
+}
+
 /** simulateSpin 回傳的完整 spin 結果 */
 export interface SpinResult {
     initialGrid:  SymType[][];
+    finalGrid:    SymType[][];     // 最終盤面（所有 cascade 完成後）
     cascadeSteps: CascadeStep[];
     tbStep?:      TBStep;          // TB 最多發生一次，在 cascade 尾端
     totalRawWin:  number;          // 所有步驟賠付總和（totalBet 已乘入；FG 倍率不含）
@@ -300,7 +323,8 @@ export class SlotEngine {
         }
 
         return {
-            initialGrid, cascadeSteps, tbStep,
+            initialGrid, finalGrid: grid.map(c => [...c]) as SymType[][],
+            cascadeSteps, tbStep,
             totalRawWin, fgTriggered,
             finalRows: rows, maxWinCapped,
         };
@@ -311,3 +335,14 @@ export class SlotEngine {
 export function createEngine(rng?: () => number): SlotEngine {
     return new SlotEngine(rng);
 }
+
+/**
+ * 自由函式版 checkWins（向後相容 WinChecker import）
+ * 第三個參數 totalBet 為保留參數，邏輯上不使用（獎金計算由 calcWinAmount 負責）
+ */
+export function checkWins(grid: SymType[][], rows: number, _totalBet?: number): WinLine[] {
+    return _sharedEngine.checkWins(grid, rows);
+}
+
+// 內部共用單例，避免 checkWins 自由函式每次 new SlotEngine
+const _sharedEngine = new SlotEngine();

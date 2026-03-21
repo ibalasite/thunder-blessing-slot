@@ -13,7 +13,7 @@
  *   - calcWinAmount arithmetic
  */
 
-import { checkWins, calcWinAmount } from '../../assets/scripts/WinChecker';
+import { checkWins, calcWinAmount } from '../../assets/scripts/SlotEngine';
 import {
     SYM, SymType,
     PAYLINES_25, PAYLINES_33, PAYLINES_45, PAYLINES_57,

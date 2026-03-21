@@ -4,3 +4,5 @@ library/
 build/
 node_modules/
 *.meta.user
+
+test-results.json

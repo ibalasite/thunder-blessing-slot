@@ -8,8 +8,9 @@ import { _decorator, Component, Node, Label, Sprite, Color, UITransform,
          CCFloat, EventTarget } from 'cc';
 import { REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP,
          REEL_GAP, REEL_STRIP, SYMBOL_COLORS, SYMBOL_DARK, SYMBOL_LABELS, SymType, SYM, CANVAS_W } from './GameConfig';
-import { gs } from './GameState';
-import { WinResult } from './WinChecker';
+import { IGameSession } from './contracts/IGameSession';
+import { IReelManager }  from './contracts/IReelManager';
+import { WinResult } from './SlotEngine';
 
 const { ccclass, property } = _decorator;
 
@@ -23,9 +24,16 @@ interface SymCell {
 }
 
 @ccclass('ReelManager')
-export class ReelManager extends Component {
+export class ReelManager extends Component implements IReelManager {
     // 事件匯流排 (GameBootstrap 監聽用)
     static events = new EventTarget();
+
+    private _session!: IGameSession;
+
+    /** 由 GameBootstrap 在場景建立後注入 */
+    init(session: IGameSession): void {
+        this._session = session;
+    }
 
     // 每個滾輪的符號格子 [reel][row]
     private cells: SymCell[][] = [];
@@ -169,10 +177,11 @@ export class ReelManager extends Component {
 
     /** 重新繪製所有閃電標記狀態 */
     refreshAllMarks(): void {
-        const rows = gs.currentRows;
+        if (!this._session) return;
+        const rows = this._session.currentRows;
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             for (let row = 0; row < rows; row++) {
-                this.updateMark(ri, row, gs.hasMark({ reel: ri, row }));
+                this.updateMark(ri, row, this._session.hasMark(ri, row));
             }
         }
     }
@@ -235,6 +244,7 @@ export class ReelManager extends Component {
         });
     }
     private randomizeGrid(): void {
+        if (!this._session) return;
         const grid: SymType[][] = [];
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             grid[ri] = [];
@@ -244,7 +254,7 @@ export class ReelManager extends Component {
                 this.drawCell(this.cells[ri][row], sym);
             }
         }
-        gs.grid = grid;
+        this._session.setGrid(grid);
     }
 
     // ── 雲霧遮罩 ─────────────────────────────────────────
@@ -322,8 +332,13 @@ export class ReelManager extends Component {
         if (this.spinning) return Promise.resolve();
         this.spinning = true;
 
+        // ── Turbo 模式：不走卷帶，直接閃入結果（最快）────────
+        if (!fgMode && this._session.turboMode) {
+            return this._snapAllToResult(resultGrid);
+        }
+
         const STEP_PX   = SYMBOL_H + SYMBOL_GAP;   // 116 px — 一格高度
-        const SPEED     = STEP_PX / 0.055;           // ~2109 px/s → 約 35px/frame @60fps
+        const SPEED     = STEP_PX / 0.055;           // 標準卷帶速度
         // 底部退出閾值：比底列再低半格即算離開
         const EXIT_Y    = this.rowToY(0, MAX_ROWS) - STEP_PX * 0.6;
 
@@ -336,7 +351,7 @@ export class ReelManager extends Component {
                 cell.node.setScale(1, 1, 1);
                 cell.node.active = true;
                 cell.node.setPosition(px, this.rowToY(row, MAX_ROWS), 0);
-                this.drawCell(cell, gs.grid[ri][row]);
+                this.drawCell(cell, this._session.grid[ri][row]);
             }
             this._scrolling[ri] = true;
         }
@@ -344,9 +359,12 @@ export class ReelManager extends Component {
         this.setCloud(BASE_ROWS);
 
         // ② 每欄的停轉時間
+        // fgMode=true  → 逐欄停轉（0.22s 間隔），模擬 Free Game 緩慢效果
+        // turboMode=false → 逐欄停轉（0.28s 間隔），慢速基礎遊戲模式
         const MIN_T    = 0.60;
+        const stagger  = fgMode ? 0.22 : 0.28;
         const stopTimes = Array.from({ length: REEL_COUNT }, (_, ri) =>
-            fgMode ? MIN_T + ri * 0.22 : MIN_T + ri * 0.06
+            MIN_T + ri * stagger
         );
 
         return new Promise<void>(resolve => {
@@ -402,7 +420,7 @@ export class ReelManager extends Component {
                             doneCnt++;
                             if (doneCnt === REEL_COUNT) {
                                 this.unschedule(updateFn);
-                                gs.grid      = resultGrid;
+                                this._session.setGrid(resultGrid);
                                 this.spinning = false;
                                 resolve();
                             }
@@ -412,6 +430,105 @@ export class ReelManager extends Component {
             };
 
             // 每幀呼叫（interval=0）
+            this.schedule(updateFn, 0);
+        });
+    }
+
+    /**
+     * Turbo 模式：精確執行「一轉」卷帶動畫（= 6格距離）。
+     *
+     * 原理：
+     *   EXIT_Y = rowToY(0) − STEP_PX（底列下方恰好一格）
+     *   cell[row] 從 rowToY(row) 出發，下落 (row+1)×STEP_PX 後到達 EXIT_Y。
+     *   回收時放到最頂上方並帶入結果符號 → 結果符號從頂部（雲朵後方）逐列出現。
+     *   6 格全部回收後，每格恰好回到 rowToY(row)：一轉完成，舊牌全出、新牌全進。
+     *
+     * 全部5欄同時進行，速度與普通捲動相同，約 0.33s 完成。
+     */
+    private _snapAllToResult(resultGrid: SymType[][]): Promise<void> {
+        this.setCloud(BASE_ROWS);
+
+        const STEP_PX = SYMBOL_H + SYMBOL_GAP;
+        const SPEED   = STEP_PX / 0.055;   // 與普通卷帶相同速度 → 1轉 ≈ 0.33s
+        // 精確出口閾值：底列下方整整一格，確保每格在 1 轉後精準歸位
+        const EXIT_Y  = this.rowToY(0, MAX_ROWS) - STEP_PX;
+
+        // 初始化：歸位 + 填入舊符號
+        for (let ri = 0; ri < REEL_COUNT; ri++) {
+            const px = this.cells[ri][0].node.position.x;
+            for (let row = 0; row < MAX_ROWS; row++) {
+                const cell = this.cells[ri][row];
+                tween(cell.node).stop();
+                cell.node.setScale(1, 1, 1);
+                cell.node.active = true;
+                cell.node.setPosition(px, this.rowToY(row, MAX_ROWS), 0);
+                this.drawCell(cell, this._session.grid[ri][row]);
+            }
+        }
+
+        // 每格只回收一次的旗標，及每欄已回收計數
+        const recycled     = Array.from({ length: REEL_COUNT }, () =>
+            Array(MAX_ROWS).fill(false));
+        const recycleCount = Array(REEL_COUNT).fill(0);
+
+        return new Promise<void>(resolve => {
+            let doneCnt = 0;
+            let prevMs  = -1;
+
+            const updateFn = () => {
+                const nowMs = Date.now();
+                if (prevMs < 0) { prevMs = nowMs; return; }
+                const dt    = Math.min((nowMs - prevMs) / 1000, 0.05);
+                prevMs      = nowMs;
+                const movePx = SPEED * dt;
+
+                for (let ri = 0; ri < REEL_COUNT; ri++) {
+                    if (recycleCount[ri] >= MAX_ROWS) continue;   // 此欄已完成
+                    const px = this.cells[ri][0].node.position.x;
+
+                    // 所有格子向下移動
+                    for (let row = 0; row < MAX_ROWS; row++) {
+                        const nd = this.cells[ri][row].node;
+                        nd.setPosition(px, nd.position.y - movePx, 0);
+                    }
+
+                    // 偵測並回收已離開底部的格子（每格只回收一次）
+                    for (let row = 0; row < MAX_ROWS; row++) {
+                        if (recycled[ri][row]) continue;
+                        const cell = this.cells[ri][row];
+                        if (cell.node.position.y <= EXIT_Y) {
+                            recycled[ri][row] = true;
+
+                            // 找目前最高格，新格放在其上方
+                            let maxY = -Infinity;
+                            for (let r2 = 0; r2 < MAX_ROWS; r2++) {
+                                const y2 = this.cells[ri][r2].node.position.y;
+                                if (y2 > maxY) maxY = y2;
+                            }
+                            cell.node.setPosition(px, maxY + STEP_PX, 0);
+                            // 帶入對應的結果符號（cell[row] 最終回到 row 位置）
+                            this.drawCell(cell, resultGrid[ri][row]);
+                            recycleCount[ri]++;
+
+                            // 本欄6格全部回收 → snap 對齊後 resolve
+                            if (recycleCount[ri] >= MAX_ROWS) {
+                                const capturedRi = ri;
+                                const capturedPx = px;
+                                this._snapReelToResult(capturedRi, resultGrid[capturedRi], capturedPx, () => {
+                                    this._session.setGrid(resultGrid);
+                                    doneCnt++;
+                                    if (doneCnt === REEL_COUNT) {
+                                        this.unschedule(updateFn);
+                                        this.spinning = false;
+                                        resolve();
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            };
+
             this.schedule(updateFn, 0);
         });
     }
@@ -468,7 +585,7 @@ export class ReelManager extends Component {
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             resultGrid[ri] = [];
             for (let row = 0; row < MAX_ROWS; row++) {
-                if (gs.extraBetOn && ri === 2 && row === 0) {
+                if (this._session.extraBetOn && ri === 2 && row === 0) {
                     resultGrid[ri][row] = SYM.SCATTER;
                 } else {
                     resultGrid[ri][row] = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
@@ -485,7 +602,7 @@ export class ReelManager extends Component {
      */
     cascade(winCells: { reel: number; row: number }[], newRows: number,
             newSyms?: Map<string, SymType>): Promise<void> {
-        const oldRows = gs.currentRows;
+        const oldRows = this._session.currentRows;
         const expanding = newRows > oldRows;
 
         return new Promise<void>(resolve => {
@@ -509,7 +626,7 @@ export class ReelManager extends Component {
             }
 
             this.scheduleOnce(() => {
-                const grid    = gs.grid;  // 永遠包含全 6 列
+                const grid    = this._session.grid.map(col => [...col]) as SymType[][];  // 深複製供修改
                 // Entry Y: 框外上方，遮罩以外不可見
                 const topRowY = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
                 const entryY  = topRowY + SYMBOL_H * 2 + SYMBOL_GAP;
@@ -593,8 +710,8 @@ export class ReelManager extends Component {
                         cell.node.setPosition(cell.node.position.x, this.rowToY(row, MAX_ROWS), 0);
                     }
                 }
-                gs.grid     = grid;
-                gs.rowCount = Array(REEL_COUNT).fill(newRows);
+                this._session.setGrid(grid);
+                this._session.setCurrentRows(newRows);
 
                 if (expanding) {
                     // 先搖晃雲朵（已在上方），然後解放一層
@@ -621,8 +738,8 @@ export class ReelManager extends Component {
     /** 更新盤面（Thunder Blessing 後） */
     updateGrid(grid: SymType[][]): void {
         for (let ri = 0; ri < REEL_COUNT; ri++) {
-            for (let row = 0; row < gs.currentRows; row++) {
-                if (grid[ri][row] !== gs.grid[ri][row]) {
+            for (let row = 0; row < this._session.currentRows; row++) {
+                if (grid[ri][row] !== this._session.grid[ri][row]) {
                     this.drawCell(this.cells[ri][row], grid[ri][row]);
                     // Flash cell: white burst → settle (Thunder Blessing transform)
                     tween(this.cells[ri][row].node)
@@ -633,15 +750,15 @@ export class ReelManager extends Component {
                 }
             }
         }
-        gs.grid = grid;
+        this._session.setGrid(grid);
     }
 
     /**
-     * Buy FG 表演用：將滾輪視覺擴展至指定列數（純動畫，不改變 gs.grid 內容）。
-     * TODO: 實作具體的逐列展開動畫；目前僅更新 gs.rowCount 供後續邏輯使用。
+     * Buy FG 表演用：將滾輪視覺擴展至指定列數（純動畫，不改變 session.grid 內容）。
+     * TODO: 實作具體的逐列展開動畫；目前僅更新 session.currentRows 供後續邏輯使用。
      */
     expandToRows(targetRows: number): void {
-        gs.rowCount = Array(REEL_COUNT).fill(targetRows);
+        this._session.setCurrentRows(targetRows);
         // TODO: 播放滾輪向下展開動畫，揭示對應 FREE 字母
     }
 
@@ -656,7 +773,7 @@ export class ReelManager extends Component {
     /** 重置盤面到 BASE_ROWS */
     reset(): void {
         this.clearPreviewExtraBet();   // restore any preview SC cells before redraw
-        gs.rowCount = Array(REEL_COUNT).fill(BASE_ROWS);
+        this._session.setCurrentRows(BASE_ROWS);
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             for (let row = 0; row < MAX_ROWS; row++) {
                 this.cells[ri][row].node.active = true;

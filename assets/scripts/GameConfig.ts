@@ -26,16 +26,13 @@ export const SYMBOL_WEIGHTS_FG: Record<SymType, number> = {
 };
 
 // Reel strip — 依照權重展開（每個滾輪共用同一張 strip，可日後分開）
+// 注意：不在 module 載入時洗牌（避免 seeded 測試不穩定）；
+// ReelManager 每次存取時自行 Math.random() 取樣，洗牌無意義。
 export const REEL_STRIP: SymType[] = (() => {
     const strip: SymType[] = [];
     (Object.entries(SYMBOL_WEIGHTS) as [SymType, number][]).forEach(([sym, w]) => {
         for (let i = 0; i < w; i++) strip.push(sym);
     });
-    // 打亂
-    for (let i = strip.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [strip[i], strip[j]] = [strip[j], strip[i]];
-    }
     return strip;
 })();
 
@@ -178,6 +175,15 @@ export const SYMBOL_UPGRADE: Record<string, string> = {
     'L4':'P4','L3':'P4','L2':'P4','L1':'P4',
     'P4':'P3','P3':'P2','P2':'P1','P1':'P1'
 };
+
+// 基礎連線數（3 列可見：25 條；展開後：57 條）
+export const LINES_BASE = 25;   // BASE_ROWS 時的活躍連線數
+export const LINES_MAX  = 57;   // MAX_ROWS  時的活躍連線數
+
+// 押分範圍（以 25 線基礎遊戲為參考單位）
+export const BET_MIN = 0.25;    // 25線 × betPerLine 的最小合法值
+export const BET_MAX = 10.00;   // 25線 × betPerLine 的最大合法值
+export const BET_STEP = 0.25;   // +/- 一次的步進量
 
 // Extra Bet 倍率
 export const EXTRA_BET_MULT = 3;
