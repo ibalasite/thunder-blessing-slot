@@ -1,6 +1,12 @@
-# patch_bundle.ps1  v2 — per-frame ribbon animation
+# patch_bundle.ps1  v3 — per-frame ribbon animation + Array.from Set spread fix
 $bundlePath = "C:\Projects\thunder-blessing-slot\build\web-desktop\assets\main\index.js"
 $c = [System.IO.File]::ReadAllText($bundlePath)
+
+# ── Fix 1: Babel compiles [...Set] → [].concat(Set) which wraps Set as one element.
+#    Must use Array.from() so spread works correctly on Set objects.
+$c = $c.Replace("marks:[].concat(this._session.lightningMarks)", "marks:Array.from(this._session.lightningMarks)")
+$c = $c.Replace("newMarks:[].concat(o)", "newMarks:Array.from(o)")
+Write-Host "Array.from fix applied"
 
 # Locate old spinWithScrollStrip block (everything up to ,t.spin=function())
 $i1 = $c.IndexOf("t.spinWithScrollStrip=function(")

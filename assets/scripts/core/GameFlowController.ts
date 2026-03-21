@@ -334,7 +334,7 @@ export class GameFlowController {
             extraBet:    this._session.extraBetOn,
             inFreeGame:  this._session.inFreeGame,
             fgMultIndex: this._session.fgMultIndex,
-            marks:       [...this._session.lightningMarks],
+            marks:       Array.from(this._session.lightningMarks),
         };
     }
 

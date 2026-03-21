@@ -31,7 +31,7 @@ export class LocalEngineAdapter implements IEngineAdapter {
             fgTriggered:  result.fgTriggered,
             finalRows:    result.finalRows,
             maxWinCapped: result.maxWinCapped,
-            newMarks:     [...marks],
+            newMarks:     Array.from(marks),
         };
     }
 }
