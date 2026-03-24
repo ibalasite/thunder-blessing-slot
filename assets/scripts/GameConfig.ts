@@ -199,8 +199,17 @@ export const BET_MIN = 0.25;    // 25線 × betPerLine 的最小合法值
 export const BET_MAX = 10.00;   // 25線 × betPerLine 的最大合法值
 export const BET_STEP = 0.25;   // +/- 一次的步進量
 
-// Extra Bet 倍率
+// Extra Bet 倍率（玩家每轉付 totalBet × EXTRA_BET_MULT）
 export const EXTRA_BET_MULT = 3;
+
+// Buy Free Game 費用（玩家付 totalBet × BUY_COST_MULT 購買 FG）
+export const BUY_COST_MULT = 100;
+
+// ── 模式專屬派獎倍率（各模式獨立校準至 97.5% RTP）───────────────
+// Buy FG 期間所有中獎額外乘以此值（含 intro cascade + FG chain）
+export const BUY_FG_PAYOUT_SCALE = 3.36;
+// Extra Bet 期間所有中獎額外乘以此值
+export const EB_PAYOUT_SCALE = 2.73;
 
 // 最大獎金上限
 export const MAX_WIN_MULT = 30000;

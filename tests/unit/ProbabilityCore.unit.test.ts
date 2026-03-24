@@ -22,6 +22,7 @@ import {
     TB_SECOND_HIT_PROB, SYMBOL_UPGRADE,
     MAX_WIN_MULT, REEL_COUNT, BASE_ROWS, MAX_ROWS,
     BET_MIN, BET_MAX, BET_STEP, EXTRA_BET_MULT,
+    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
 } from '../../assets/scripts/GameConfig';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -491,5 +492,30 @@ describe('checkWins — Edge Cases', () => {
         const wins3 = engine.checkWins(g, 3);
         const wins6 = engine.checkWins(g, 6);
         expect(wins6.length).toBeGreaterThanOrEqual(wins3.length);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. Mode-specific payout scales
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('Mode-specific payout scales', () => {
+    it('BUY_COST_MULT is a positive integer', () => {
+        expect(BUY_COST_MULT).toBeGreaterThan(0);
+        expect(Number.isInteger(BUY_COST_MULT)).toBe(true);
+    });
+
+    it('BUY_FG_PAYOUT_SCALE > 1 (boosts FG returns to compensate high cost)', () => {
+        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(1);
+        expect(BUY_FG_PAYOUT_SCALE).toBeLessThan(10);
+    });
+
+    it('EB_PAYOUT_SCALE > 1 (boosts EB returns to compensate 3x cost)', () => {
+        expect(EB_PAYOUT_SCALE).toBeGreaterThan(1);
+        expect(EB_PAYOUT_SCALE).toBeLessThan(10);
+    });
+
+    it('EXTRA_BET_MULT is 3', () => {
+        expect(EXTRA_BET_MULT).toBe(3);
     });
 });

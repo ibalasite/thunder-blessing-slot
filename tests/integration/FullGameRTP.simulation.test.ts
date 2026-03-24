@@ -22,6 +22,7 @@ import {
     FG_MULTIPLIERS, FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
     MAX_WIN_MULT, TB_SECOND_HIT_PROB,
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
+    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE,
     SYM,
 } from '../../assets/scripts/GameConfig';
 
@@ -258,54 +259,50 @@ describe('Coin Toss Mechanics Verification', () => {
 
 describe('Buy Feature Expected Value', () => {
 
-    it('Buy FG has positive expected value (includes intro cascade + FG chain)', () => {
+    it('Buy FG RTP ≈ 97.5% with BUY_FG_PAYOUT_SCALE (100k sessions)', () => {
         const N = 100_000;
         const rng = mulberry32(42);
         const engine = new SlotEngine(rng);
         const totalBet = 1;
-        const buyCost = totalBet * 100;
+        const buyCost = totalBet * BUY_COST_MULT;
 
         let totalCost = 0;
         let totalReturn = 0;
 
         for (let i = 0; i < N; i++) {
             totalCost += buyCost;
+            let sessionPay = 0;
 
-            // Intro cascade spins (up to 20) until reaching MAX_ROWS
             for (let s = 0; s < 20; s++) {
                 const intro = engine.simulateSpin({ totalBet });
-                totalReturn += intro.totalRawWin;
+                sessionPay += intro.totalRawWin;
                 if (intro.fgTriggered || intro.finalRows >= MAX_ROWS) break;
             }
 
-            // Entry coin toss at 80% (guaranteed for Buy)
-            if (rng() >= COIN_TOSS_HEADS_PROB[0]) continue;
-
-            const fgMarks = new Set<string>();
-            let multIdx = 0;
-
-            while (true) {
-                const mult = FG_MULTIPLIERS[multIdx];
-                const fg = engine.simulateSpin({
-                    inFreeGame: true,
-                    fgMultiplier: mult,
-                    totalBet,
-                    lightningMarks: fgMarks,
-                });
-                totalReturn += fg.totalRawWin * mult;
-                if (fg.maxWinCapped) break;
-
-                const prob = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
-                if (rng() >= prob) break;
-                if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
+            if (rng() < COIN_TOSS_HEADS_PROB[0]) {
+                const fgMarks = new Set<string>();
+                let multIdx = 0;
+                while (true) {
+                    const mult = FG_MULTIPLIERS[multIdx];
+                    const fg = engine.simulateSpin({
+                        inFreeGame: true, fgMultiplier: mult,
+                        totalBet, lightningMarks: fgMarks,
+                    });
+                    sessionPay += fg.totalRawWin * mult;
+                    if (fg.maxWinCapped) break;
+                    const prob = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
+                    if (rng() >= prob) break;
+                    if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
+                }
             }
+
+            totalReturn += sessionPay * BUY_FG_PAYOUT_SCALE;
         }
 
         const buyRtp = totalReturn / totalCost;
-        console.log(`Buy FG RTP: ${(buyRtp * 100).toFixed(2)}% (${N} sessions)`);
-        // Buy FG should return meaningful value (>20% of cost)
-        expect(buyRtp).toBeGreaterThan(0.20);
-        expect(buyRtp).toBeLessThan(2.00);
+        console.log(`Buy FG RTP: ${(buyRtp * 100).toFixed(2)}% (${N} sessions, scale=${BUY_FG_PAYOUT_SCALE})`);
+        expect(buyRtp).toBeGreaterThan(0.92);
+        expect(buyRtp).toBeLessThan(1.05);
     });
 });
 

@@ -24,7 +24,8 @@ import { WinLine }         from '../SlotEngine';
 import { calcWinAmount, findScatters } from '../SlotEngine';
 import {
     BASE_ROWS, MAX_ROWS, MAX_WIN_MULT, REEL_COUNT,
-    FG_MULTIPLIERS, FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB, SymType,
+    FG_MULTIPLIERS, FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
+    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, SymType,
 } from '../GameConfig';
 
 export class GameFlowController {
@@ -35,6 +36,13 @@ export class GameFlowController {
     autoSpinCount = 0;
 
     private _buyFGMode = false;
+    private _buyFGSession = false;
+
+    private get _modePayoutScale(): number {
+        if (this._buyFGSession) return BUY_FG_PAYOUT_SCALE;
+        if (this._session.extraBetOn) return EB_PAYOUT_SCALE;
+        return 1;
+    }
 
     constructor(
         private readonly _session: IGameSession,
@@ -124,7 +132,7 @@ export class GameFlowController {
 
             const multiplier = this._session.inFreeGame ? this._session.fgMultiplier : 1;
             const rawWin = step.wins.reduce((s, w) => s + calcWinAmount(w as WinLine, this._session.totalBet), 0);
-            const stepWin = Math.round(rawWin * multiplier * 100 + Number.EPSILON) / 100;
+            const stepWin = Math.round(rawWin * multiplier * this._modePayoutScale * 100 + Number.EPSILON) / 100;
 
             this._session.addRoundWin(stepWin);
             this._account.credit(stepWin);
@@ -263,19 +271,21 @@ export class GameFlowController {
         if (this.busy) return;
         const confirmed = await this._ui.showBuyPanel();
         if (!confirmed) return;
-        const cost = this._session.totalBet * 100;
+        const cost = this._session.totalBet * BUY_COST_MULT;
         if (!this._account.canAfford(cost)) {
             this._ui.setStatus('餘額不足！', '#ff4444');
             return;
         }
         this._account.debit(cost);
         this.busy = true;
+        this._buyFGSession = true;
         this._ui.enableSpin(false);
         this._session.resetRound();
         this._session.clearMarks();
         this._reels.reset();
         this._ui.refresh();
         await this._playBuyFGIntro();
+        this._buyFGSession = false;
         this.busy = false;
         this._ui.enableSpin(true);
         this._ui.refresh();
