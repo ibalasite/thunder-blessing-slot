@@ -18,7 +18,7 @@ import {
     SYM, SymType,
     PAYLINES_25, PAYLINES_33, PAYLINES_45, PAYLINES_57,
     PAYLINES_BY_ROWS,
-    PAYTABLE,
+    PAYTABLE, PAYTABLE_SCALE,
     REEL_COUNT, MAX_ROWS,
 } from '../../assets/scripts/GameConfig';
 
@@ -465,9 +465,8 @@ describe('calcWinAmount', () => {
 // 9. Full PAYTABLE validation — every symbol × count matches screenshot values
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('PAYTABLE values match game display', () => {
-    const expected: Record<SymType, [number, number, number]> = {
-        // [3-match, 4-match, 5-match]
+describe('PAYTABLE values match GDD base ratios (scaled by PAYTABLE_SCALE)', () => {
+    const baseExpected: Record<SymType, [number, number, number]> = {
         W:  [0.17, 0.43, 1.17],
         SC: [0,    0,    0   ],
         P1: [0.17, 0.43, 1.17],
@@ -480,15 +479,18 @@ describe('PAYTABLE values match game display', () => {
         L4: [0.02, 0.05, 0.13],
     };
 
-    (Object.entries(expected) as [SymType, [number, number, number]][]).forEach(([sym, [m3, m4, m5]]) => {
-        it(`${sym}: 3-of-a-kind = ${m3}`, () => {
-            expect(PAYTABLE[sym][3]).toBe(m3);
+    (Object.entries(baseExpected) as [SymType, [number, number, number]][]).forEach(([sym, [m3, m4, m5]]) => {
+        const s3 = m3 === 0 ? 0 : parseFloat((m3 * PAYTABLE_SCALE).toFixed(4));
+        const s4 = m4 === 0 ? 0 : parseFloat((m4 * PAYTABLE_SCALE).toFixed(4));
+        const s5 = m5 === 0 ? 0 : parseFloat((m5 * PAYTABLE_SCALE).toFixed(4));
+        it(`${sym}: 3-of-a-kind = ${s3}`, () => {
+            expect(PAYTABLE[sym][3]).toBeCloseTo(s3, 3);
         });
-        it(`${sym}: 4-of-a-kind = ${m4}`, () => {
-            expect(PAYTABLE[sym][4]).toBe(m4);
+        it(`${sym}: 4-of-a-kind = ${s4}`, () => {
+            expect(PAYTABLE[sym][4]).toBeCloseTo(s4, 3);
         });
-        it(`${sym}: 5-of-a-kind = ${m5}`, () => {
-            expect(PAYTABLE[sym][5]).toBe(m5);
+        it(`${sym}: 5-of-a-kind = ${s5}`, () => {
+            expect(PAYTABLE[sym][5]).toBeCloseTo(s5, 3);
         });
     });
 

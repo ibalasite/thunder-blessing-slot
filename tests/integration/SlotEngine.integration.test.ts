@@ -63,7 +63,7 @@ function assertRate(
 describe('基礎遊戲 RTP 合理性', () => {
     const N = 200_000;
 
-    it(`simulateSpin base RTP 在 [25%, 80%] 合理範圍內（${N.toLocaleString()} spins, seed=42）`, () => {
+    it(`simulateSpin base RTP 在 [40%, 70%] 合理範圍內（${N.toLocaleString()} spins, seed=42）`, () => {
         const rng    = mulberry32(42);
         const engine = new SlotEngine(rng);
         let totalWin = 0;
@@ -71,8 +71,8 @@ describe('基礎遊戲 RTP 合理性', () => {
             totalWin += engine.simulateSpin({ totalBet: 1 }).totalRawWin;
         }
         const rtp = totalWin / N;
-        expect(rtp).toBeGreaterThan(0.08);
-        expect(rtp).toBeLessThan(0.25);
+        expect(rtp).toBeGreaterThan(0.40);
+        expect(rtp).toBeLessThan(0.70);
     });
 
     it('base RTP 穩定：兩組 100k spins RTP 差距 < 5%', () => {
@@ -198,7 +198,7 @@ describe('Extra Bet / SC 驗證', () => {
         }
     });
 
-    it('非 Extra Bet 時 SC 出現率 ≈ 理論值 3/90 per cell（±10%）', () => {
+    it('非 Extra Bet 時 SC 出現率 ≈ 理論值 per cell（±10%）', () => {
         const engine = new SlotEngine(mulberry32(555));
         const scRate = SYMBOL_WEIGHTS[SYM.SCATTER] / 90;
         let scCells = 0;
@@ -374,7 +374,7 @@ describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
         expect(fullRTP).toBeLessThan(10.0);
     });
 
-    it('Full-game RTP 在 [80%, 120%] 內（具體 RTP 驗證，500k spins, seed=42）', () => {
+    it('Full-game RTP 在 97.5% ± 5% 內（500k spins, seed=42）', () => {
         const N       = 500_000;
         const rng     = mulberry32(42);
         const engine  = new SlotEngine(rng);
@@ -386,7 +386,7 @@ describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
             totalPayout += base.totalRawWin;
             if (!base.fgTriggered) continue;
             if (rng() >= FG_TRIGGER_PROB) continue;
-            if (rng() >= COIN_TOSS_HEADS_PROB[0]) continue;  // 進場 Coin Toss 80%
+            if (rng() >= COIN_TOSS_HEADS_PROB[0]) continue;
 
             const fgMarks = new Set<string>();
             let multIdx = 0;
@@ -405,8 +405,6 @@ describe('完整遊戲 RTP（Base + FG chain，含 Coin Toss 機率）', () => {
         }
 
         const rtp = totalPayout / N;
-        // Wild-chain 修正後實測完整遊戲 RTP ≈ 22%（seed=42, N=500k）
-        // 原 97.5% 目標是 Wild 連線 bug 膨脹後的數字；如需提升 RTP 請調整 PAYTABLE
-        assertRate(rtp, 0.22, 30, 'Full-game RTP (base+FG chain, 500k spins, seed=42) ≈ 22%');
+        assertRate(rtp, 0.975, 5, 'Full-game RTP (base+FG chain, 500k spins, seed=42) ≈ 97.5%');
     });
 });

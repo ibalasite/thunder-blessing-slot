@@ -570,7 +570,7 @@ describe('simulateSpin() — cascade continues at MAX_ROWS', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('WILD symbol appearance rate', () => {
-    it('main game: WILD appears at ~2.2% per cell (weight 2/90)', () => {
+    it('main game: WILD appears at ~3.3% per cell (weight 3/90, GDD §2-1)', () => {
         const e = createEngine();
         let wildCount = 0;
         const N = 100_000;
@@ -578,12 +578,12 @@ describe('WILD symbol appearance rate', () => {
             if (e.drawSymbol() === SYM.WILD) wildCount++;
         }
         const rate = wildCount / N;
-        // 2/90 ≈ 0.0222; allow ±30% relative tolerance
-        expect(rate).toBeGreaterThan(0.0222 * 0.70);
-        expect(rate).toBeLessThan(0.0222 * 1.30);
+        const expected = SYMBOL_WEIGHTS[SYM.WILD] / 90;
+        expect(rate).toBeGreaterThan(expected * 0.70);
+        expect(rate).toBeLessThan(expected * 1.30);
     });
 
-    it('FG: WILD appears at ~3.3% per cell (weight 3/90)', () => {
+    it('FG: WILD appears at ~4.4% per cell (weight 4/90, GDD §2-2)', () => {
         const e = createEngine();
         let wildCount = 0;
         const N = 100_000;
@@ -591,12 +591,12 @@ describe('WILD symbol appearance rate', () => {
             if (e.drawSymbol(true) === SYM.WILD) wildCount++;
         }
         const rate = wildCount / N;
-        // 3/90 ≈ 0.0333; allow ±30% relative tolerance
-        expect(rate).toBeGreaterThan(0.0333 * 0.70);
-        expect(rate).toBeLessThan(0.0333 * 1.30);
+        const expected = SYMBOL_WEIGHTS_FG[SYM.WILD] / 90;
+        expect(rate).toBeGreaterThan(expected * 0.70);
+        expect(rate).toBeLessThan(expected * 1.30);
     });
 
-    it('5×3 base grid: P(no WILD at all) ≈ 71% (theoretical (88/90)^15)', () => {
+    it('5×3 base grid: P(no WILD at all) ≈ theoretical ((90-W)/90)^15', () => {
         const e = createEngine();
         let noWildSpins = 0;
         const N = 50_000;
@@ -611,8 +611,8 @@ describe('WILD symbol appearance rate', () => {
             if (!hasWild) noWildSpins++;
         }
         const noWildRate = noWildSpins / N;
-        // (88/90)^15 ≈ 0.713; allow ±10% absolute
-        expect(noWildRate).toBeGreaterThan(0.60);
-        expect(noWildRate).toBeLessThan(0.82);
+        const theoretical = Math.pow((90 - SYMBOL_WEIGHTS[SYM.WILD]) / 90, 15);
+        expect(noWildRate).toBeGreaterThan(theoretical * 0.85);
+        expect(noWildRate).toBeLessThan(theoretical * 1.15);
     });
 });

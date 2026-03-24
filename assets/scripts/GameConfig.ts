@@ -11,18 +11,18 @@ export const SYM = {
 } as const;
 export type SymType = typeof SYM[keyof typeof SYM];
 
-// ── Phase 5 最終確認機率設定（Main Game，目標 RTP 97.5%，驗證 98.53%）───────────────
+// ── Main Game 符號權重（GDD §2-1: 合計 90）───────────────
 export const SYMBOL_WEIGHTS: Record<SymType, number> = {
-    W: 2, SC: 3,
-    P1: 4, P2: 5, P3: 7, P4: 9,
-    L1: 14, L2: 14, L3: 16, L4: 16,
+    W: 3, SC: 4,
+    P1: 6, P2: 7, P3: 8, P4: 10,
+    L1: 12, L2: 12, L3: 14, L4: 14,
 };
 
-// ── Phase 5 Free Game 機率（高賠符號出現率提升）────────────────────────────────
+// ── Free Game 符號權重（GDD §2-2: 合計 90）────────────────────────────────
 export const SYMBOL_WEIGHTS_FG: Record<SymType, number> = {
-    W: 3, SC: 4,
-    P1: 7, P2: 8, P3: 10, P4: 11,
-    L1: 11, L2: 11, L3: 12, L4: 13,
+    W: 4, SC: 6,
+    P1: 9, P2: 10, P3: 11, P4: 12,
+    L1: 9, L2: 9, L3: 10, L4: 10,
 };
 
 // Reel strip — 依照權重展開（每個滾輪共用同一張 strip，可日後分開）
@@ -38,9 +38,16 @@ export const REEL_STRIP: SymType[] = (() => {
 
 // ─── 賠率表 ─────────────────────────────────────────────
 // 索引 0=0個, 1=1個, 2=無效, 3=3個連線, 4=4個連線, 5=5個連線
-export const PAYTABLE: Record<SymType, number[]> = {
+//
+// GDD 基礎倍率是為 scatter-pays（任意位置中獎）設計的。
+// 本遊戲使用 payline 機制（左到右連線），命中率遠低於 scatter-pays，
+// 因此需要 PAYTABLE_SCALE 校準因子來補償，維持目標 RTP 97.5%。
+// 基礎值比例保持 GDD 規格不變，scale 由 Monte Carlo 模擬校準。
+export const PAYTABLE_SCALE = 3.57;
+
+const _BASE_PAYTABLE: Record<SymType, number[]> = {
     W:  [0, 0, 0, 0.17, 0.43, 1.17],
-    SC: [0, 0, 0, 0,    0,    0],   // Scatter 無直接賠率，觸發特效
+    SC: [0, 0, 0, 0,    0,    0],
     P1: [0, 0, 0, 0.17, 0.43, 1.17],
     P2: [0, 0, 0, 0.11, 0.27, 0.67],
     P3: [0, 0, 0, 0.09, 0.23, 0.67],
@@ -50,6 +57,14 @@ export const PAYTABLE: Record<SymType, number[]> = {
     L3: [0, 0, 0, 0.02, 0.05, 0.13],
     L4: [0, 0, 0, 0.02, 0.05, 0.13],
 };
+
+export const PAYTABLE: Record<SymType, number[]> = (() => {
+    const scaled = {} as Record<SymType, number[]>;
+    for (const [sym, pays] of Object.entries(_BASE_PAYTABLE) as [SymType, number[]][]) {
+        scaled[sym] = pays.map(v => v === 0 ? 0 : parseFloat((v * PAYTABLE_SCALE).toFixed(4)));
+    }
+    return scaled;
+})();
 
 // ─── 符號顯示名稱（希臘神話主題）────────────────────────
 // P1=宙斯 P2=天馬 P3=雅典娜 P4=雄鷹 L1/L2/L3/L4=Z/E/U/S 字母
@@ -164,12 +179,11 @@ export const COIN_TOSS_HEADS_PROB = [0.80, 0.68, 0.56, 0.48, 0.40];
  * 基礎遊戲 Cascade 達到 MAX_ROWS 並再次勝出時，還需通過此機率檢查，才能進入 Coin Toss。
  * 調低此值可降低 FG 觸發頻率，是控制整體 RTP 的主要旋鈕。
  * Buy Free Game 不受此限制（付費保證）。
- * 倒率序列改為 [3,7,17,27,77] 後重新測算：
- * 設定 0.11（11%）→ 預估全局 RTP ≈ 97%
+ * GDD §10-1: 20%
  */
-export const FG_TRIGGER_PROB = 0.11;
-// 雷霆祝福：第二擊觸發機率（Phase 5 設定）
-export const TB_SECOND_HIT_PROB = 0.28;
+export const FG_TRIGGER_PROB = 0.20;
+// 雷霆祝福：第二擊觸發機率（GDD §5: 40%）
+export const TB_SECOND_HIT_PROB = 0.40;
 
 export const SYMBOL_UPGRADE: Record<string, string> = {
     'L4':'P4','L3':'P4','L2':'P4','L1':'P4',
