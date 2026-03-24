@@ -6,3 +6,5 @@ node_modules/
 *.meta.user
 
 test-results.json
+tests/visual-e2e/screenshots/
+tests/visual-e2e/tests/

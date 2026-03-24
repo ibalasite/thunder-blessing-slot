@@ -53,6 +53,23 @@ export interface SceneRefs {
 // ────────────────────────────────────────────────────────────────────────────
 // 私有 helpers（模組內使用）
 // ────────────────────────────────────────────────────────────────────────────
+
+/** 查找已存在的子節點（by name）或建立新的 */
+function findOrMake(parent: Node, name: string,
+        x: number, y: number, z: number, w: number, h: number): Node {
+    let n = parent.getChildByName(name);
+    if (n) return n;
+    n = new Node(name);
+    parent.addChild(n);
+    n.setPosition(x, y, z);
+    n.addComponent(UITransform).setContentSize(w, h);
+    return n;
+}
+
+function ensureGfx(node: Node): Graphics {
+    return node.getComponent(Graphics) || node.addComponent(Graphics);
+}
+
 function makeLabel(parent: Node, text: string, fontSize: number,
         color = '#ffffff', x = 0, y = 0, w = 400): Label {
     const n = new Node('lbl');
@@ -65,6 +82,24 @@ function makeLabel(parent: Node, text: string, fontSize: number,
     lbl.fontSize = fontSize;
     lbl.isBold   = true;
     lbl.color    = Color.fromHEX(new Color(), color);
+    return lbl;
+}
+
+/** 查找已存在的命名 Label 或建立新的 */
+function findOrMakeLabel(parent: Node, name: string, text: string,
+        fontSize: number, color = '#ffffff', x = 0, y = 0, w = 400): Label {
+    const existing = parent.getChildByName(name);
+    if (existing) {
+        let lbl = existing.getComponent(Label);
+        if (!lbl) lbl = existing.addComponent(Label);
+        lbl.string   = text;
+        lbl.fontSize = fontSize;
+        lbl.isBold   = true;
+        lbl.color    = Color.fromHEX(new Color(), color);
+        return lbl;
+    }
+    const lbl = makeLabel(parent, text, fontSize, color, x, y, w);
+    lbl.node.name = name;
     return lbl;
 }
 
@@ -86,6 +121,31 @@ function makeButton(parent: Node, text: string, w: number, h: number,
     makeLabel(n, text, h > 50 ? 22 : 16, textColor, 0, 0, w);
     n.addComponent(Button);
     return n;
+}
+
+/** 查找已存在的命名按鈕節點並繪製背景，或建立新的 */
+function findOrMakeButton(parent: Node, name: string, text: string,
+        w: number, h: number, x: number, y: number,
+        bgColor: string, textColor = '#ffffff'): Node {
+    const existing = parent.getChildByName(name);
+    if (existing) {
+        const gfx = ensureGfx(existing);
+        gfx.clear();
+        gfx.fillColor = Color.fromHEX(new Color(), bgColor);
+        gfx.roundRect(-w/2, -h/2, w, h, 12);
+        gfx.fill();
+        gfx.strokeColor = Color.fromHEX(new Color(), '#ffffff55');
+        gfx.lineWidth   = 2;
+        gfx.roundRect(-w/2+1, -h/2+1, w-2, h-2, 11);
+        gfx.stroke();
+        if (!existing.getComponent(Button)) existing.addComponent(Button);
+        // Label already on a child 'lbl' node from EditorSceneSetup — keep it
+        if (!existing.getChildByName('lbl')) {
+            makeLabel(existing, text, h > 50 ? 22 : 16, textColor, 0, 0, w);
+        }
+        return existing;
+    }
+    return makeButton(parent, text, w, h, x, y, bgColor, textColor);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -398,12 +458,8 @@ export function buildScene(
         account: IAccountService,
         cbs: SceneBuildCallbacks): SceneRefs {
     // ── 背景 ────────────────────────────────────────────
-    const bg = new Node('Background');
-    root.addChild(bg);
-    bg.setPosition(0, 0, -10);
-    const bgUit = bg.addComponent(UITransform);
-    bgUit.setContentSize(CANVAS_W, CANVAS_H);
-    const bgGfx = bg.addComponent(Graphics);
+    const bg = findOrMake(root, 'Background', 0, 0, -10, CANVAS_W, CANVAS_H);
+    const bgGfx = ensureGfx(bg);
     bgGfx.fillColor = Color.fromHEX(new Color(), '#04080f');
     bgGfx.rect(-CANVAS_W/2, -CANVAS_H/2, CANVAS_W, CANVAS_H);
     bgGfx.fill();
@@ -420,9 +476,10 @@ export function buildScene(
     bgGfx.stroke();
 
     // ── 標題 ────────────────────────────────────────────
+    const titleArea = findOrMake(root, 'TitleArea', 0, 530, 0, CANVAS_W, 100);
     const titleNodes: Node[] = [];
-    titleNodes.push(makeLabel(root, '⚡ THUNDER BLESSING', 24, '#ffe066', 0, 530).node);
-    titleNodes.push(makeLabel(root, 'Zeus  Slot  Game', 14, '#88aacc', 0, 506).node);
+    titleNodes.push(findOrMakeLabel(titleArea, 'TitleLabel', '⚡ THUNDER BLESSING', 24, '#ffe066', 0, 10).node);
+    titleNodes.push(findOrMakeLabel(titleArea, 'SubtitleLabel', 'Zeus  Slot  Game', 14, '#88aacc', 0, -22).node);
 
     // ── FREE 字母收集指示器 ──────────────────────────────
     const freeLbls: Label[] = [];
@@ -430,34 +487,28 @@ export function buildScene(
     const letterSpacing = 50;
     const freeTotalW = (freeLetters.length - 1) * letterSpacing;
     freeLetters.forEach((ch, i) => {
-        const lbl = makeLabel(root, ch, 20, '#2a2a44',
-            -freeTotalW / 2 + i * letterSpacing, 452);
+        const lbl = findOrMakeLabel(titleArea, `FreeLetter_${i}`, ch, 20, '#2a2a44',
+            -freeTotalW / 2 + i * letterSpacing, -48);
         lbl.isBold = true;
         freeLbls.push(lbl);
     });
 
     // ── 滾輪區域 (Mask) ──────────────────────────────────
-    const reelArea = new Node('ReelArea');
-    root.addChild(reelArea);
-    reelArea.setPosition(0, 72, 0);
-    const reelUit = reelArea.addComponent(UITransform);
-    reelUit.setContentSize(
-        REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W,
-        MAX_ROWS  * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2);
-    const reelMask = reelArea.addComponent(Mask);
-    reelMask.type = Mask.Type.RECT;
-    const reelMgr = reelArea.addComponent(ReelManager);
+    const reelW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W;
+    const reelH = MAX_ROWS  * (SYMBOL_H + SYMBOL_GAP) + SYMBOL_H / 2;
+    const reelArea = findOrMake(root, 'ReelArea', 0, 72, 0, reelW, reelH);
+    if (!reelArea.getComponent(Mask)) {
+        const m = reelArea.addComponent(Mask);
+        m.type = (Mask.Type as any).GRAPHICS_RECT ?? Mask.Type.RECT;
+    }
+    const reelMgr = reelArea.getComponent(ReelManager) || reelArea.addComponent(ReelManager);
     reelMgr.init(session);
 
     // ── 滾輪框 ──────────────────────────────────────────
-    const reelFrame = new Node('ReelFrame');
-    root.addChild(reelFrame);
-    reelFrame.setPosition(0, 72, 1);
     const rfW = REEL_COUNT * SYMBOL_W + (REEL_COUNT - 1) * REEL_GAP + 20;
     const rfH = MAX_ROWS  * SYMBOL_H + (MAX_ROWS  - 1) * SYMBOL_GAP + 20;
-    const rfUit = reelFrame.addComponent(UITransform);
-    rfUit.setContentSize(rfW, rfH);
-    const rfGfx = reelFrame.addComponent(Graphics);
+    const reelFrame = findOrMake(root, 'ReelFrame', 0, 72, 1, rfW, rfH);
+    const rfGfx = ensureGfx(reelFrame);
     rfGfx.strokeColor = Color.fromHEX(new Color(), '#8b6914');
     rfGfx.lineWidth   = 3;
     rfGfx.roundRect(-rfW/2, -rfH/2, rfW, rfH, 14);
@@ -471,18 +522,13 @@ export function buildScene(
     const multBarRefs = buildMultBar(root);
 
     // ── UIPanel (y=−530) ─────────────────────────────────
-    const uiPanel = new Node('UIPanel');
-    root.addChild(uiPanel);
-    uiPanel.setPosition(0, -530, 0);
-    const uiCtrl = uiPanel.addComponent(UIController);
+    const uiPanel = findOrMake(root, 'UIPanel', 0, -530, 0, 720, 200);
+    const uiCtrl = uiPanel.getComponent(UIController) || uiPanel.addComponent(UIController);
     // init deferred until after reelMgr is available (done after scene construction)
 
     // ── BUY FREE GAME | EXTRA BET 列 ─────────────────────
-    const buyExtraRow = new Node('BuyExtraRow');
-    root.addChild(buyExtraRow);
-    buyExtraRow.setPosition(0, -330, 2);
-    buyExtraRow.addComponent(UITransform).setContentSize(720, 52);
-    const barBg = buyExtraRow.addComponent(Graphics);
+    const buyExtraRow = findOrMake(root, 'BuyExtraRow', 0, -330, 2, 720, 52);
+    const barBg = ensureGfx(buyExtraRow);
     barBg.fillColor = Color.fromHEX(new Color(), '#0c0c1c');
     barBg.roundRect(-360, -26, 720, 52, 0);
     barBg.fill();
@@ -494,31 +540,29 @@ export function buildScene(
     barBg.lineWidth   = 1;
     barBg.moveTo(-12, -22); barBg.lineTo(-12, 22); barBg.stroke();
 
-    const buyBtn = makeButton(buyExtraRow, 'BUY FREE GAME', 316, 42, -160, 0, '#08185c', '#3a88ff');
+    const buyBtn = findOrMakeButton(buyExtraRow, 'BuyBtn', 'BUY FREE GAME', 316, 42, -160, 0, '#08185c', '#3a88ff');
     buyBtn.on(Button.EventType.CLICK, () => cbs.onBuyFreeGame());
 
-    const extraBetNode = new Node('ExtraBet');
-    buyExtraRow.addChild(extraBetNode);
-    extraBetNode.setPosition(168, 0, 0);
-    extraBetNode.addComponent(UITransform).setContentSize(228, 42);
-    uiCtrl.extraBetBg = extraBetNode.addComponent(Graphics);
-    makeLabel(extraBetNode, 'EXTRA BET  OFF', 14, '#88aacc', 0, 0, 228);
-    extraBetNode.addComponent(Button);
+    const extraBetNode = findOrMake(buyExtraRow, 'ExtraBetBtn', 168, 0, 0, 228, 42);
+    uiCtrl.extraBetBg = ensureGfx(extraBetNode);
+    if (!extraBetNode.getChildByName('lbl')) {
+        makeLabel(extraBetNode, 'EXTRA BET  OFF', 14, '#88aacc', 0, 0, 228);
+    }
+    if (!extraBetNode.getComponent(Button)) extraBetNode.addComponent(Button);
     extraBetNode.on(Button.EventType.CLICK, () => cbs.onExtraBetToggle());
     uiCtrl.btnExtraBet = extraBetNode;
 
-    //「?」Extra Bet 說明按鈕
-    const extraBetInfoBtn = makeButton(buyExtraRow, '?', 34, 34, 338, 0, '#001830', '#00cfff');
+    const extraBetInfoBtn = findOrMakeButton(buyExtraRow, 'ExtraBetInfoBtn', '?', 34, 34, 338, 0, '#001830', '#00cfff');
     extraBetInfoBtn.on(Button.EventType.CLICK, () => uiCtrl.showExtraBetInfo());
 
     // ── Status label & 中央 cascade 獎金大字 ────────────────
-    uiCtrl.lblStatus = makeLabel(root, '', 13, '#88aacc', 0, -392, 600);
-    const stepWinLbl = makeLabel(root, '', 48, '#ffe566', 0, 72, 600);
+    uiCtrl.lblStatus = findOrMakeLabel(root, 'StatusLabel', '', 13, '#88aacc', 0, -392, 600);
+    const stepWinLbl = findOrMakeLabel(root, 'StepWinLabel', '', 48, '#ffe566', 0, 72, 600);
     stepWinLbl.node.active = false;
     uiCtrl.lblStepWin = stepWinLbl;
 
     // ── UIPanel 背景 + 分隔線 ─────────────────────────────
-    const panelGfx = uiPanel.addComponent(Graphics);
+    const panelGfx = ensureGfx(uiPanel);
     panelGfx.fillColor = Color.fromHEX(new Color(), '#07071a');
     panelGfx.roundRect(-360, -100, 720, 200, 0);
     panelGfx.fill();
@@ -530,29 +574,34 @@ export function buildScene(
     panelGfx.moveTo(-360, 18); panelGfx.lineTo(360, 18); panelGfx.stroke();
 
     // ── Info row ──────────────────────────────────────────
-    uiCtrl.lblBalance    = makeLabel(uiPanel, '', 15, '#ccccdd', -215, 52, 200);
-    uiCtrl.lblBet        = makeLabel(uiPanel, '', 15, '#ccccdd',    0, 52, 140);
-    uiCtrl.lblWin        = makeLabel(uiPanel, '', 16, '#ffd700',  215, 52, 190);
-    uiCtrl.lblLines      = makeLabel(uiPanel, '', 12, '#888899',    0, 32, 400);
-    uiCtrl.lblMultiplier = makeLabel(uiPanel, '', 16, '#00cfff',    0, 32, 400);
+    uiCtrl.lblBalance    = findOrMakeLabel(uiPanel, 'BalanceLabel', '', 15, '#ccccdd', -215, 52, 200);
+    uiCtrl.lblBet        = findOrMakeLabel(uiPanel, 'BetLabel', '', 15, '#ccccdd',    0, 52, 140);
+    uiCtrl.lblWin        = findOrMakeLabel(uiPanel, 'WinLabel', '', 16, '#ffd700',  215, 52, 190);
+    uiCtrl.lblLines      = findOrMakeLabel(uiPanel, 'LinesLabel', '', 12, '#888899',    0, 32, 400);
+    uiCtrl.lblMultiplier = findOrMakeLabel(uiPanel, 'MultiplierLabel', '', 16, '#00cfff',    0, 32, 400);
 
     // ── Function bar ─────────────────────────────────────
-    const turboBtn = makeButton(uiPanel, '⚡', 62, 62, -295, -44, '#2a1a00', '#ffcc22');
+    const turboBtn = findOrMakeButton(uiPanel, 'TurboBtn', '⚡', 62, 62, -295, -44, '#2a1a00', '#ffcc22');
     turboBtn.on(Button.EventType.CLICK, () => cbs.onTurboToggle());
     uiCtrl.btnTurbo = turboBtn;
-    makeButton(uiPanel, '−', 62, 62, -175, -44, '#2a1200', '#ff8800')
+    findOrMakeButton(uiPanel, 'BetMinusBtn', '−', 62, 62, -175, -44, '#2a1200', '#ff8800')
         .on(Button.EventType.CLICK, () => cbs.changeBet(-0.25));
-    const spinBtn = makeButton(uiPanel, '↺', 106, 106, 0, -44, '#cc3300');
+    const spinBtn = findOrMakeButton(uiPanel, 'SpinBtn', '↺', 106, 106, 0, -44, '#cc3300');
     uiCtrl.btnSpin = spinBtn;
     spinBtn.on(Button.EventType.CLICK, () => cbs.onSpinClick());
-    makeButton(uiPanel, '+', 62, 62, 175, -44, '#001830', '#2299ff')
+    findOrMakeButton(uiPanel, 'BetPlusBtn', '+', 62, 62, 175, -44, '#001830', '#2299ff')
         .on(Button.EventType.CLICK, () => cbs.changeBet(0.25));
-    makeButton(uiPanel, '▶', 62, 62, 255, -44, '#001a14', '#00cc88')
+    findOrMakeButton(uiPanel, 'AutoSpinBtn', '▶', 62, 62, 255, -44, '#001a14', '#00cc88')
         .on(Button.EventType.CLICK, () => cbs.onAutoSpinClick());
-    // Auto spin 剩餘次數顯示在 SPIN 按鈕中央
-    const autoSpinCountLbl = makeLabel(spinBtn, '', 26, '#ffffff', 0, 0, 100);
-    autoSpinCountLbl.node.name = 'autoSpinCountOverlay';
-    makeButton(uiPanel, '≡', 62, 62, 325, -44, '#14141e', '#8888aa')
+    let autoSpinCountLbl: Label;
+    const existingOverlay = spinBtn.getChildByName('autoSpinCountOverlay');
+    if (existingOverlay) {
+        autoSpinCountLbl = existingOverlay.getComponent(Label) || existingOverlay.addComponent(Label);
+    } else {
+        autoSpinCountLbl = makeLabel(spinBtn, '', 26, '#ffffff', 0, 0, 100);
+        autoSpinCountLbl.node.name = 'autoSpinCountOverlay';
+    }
+    findOrMakeButton(uiPanel, 'MenuBtn', '≡', 62, 62, 325, -44, '#14141e', '#8888aa')
         .on(Button.EventType.CLICK, () => {});
 
     // ── 覆蓋面板 ─────────────────────────────────────────
