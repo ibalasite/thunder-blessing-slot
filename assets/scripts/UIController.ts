@@ -12,7 +12,7 @@ import { IAccountService } from './contracts/IAccountService';
 import { IReelManager }  from './contracts/IReelManager';
 import {
     MAX_ROWS, COIN_TOSS_HEADS_PROB, FG_MULTIPLIERS,
-    LINES_BASE, BET_MIN, BET_MAX, BUY_COST_MULT,
+    LINES_BASE, BET_MIN, BET_MAX, BUY_COST_MULT, EXTRA_BET_MULT,
 } from './GameConfig';
 
 const { ccclass } = _decorator;
@@ -212,8 +212,12 @@ export class UIController extends Component implements IUIController {
     showBuyPanel(): Promise<boolean> {
         return new Promise<boolean>(resolve => {
             this._buyResolve = resolve;
-            if (this._buyCostLbl)
-                this._buyCostLbl.string = (this._session.totalBet * BUY_COST_MULT).toFixed(2);
+            if (this._buyCostLbl) {
+                const ebMult = this._session.extraBetOn ? EXTRA_BET_MULT : 1;
+                const baseBet = parseFloat(
+                    (this._session.betPerLine * LINES_BASE * ebMult).toFixed(2));
+                this._buyCostLbl.string = (baseBet * BUY_COST_MULT).toFixed(2);
+            }
             this.buyPanel.active = true;
         });
     }

@@ -25,7 +25,7 @@ import { WinLine }         from '../SlotEngine';
 import { calcWinAmount, findScatters } from '../SlotEngine';
 import {
     BASE_ROWS, MAX_ROWS, MAX_WIN_MULT, LINES_BASE,
-    BUY_COST_MULT, SymType,
+    BUY_COST_MULT, EXTRA_BET_MULT, SymType,
     FG_MULTIPLIERS, FG_ROUND_COUNTS, SYMBOL_LABELS,
 } from '../GameConfig';
 
@@ -152,7 +152,8 @@ export class GameFlowController {
         const confirmed = await this._ui.showBuyPanel();
         if (!confirmed) return;
 
-        const baseBet = this._baseTotalBet;
+        const ebMult = this._session.extraBetOn ? EXTRA_BET_MULT : 1;
+        const baseBet = parseFloat((this._session.betPerLine * LINES_BASE * ebMult).toFixed(4));
         const outcome = await this._engine.fullSpin('buyFG', baseBet);
 
         const w = this._wallet;
