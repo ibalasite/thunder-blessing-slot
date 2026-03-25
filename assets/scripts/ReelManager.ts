@@ -11,6 +11,7 @@ import { REEL_COUNT, BASE_ROWS, MAX_ROWS, SYMBOL_W, SYMBOL_H, SYMBOL_GAP,
 import { IGameSession } from './contracts/IGameSession';
 import { IReelManager }  from './contracts/IReelManager';
 import { WinResult } from './SlotEngine';
+import type { RNGFunction } from './services/RNGProvider';
 
 const { ccclass, property } = _decorator;
 
@@ -29,10 +30,16 @@ export class ReelManager extends Component implements IReelManager {
     static events = new EventTarget();
 
     private _session!: IGameSession;
+    private _rng!: RNGFunction;
 
     /** 由 GameBootstrap 在場景建立後注入 */
-    init(session: IGameSession): void {
+    init(session: IGameSession, rng?: RNGFunction): void {
         this._session = session;
+        this._rng = rng ?? (() => Math.random());
+    }
+
+    private _randomStripSym(): SymType {
+        return REEL_STRIP[Math.floor(this._rng() * REEL_STRIP.length)];
     }
 
     // 每個滾輪的符號格子 [reel][row]
@@ -249,7 +256,7 @@ export class ReelManager extends Component implements IReelManager {
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             grid[ri] = [];
             for (let row = 0; row < MAX_ROWS; row++) {
-                const sym = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                const sym = this._randomStripSym();
                 grid[ri][row] = sym;
                 this.drawCell(this.cells[ri][row], sym);
             }
@@ -406,7 +413,7 @@ export class ReelManager extends Component implements IReelManager {
                             }
                             // 放在最高格正上方（進入雲朵遮蔽緩衝區，不可見）
                             cell.node.setPosition(px, maxY + STEP_PX, 0);
-                            this.drawCell(cell, REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)]);
+                            this.drawCell(cell, this._randomStripSym());
                         }
                     }
 
@@ -588,7 +595,7 @@ export class ReelManager extends Component implements IReelManager {
                 if (this._session.extraBetOn && ri === 2 && row === 0) {
                     resultGrid[ri][row] = SYM.SCATTER;
                 } else {
-                    resultGrid[ri][row] = REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                    resultGrid[ri][row] = this._randomStripSym();
                 }
             }
         }
@@ -659,7 +666,7 @@ export class ReelManager extends Component implements IReelManager {
                         // 優先使用引擎預先抽取的符號，否則從 REEL_STRIP 隨機補充
                         const origRow = removedSorted[newSymFillIdx++];
                         const sym     = newSyms?.get(`${ri},${origRow}`)
-                            ?? REEL_STRIP[Math.floor(Math.random() * REEL_STRIP.length)];
+                            ?? this._randomStripSym();
                         surviving.push(sym);
                     }
                     // 重建完整 grid：新可見列 + 保留雲朵遮蔽列的 spin 預設值
@@ -802,7 +809,7 @@ export class ReelManager extends Component implements IReelManager {
                 candidates.push({ reel: ri, row });
         // Fisher-Yates shuffle then take first 5
         for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this._rng() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         for (const { reel, row } of candidates.slice(0, 5)) {

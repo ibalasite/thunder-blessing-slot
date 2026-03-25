@@ -43,7 +43,7 @@ function emptyGrid(sym: SymType = SYM.L4): SymType[][] {
 
 describe('drawSymbol()', () => {
     it('回傳值必須是有效的 SymType', () => {
-        const engine = createEngine();
+        const engine = createEngine(Math.random);
         const validSyms = new Set(Object.values(SYM));
         for (let i = 0; i < 1000; i++) {
             expect(validSyms.has(engine.drawSymbol())).toBe(true);
@@ -51,7 +51,7 @@ describe('drawSymbol()', () => {
     });
 
     it('useFG=false 使用主遊戲權重：總權重 90', () => {
-        const engine = createEngine();
+        const engine = createEngine(Math.random);
         const total = Object.values(SYMBOL_WEIGHTS).reduce((a, b) => a + b, 0);
         expect(total).toBe(90);
     });
@@ -73,7 +73,7 @@ describe('drawSymbol()', () => {
     });
 
     it('大量抽樣：各符號出現頻率與權重比例吻合（±20%相對誤差）', () => {
-        const engine = createEngine();
+        const engine = createEngine(Math.random);
         const counts: Record<string, number> = {};
         const N = 100_000;
         for (let i = 0; i < N; i++) {
@@ -89,7 +89,7 @@ describe('drawSymbol()', () => {
     });
 
     it('useFG=true：各符號出現頻率與 FG 權重吻合（±20%相對誤差）', () => {
-        const engine = createEngine();
+        const engine = createEngine(Math.random);
         const counts: Record<string, number> = {};
         const N = 100_000;
         for (let i = 0; i < N; i++) {
@@ -110,7 +110,7 @@ describe('drawSymbol()', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('generateGrid()', () => {
-    const engine = createEngine();
+    const engine = createEngine(Math.random);
 
     it(`回傳 ${REEL_COUNT} 個滾輪`, () => {
         const g = engine.generateGrid();
@@ -165,7 +165,7 @@ describe('applyExtraBetSC()', () => {
     });
 
     it('原本 base rows 已有 SC → 盤面原封不動', () => {
-        const engine = createEngine();
+        const engine = createEngine(Math.random);
         const g = emptyGrid(SYM.L4);
         g[2][1] = SYM.SCATTER;  // 在 row=1 (base) 放 SC
         const result = engine.applyExtraBetSC(g);
@@ -214,7 +214,7 @@ describe('checkWins()', () => {
         return g;
     }
 
-    const engine = createEngine();
+    const engine = createEngine(Math.random);
 
     it('全空盤（全 L4 水平中線）→ 至少有一條 L4 3-5 連中獎', () => {
         const g = emptyGrid(SYM.L4);
@@ -388,7 +388,7 @@ describe('applyTB()', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('simulateSpin() — 結構', () => {
-    const engine = createEngine();
+    const engine = createEngine(Math.random);
 
     it('回傳物件包含所有必要欄位', () => {
         const r = engine.simulateSpin();
@@ -473,7 +473,7 @@ describe('simulateSpin() — 結構', () => {
 
 describe('createEngine()', () => {
     it('無參數時建立 SlotEngine 實例', () => {
-        const e = createEngine();
+        const e = createEngine(Math.random);
         expect(e).toBeInstanceOf(SlotEngine);
     });
 
@@ -571,7 +571,7 @@ describe('simulateSpin() — cascade continues at MAX_ROWS', () => {
 
 describe('WILD symbol appearance rate', () => {
     it('main game: WILD appears at ~3.3% per cell (weight 3/90, GDD §2-1)', () => {
-        const e = createEngine();
+        const e = createEngine(Math.random);
         let wildCount = 0;
         const N = 100_000;
         for (let i = 0; i < N; i++) {
@@ -584,7 +584,7 @@ describe('WILD symbol appearance rate', () => {
     });
 
     it('FG: WILD appears at ~4.4% per cell (weight 4/90, GDD §2-2)', () => {
-        const e = createEngine();
+        const e = createEngine(Math.random);
         let wildCount = 0;
         const N = 100_000;
         for (let i = 0; i < N; i++) {
@@ -597,7 +597,7 @@ describe('WILD symbol appearance rate', () => {
     });
 
     it('5×3 base grid: P(no WILD at all) ≈ theoretical ((90-W)/90)^15', () => {
-        const e = createEngine();
+        const e = createEngine(Math.random);
         let noWildSpins = 0;
         const N = 50_000;
         for (let i = 0; i < N; i++) {

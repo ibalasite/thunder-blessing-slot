@@ -44,7 +44,7 @@ export const SYMBOL_WEIGHTS_BUY_FG: Record<SymType, number> = {
 
 // Reel strip — 依照權重展開（每個滾輪共用同一張 strip，可日後分開）
 // 注意：不在 module 載入時洗牌（避免 seeded 測試不穩定）；
-// ReelManager 每次存取時自行 Math.random() 取樣，洗牌無意義。
+// ReelManager 透過注入的 RNG 函式取樣。禁止直接使用 Math.random()。
 export const REEL_STRIP: SymType[] = (() => {
     const strip: SymType[] = [];
     (Object.entries(SYMBOL_WEIGHTS) as [SymType, number][]).forEach(([sym, w]) => {

@@ -12,7 +12,8 @@
  *
  * 使用方法（前端）：
  *   import { SlotEngine } from './SlotEngine';
- *   const engine = new SlotEngine();
+ *   import { createCSPRNG } from './services/RNGProvider';
+ *   const engine = new SlotEngine(createCSPRNG());
  *   const grid = engine.generateGrid();
  *   const wins = engine.checkWins(grid, rows);
  *   const newSym = engine.drawSymbol();
@@ -20,7 +21,7 @@
  *
  * 使用方法（獨立測試，Node.js）：
  *   const { SlotEngine } = require('./SlotEngine');
- *   const engine = new SlotEngine(() => Math.random());
+ *   const engine = new SlotEngine(mulberry32(42));  // seeded RNG for tests
  *   let total = 0;
  *   for (let i = 0; i < 1_000_000; i++) {
  *     const r = engine.simulateSpin({ totalBet: 1 });
@@ -112,9 +113,12 @@ export interface SpinResult {
 export class SlotEngine {
 
     /**
-     * @param rng 隨機數來源（預設 Math.random），測試時可注入 seeded RNG
+     * @param rng 隨機數來源（必傳）。
+     *   Production: 傳入 createCSPRNG()
+     *   Test: 傳入 mulberry32(seed)
+     *   禁止使用 Math.random。
      */
-    constructor(private rng: () => number = Math.random) {}
+    constructor(private rng: () => number) {}
 
     // ── 抽一個符號 ────────────────────────────────────────────────────────────
 
@@ -535,18 +539,21 @@ export class SlotEngine {
     }
 }
 
-/** 建立預設設定的引擎實例 */
-export function createEngine(rng?: () => number): SlotEngine {
+/** 建立引擎實例（rng 為必傳參數） */
+export function createEngine(rng: () => number): SlotEngine {
     return new SlotEngine(rng);
 }
 
 /**
  * 自由函式版 checkWins（向後相容 WinChecker import）
  * 第三個參數 totalBet 為保留參數，邏輯上不使用（獎金計算由 calcWinAmount 負責）
+ *
+ * NOTE: 此函式僅用於 pure win detection（不消耗 RNG），
+ * 內部使用 dummy RNG（永遠不會被呼叫）。
  */
 export function checkWins(grid: SymType[][], rows: number, _totalBet?: number): WinLine[] {
     return _sharedEngine.checkWins(grid, rows);
 }
 
-// 內部共用單例，避免 checkWins 自由函式每次 new SlotEngine
-const _sharedEngine = new SlotEngine();
+const _dummyRng = () => 0;
+const _sharedEngine = new SlotEngine(_dummyRng);

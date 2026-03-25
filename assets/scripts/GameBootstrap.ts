@@ -11,6 +11,7 @@ import { LocalWalletService }    from './services/LocalWalletService';
 import { LocalEngineAdapter }    from './services/LocalEngineAdapter';
 import { GameFlowController }    from './core/GameFlowController';
 import { createEngine }          from './SlotEngine';
+import { createCSPRNG }          from './services/RNGProvider';
 import { buildScene }            from './components/SceneBuilder';
 
 const { ccclass } = _decorator;
@@ -21,10 +22,13 @@ export class GameBootstrap extends Component {
     start() {
         view.setDesignResolutionSize(CANVAS_W, CANVAS_H, ResolutionPolicy.SHOW_ALL);
 
+        // ── RNG（CSPRNG — 全域唯一，注入所有模組）────────
+        const rng = createCSPRNG();
+
         // ── Model ──────────────────────────────────────────
         const session = new GameSession();
         const wallet  = new LocalWalletService();
-        const adapter = new LocalEngineAdapter(createEngine());
+        const adapter = new LocalEngineAdapter(createEngine(rng));
 
         // IAccountService fallback（SceneBuilder/UIController still use it for display）
         const account = new LocalAccountService();
@@ -44,7 +48,7 @@ export class GameBootstrap extends Component {
             onBuyCancel:      () => uiCtrl.onBuyCancel(),
             onBuyStart:       () => uiCtrl.onBuyStart(),
             onCollect:        () => uiCtrl.onCollect(),
-        });
+        }, rng);
 
         // ── Controller（注入 wallet DI）─────────────────────
         flow = new GameFlowController(

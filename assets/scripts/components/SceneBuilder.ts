@@ -14,6 +14,7 @@ import { IGameSession }  from '../contracts/IGameSession';
 import { IAccountService } from '../contracts/IAccountService';
 import { ReelManager }  from '../ReelManager';
 import { UIController } from '../UIController';
+import type { RNGFunction } from '../services/RNGProvider';
 import {
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
     SYMBOL_W, SYMBOL_H, SYMBOL_GAP, REEL_GAP,
@@ -456,7 +457,8 @@ export function buildScene(
         root: Node,
         session: IGameSession,
         account: IAccountService,
-        cbs: SceneBuildCallbacks): SceneRefs {
+        cbs: SceneBuildCallbacks,
+        rng?: RNGFunction): SceneRefs {
     // ── 背景 ────────────────────────────────────────────
     const bg = findOrMake(root, 'Background', 0, 0, -10, CANVAS_W, CANVAS_H);
     const bgGfx = ensureGfx(bg);
@@ -502,7 +504,7 @@ export function buildScene(
         m.type = (Mask.Type as any).GRAPHICS_RECT ?? Mask.Type.RECT;
     }
     const reelMgr = reelArea.getComponent(ReelManager) || reelArea.addComponent(ReelManager);
-    reelMgr.init(session);
+    reelMgr.init(session, rng);
 
     // ── 滾輪框 ──────────────────────────────────────────
     const rfW = REEL_COUNT * SYMBOL_W + (REEL_COUNT - 1) * REEL_GAP + 20;
@@ -613,7 +615,7 @@ export function buildScene(
     const totalWinResult   = buildTotalWinPanel(root, cbs);
 
     // ── Inject all panel refs into uiCtrl ───────────────
-    uiCtrl.init(session, account, reelMgr);
+    uiCtrl.init(session, account, reelMgr, rng);
     uiCtrl.initPanels({
         freeLbls,
         titleNodes,

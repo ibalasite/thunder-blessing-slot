@@ -30,7 +30,7 @@ describe('LocalEngineAdapter', () => {
     // ── basic contract ──────────────────────────────────────────────────
 
     it('returns a SpinResponse with expected shape', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         expect(res).toHaveProperty('grid');
         expect(res).toHaveProperty('cascadeSteps');
@@ -44,7 +44,7 @@ describe('LocalEngineAdapter', () => {
     });
 
     it('returns a Promise (async)', () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const p = adapter.spin(makeReq());
         expect(p).toBeInstanceOf(Promise);
         return p;
@@ -56,7 +56,7 @@ describe('LocalEngineAdapter', () => {
         // Use a seeded engine so we know the raw win is deterministic
         // We just verify the ratio holds across many runs
         for (let idx = 0; idx < FG_MULTIPLIERS.length; idx++) {
-            const engine  = new SlotEngine();
+            const engine  = new SlotEngine(Math.random);
             const adapter = new LocalEngineAdapter(engine);
             const res     = await adapter.spin(makeReq({ fgMultIndex: idx, totalBet: 2 }));
             // totalWin must be totalRawWin * mult, rounded
@@ -70,7 +70,7 @@ describe('LocalEngineAdapter', () => {
     it('totalWin is 0 when there are no cascadeSteps', async () => {
         // Force a spin with 0 wins by using an engine where no cascade occurs
         // We can't guarantee this, so we only verify mathematical consistency
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         const rawWin = res.cascadeSteps.reduce((s, step) => s + step.rawWin, 0);
         expect(res.totalWin).toBeCloseTo(rawWin * FG_MULTIPLIERS[0], 4);
@@ -79,7 +79,7 @@ describe('LocalEngineAdapter', () => {
     // ── marks conversion ──────────────────────────────────────────────
 
     it('converts marks string[] to Set for engine and returns newMarks as array', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const req = makeReq({ marks: ['0,0', '1,1'] });
         const res = await adapter.spin(req);
         // newMarks must be an array of strings
@@ -88,7 +88,7 @@ describe('LocalEngineAdapter', () => {
     });
 
     it('does not mutate the original marks array from SpinRequest', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const marks = ['0,0', '1,2'];
         const originalSnapshot = [...marks];
         await adapter.spin(makeReq({ marks }));
@@ -99,13 +99,13 @@ describe('LocalEngineAdapter', () => {
 
     it('returned grid has REEL_COUNT columns', async () => {
         const { REEL_COUNT } = await import('../../assets/scripts/GameConfig');
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         expect(res.grid.length).toBe(REEL_COUNT);
     });
 
     it('final grid rows >= BASE_ROWS', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         expect(res.finalRows).toBeGreaterThanOrEqual(BASE_ROWS);
     });
@@ -114,7 +114,7 @@ describe('LocalEngineAdapter', () => {
 
     it('fgTriggered matches whether finalRows reached MAX_ROWS', async () => {
         const { MAX_ROWS } = await import('../../assets/scripts/GameConfig');
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         // Consistency: fgTriggered true iff cascades pushed rows to MAX_ROWS
         if (res.fgTriggered) {
@@ -125,7 +125,7 @@ describe('LocalEngineAdapter', () => {
     // ── maxWinCapped ─────────────────────────────────────────────────
 
     it('maxWinCapped is a boolean', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq());
         expect(typeof res.maxWinCapped).toBe('boolean');
     });
@@ -152,7 +152,7 @@ describe('LocalEngineAdapter', () => {
     // ── fgMultIndex out-of-range fallback ─────────────────────────
 
     it('falls back to multiplier 1 if fgMultIndex is out of range', async () => {
-        const adapter = new LocalEngineAdapter(new SlotEngine());
+        const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
         const res = await adapter.spin(makeReq({ fgMultIndex: 99 }));
         // With fallback mult=1, totalWin = totalRawWin
         const rawWin = res.cascadeSteps.reduce((s, step) => s + step.rawWin, 0);

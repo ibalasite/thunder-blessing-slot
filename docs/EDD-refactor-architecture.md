@@ -783,6 +783,131 @@ export const BUY_FG_PAYOUT_SCALE = 1.87;  // (原 3.448)
 
 ---
 
+## 4C. Phase 1.5C：CSPRNG 亂數安全強化（2026-03-25）
+
+### 4C.1 問題背景
+
+在 iGaming / Slot Game 產業中，亂數品質不是工具函式選擇問題，而是**架構安全問題**。歷史事件已經證明弱亂數會導致嚴重後果：
+
+| 事件 | 年份 | 後果 |
+|------|------|------|
+| Netscape SSL seed 可預測 | 1995 | SSL 加密被破解 |
+| Debian OpenSSL entropy 被移除 | 2008 | 整個發行版金鑰可枚舉 |
+| Android PRNG 初始化缺陷 | 2013 | 比特幣錢包資產被盜 |
+| Hot Lotto 內鬼（Eddie Tipton）| 2005-2015 | 樂透結果被操控 |
+| 俄羅斯團隊破解老虎機 PRNG | 2014 | 賭場被套利 |
+
+### 4C.2 現況審計
+
+審計發現以下 **5 處** 不安全的 RNG 使用：
+
+| 位置 | 問題 | 嚴重度 |
+|------|------|--------|
+| `SlotEngine.ts` 建構子 | 預設 `Math.random`，production 全部機率決策都用它 | **Critical** |
+| `ReelManager.ts` × 4 處 | 直接呼叫 `Math.random()` 產生視覺符號 | High |
+| `UIController.ts` coin toss fallback | `Math.random()` 作為 coin toss 結果的 else 分支 | High |
+| `SlotEngine.ts` 模組層級 `_sharedEngine` | 用 `Math.random` 初始化共用引擎 | Medium |
+| `GameConfig.ts` 註解 | 文件建議用 `Math.random()` 取樣 | Low |
+
+**核心原則違反**：
+
+1. ❌ Production 使用 `Math.random()`（可預測、非 CSPRNG）
+2. ❌ RNG 來源分散（ReelManager 自行呼叫，未經引擎封裝）
+3. ❌ 無統一 RNG Provider（無法強制封裝與替換）
+4. ✅ RNG 與 RTP 已分離（權重表 + 賠付表決定 RTP）
+5. ✅ 模擬使用 seeded RNG（`mulberry32` 僅在 tests/ 目錄）
+6. ✅ 無 RTP 動態修正邏輯
+
+### 4C.3 設計：統一 RNG Provider
+
+#### 架構原則
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   RNGProvider                        │
+│                                                     │
+│  Production:  crypto.getRandomValues() (Web Crypto) │
+│  Node.js:     crypto.randomBytes() (Node crypto)    │
+│  Test:        mulberry32(seed) — 可注入             │
+│                                                     │
+│  API:  rng(): number  → [0, 1) float               │
+│                                                     │
+│  規則:                                              │
+│  ① 全域唯一實例，GameBootstrap 建立後注入所有模組    │
+│  ② 不允許任何模組自行呼叫 Math.random()             │
+│  ③ 不接受外部 seed（production）                    │
+│  ④ 不在 runtime 動態切換 RNG 來源                    │
+└─────────────────────────────────────────────────────┘
+```
+
+#### RNGProvider 實作
+
+```typescript
+// services/RNGProvider.ts
+
+export type RNGFunction = () => number;
+
+export function createCSPRNG(): RNGFunction {
+    if (typeof globalThis.crypto?.getRandomValues === 'function') {
+        const buf = new Uint32Array(1);
+        return () => {
+            globalThis.crypto.getRandomValues(buf);
+            return buf[0] / 0x100000000;
+        };
+    }
+    // Node.js fallback
+    const nodeCrypto = require('crypto');
+    return () => nodeCrypto.randomBytes(4).readUInt32BE(0) / 0x100000000;
+}
+```
+
+#### 變更清單
+
+| 檔案 | 變更 |
+|------|------|
+| `services/RNGProvider.ts` | **新增**：CSPRNG factory + 型別定義 |
+| `SlotEngine.ts` | 移除 `Math.random` 預設值，建構子改為必傳 `rng` |
+| `ReelManager.ts` | 注入 `RNGFunction`，消除 4 處 `Math.random()` |
+| `UIController.ts` | 移除 coin toss `Math.random()` fallback |
+| `GameBootstrap.ts` | 用 `createCSPRNG()` 建立 RNG，注入所有模組 |
+| `GameConfig.ts` | 更新註解，移除 `Math.random()` 建議 |
+
+### 4C.4 五項安全原則落實
+
+| 原則 | Phase 1.5C 前 | Phase 1.5C 後 |
+|------|---------------|---------------|
+| 1. RNG 與機率模型分離 | ✅ | ✅ |
+| 2. RNG 不接受外部 seed | ✅ | ✅ |
+| 3. 上線與模擬完全隔離 | ⚠ `Math.random` 無隔離 | ✅ Production CSPRNG / Test mulberry32 |
+| 4. 不做 RTP 動態修正 | ✅ | ✅ |
+| 5. 用系統 entropy | ❌ `Math.random` 非系統 entropy | ✅ `crypto.getRandomValues` / `crypto.randomBytes` |
+
+### 4C.5 Phase 2 伺服器端 RNG 要求
+
+Phase 2 Client-Server 架構上線時，須額外滿足：
+
+| 要求 | 說明 |
+|------|------|
+| CSPRNG only | Server 端 SlotEngine 必須使用 `crypto.randomBytes`，禁止 `Math.random` |
+| RNG Provider 封裝 | 不可被替換，只能在 DI 初始化時注入 |
+| Config 版本化 + Hash | 每次 spin audit log 記錄 config hash，防止配置竄改 |
+| Release 附 Monte Carlo 報告 | 每次上版須附 2M+ spin 的 RTP 報告 |
+| 每次 spin 記錄版本 | audit log 含 engine version + config hash |
+| RTP 滾動視窗監控 | 即時監控 1000 / 10000 / 100000 局滾動 RTP |
+| 內鬼防範 | 雙人制度、最小權限、程式碼與配置版本鎖定、不可竄改審計 |
+
+### 4C.6 合規考量（GLI / BMM 認證準備）
+
+| 項目 | 要求 | 狀態 |
+|------|------|------|
+| CSPRNG 使用 | 所有遊戲結果由 CSPRNG 決定 | Phase 1.5C 完成後 ✅ |
+| Seed 生成流程記錄 | 可追溯 entropy 來源 | Phase 2 audit log |
+| 第三方驗證 | GLI-11 / BMM 測試 | Phase 2 後送驗 |
+| 可重放測試環境 | seeded RNG 可重現完全相同結果 | ✅ 已實現 |
+| RNG 不可由營運改動 | 程式碼鎖定、部署權限分離 | Phase 2 CI/CD |
+
+---
+
 ## 5. Phase 2：Client-Server 架構
 
 ### 5.1 系統架構圖
@@ -1472,7 +1597,8 @@ tests/e2e/
 | SlotEngine 共用方式 | 直接 import（同一個 TypeScript package）| Server/Client 跑完全相同的機率邏輯，防止分歧 |
 | 後端框架 | Fastify（建議）| 比 Express 快 2-3×，內建 schema validation，TypeScript 友善 |
 | Session 存儲 | Redis + PostgreSQL | Redis for locks/TTL, PostgreSQL for durable balance/history |
-| RNG at Server | `Math.random()` + seeded override for testing | server 端不信任 client RNG，所有 spin 由 server 產生 |
+| RNG at Server | `crypto.randomBytes` (CSPRNG) + seeded override for testing | `Math.random` 禁止用於 production；server 端不信任 client RNG，所有 spin 由 server 產生 |
+| RNG Provider | 統一 `RNGProvider` 封裝 | 禁止散落的 `Math.random` 呼叫；production 用 CSPRNG，test 注入 seeded RNG |
 | `gs` singleton 廢棄時機 | Phase 1 步驟 1-D 後漸進替換 | 減少 merge conflict 風險，每步穩定後才繼續 |
 | WinChecker 留存 | 刪除，統一用 SlotEngine | 避免邏輯分歧，SlotEngine 版本已覆蓋所有案例 |
 | 壓測工具 | k6 | JS 腳本易寫，CI 整合，社群活躍，支援 threshold 斷言 |

@@ -10,6 +10,7 @@ import { IUIController } from './contracts/IUIController';
 import { IGameSession }  from './contracts/IGameSession';
 import { IAccountService } from './contracts/IAccountService';
 import { IReelManager }  from './contracts/IReelManager';
+import type { RNGFunction } from './services/RNGProvider';
 import {
     MAX_ROWS, COIN_TOSS_HEADS_PROB, FG_MULTIPLIERS,
     LINES_BASE, BET_MIN, BET_MAX, BUY_COST_MULT, EXTRA_BET_MULT,
@@ -85,11 +86,14 @@ export class UIController extends Component implements IUIController {
     autoSpinCountLbl!:          Label;
     private extraBetInfoPanel?: Node;
 
+    private _rng!: RNGFunction;
+
     /** 由 GameBootstrap 在場景建立後注入依賴 */
-    init(session: IGameSession, account: IAccountService, reelMgr: IReelManager): void {
+    init(session: IGameSession, account: IAccountService, reelMgr: IReelManager, rng?: RNGFunction): void {
         this._session = session;
         this._account = account;
         this._reelMgr = reelMgr;
+        this._rng = rng ?? (() => Math.random());
     }
 
     /** SceneBuilder 建立面板後呼叫，注入所有面板節點 / 元件 */
@@ -263,7 +267,7 @@ export class UIController extends Component implements IUIController {
             const headsProb = this._coinIsFGContext
                 ? (COIN_TOSS_HEADS_PROB[this._session.fgMultIndex] ?? 0.40)
                 : this._coinEntryHeadsProb;
-            result = Math.random() < headsProb;
+            result = this._rng() < headsProb;
         }
         const coinNode  = this.coinGfxNode;
         tween(coinNode)
