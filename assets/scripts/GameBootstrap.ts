@@ -7,6 +7,7 @@ import { _decorator, Component, view, ResolutionPolicy } from 'cc';
 import { CANVAS_W, CANVAS_H }    from './GameConfig';
 import { GameSession }           from './core/GameSession';
 import { LocalAccountService }   from './services/LocalAccountService';
+import { LocalWalletService }    from './services/LocalWalletService';
 import { LocalEngineAdapter }    from './services/LocalEngineAdapter';
 import { GameFlowController }    from './core/GameFlowController';
 import { createEngine }          from './SlotEngine';
@@ -22,11 +23,12 @@ export class GameBootstrap extends Component {
 
         // ── Model ──────────────────────────────────────────
         const session = new GameSession();
-        const account = new LocalAccountService();
+        const wallet  = new LocalWalletService();
         const adapter = new LocalEngineAdapter(createEngine());
 
-        // Declare flow before buildScene so callbacks can close over it.
-        // flow is assigned synchronously before any button can be pressed.
+        // IAccountService fallback（SceneBuilder/UIController still use it for display）
+        const account = new LocalAccountService();
+
         let flow!: GameFlowController;
 
         // ── View（Cocos Components built by SceneBuilder）──
@@ -44,11 +46,16 @@ export class GameBootstrap extends Component {
             onCollect:        () => uiCtrl.onCollect(),
         });
 
-        // ── Controller ─────────────────────────────────────
-        flow = new GameFlowController(session, account, adapter, reelMgr, uiCtrl);
+        // ── Controller（注入 wallet DI）─────────────────────
+        flow = new GameFlowController(
+            session, account, adapter, reelMgr, uiCtrl,
+            undefined,  // _wait (default)
+            wallet,     // IWalletService
+        );
 
         uiCtrl.updateExtraBetUI();
         uiCtrl.updateTurboUI();
+        uiCtrl.setDisplayBalance(wallet.getBalance());
         uiCtrl.refresh();
     }
 }

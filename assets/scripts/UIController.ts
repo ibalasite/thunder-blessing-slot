@@ -74,6 +74,7 @@ export class UIController extends Component implements IUIController {
     private _coinFlipped        = false;
     private _coinIsFGContext    = false;
     private _coinEntryHeadsProb = 0.50;
+    private _predeterminedCoin?: boolean;
     private multBarNode!:       Node;
     private multBarGfx!:        Graphics;
     private multBarLabels:      Label[]   = [];
@@ -119,10 +120,12 @@ export class UIController extends Component implements IUIController {
     // IUIController — 基本顯示
     // ══════════════════════════════════════════════════════
 
+    private _displayBalance: number | null = null;
+
     refresh(): void {
         if (!this.lblBalance || !this._session) return;
-        this.lblBalance.string    = `餘額: ${this._account.getBalance().toFixed(2)}`;
-        // 顯示 25線基礎押分（betPerLine × 25），與 +/- 操作的參考單位一致
+        const bal = this._displayBalance ?? this._account.getBalance();
+        this.lblBalance.string    = `餘額: ${bal.toFixed(2)}`;
         const baseBet = parseFloat(
             (this._session.betPerLine * LINES_BASE * (this._session.extraBetOn ? 3 : 1)).toFixed(2));
         this.lblBet.string        = `押分: ${baseBet.toFixed(2)}`;
@@ -130,6 +133,13 @@ export class UIController extends Component implements IUIController {
         this.lblLines.string      = '';
         this.lblMultiplier.string = this._session.inFreeGame
             ? `FREE GAME  ×${this._session.fgMultiplier}` : '';
+    }
+
+    setDisplayBalance(balance: number): void {
+        this._displayBalance = balance;
+        if (this.lblBalance) {
+            this.lblBalance.string = `餘額: ${balance.toFixed(2)}`;
+        }
     }
 
     setStatus(msg: string, color = '#ffffff'): void {
@@ -241,10 +251,16 @@ export class UIController extends Component implements IUIController {
     onCoinTap(): void {
         if (this._coinFlipped || !this.coinPanel?.active) return;
         this._coinFlipped = true;
-        const headsProb = this._coinIsFGContext
-            ? (COIN_TOSS_HEADS_PROB[this._session.fgMultIndex] ?? 0.40)
-            : this._coinEntryHeadsProb;
-        const result    = Math.random() < headsProb;
+        let result: boolean;
+        if (this._predeterminedCoin !== undefined) {
+            result = this._predeterminedCoin;
+            this._predeterminedCoin = undefined;
+        } else {
+            const headsProb = this._coinIsFGContext
+                ? (COIN_TOSS_HEADS_PROB[this._session.fgMultIndex] ?? 0.40)
+                : this._coinEntryHeadsProb;
+            result = Math.random() < headsProb;
+        }
         const coinNode  = this.coinGfxNode;
         tween(coinNode)
             .to(0.18, { position: new Vec3(0,  90, 0) }, { easing: 'cubicOut' })
@@ -267,6 +283,15 @@ export class UIController extends Component implements IUIController {
                 this._coinResolve?.(result);
             })
             .start();
+    }
+
+    /**
+     * playCoinToss — atomic spin 用：播放已決定結果的硬幣動畫。
+     * 玩家點擊硬幣後直接顯示預設結果，無隨機。
+     */
+    playCoinToss(isFGContext: boolean, result: boolean): Promise<void> {
+        this._predeterminedCoin = result;
+        return this.showCoinToss(isFGContext, 0).then(() => {});
     }
 
     showTotalWin(amount: number): Promise<void> {

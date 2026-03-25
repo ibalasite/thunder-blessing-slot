@@ -1,16 +1,17 @@
 /**
  * LocalEngineAdapter.ts
- * IEngineAdapter 的單機版實作 — 直接呼叫 SlotEngine.simulateSpin()
+ * IEngineAdapter 的單機版實作 — 直接呼叫 SlotEngine
  */
 import { SlotEngine } from '../SlotEngine';
 import { IEngineAdapter }       from '../contracts/IEngineAdapter';
-import { SpinRequest, SpinResponse } from '../contracts/types';
+import { SpinRequest, SpinResponse, GameMode, FullSpinOutcome } from '../contracts/types';
 import { FG_MULTIPLIERS }       from '../GameConfig';
 
 export class LocalEngineAdapter implements IEngineAdapter {
 
     constructor(private readonly _engine: SlotEngine) {}
 
+    /** Legacy single-spin */
     async spin(req: SpinRequest): Promise<SpinResponse> {
         const fgMult   = FG_MULTIPLIERS[req.fgMultIndex] ?? 1;
         const marks    = new Set<string>(req.marks);
@@ -33,5 +34,10 @@ export class LocalEngineAdapter implements IEngineAdapter {
             maxWinCapped: result.maxWinCapped,
             newMarks:     Array.from(marks),
         };
+    }
+
+    /** Atomic full-spin: 一次算完 base + FG chain */
+    async fullSpin(mode: GameMode, totalBet: number): Promise<FullSpinOutcome> {
+        return this._engine.computeFullSpin({ mode, totalBet });
     }
 }

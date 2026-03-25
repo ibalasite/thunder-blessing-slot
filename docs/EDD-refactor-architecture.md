@@ -1,8 +1,8 @@
 # EDD — Thunder Blessing Slot：架構重構設計文件
 
-**文件版本**：v2.1  
-**日期**：2026-03-21  
-**狀態**：Phase 1 完成 ✅ | Phase 2 規劃中  
+**文件版本**：v3.0  
+**日期**：2026-03-25  
+**狀態**：Phase 1.5B 完成 | Phase 2 規劃中  
 **作者**：工程團隊
 
 > **本文件涵蓋兩個重構階段。**  
@@ -473,6 +473,313 @@ assets/scripts/
 | 可 Unit Test 的流程邏輯 | 0（GameBootstrap 強耦合 Cocos）| GameFlowController 100% 可測 | ✅ |
 | 測試數量 | 237 | 384 | **+62%** |
 | 測試通過率 | 100% | 100% | **維持** |
+
+---
+
+## 4A. Phase 1.5：錢包 DI + 配獎分佈 + Bug Fix（2026-03-25）
+
+### 4A.1 IWalletService — 錢包抽象化
+
+#### 問題
+原 `IAccountService` 的 `debit()` / `credit()` 被 Controller 在 cascade 動畫中逐步呼叫，
+造成兩個問題：
+1. **斷線不安全**：動畫播到一半斷線，部分 credit 已入帳、部分未入帳
+2. **UI 餘額跳動**：實際帳務和 UI 顯示混在一起，表演期間餘額數字不自然
+
+#### 設計：帳務層 vs UI 顯示層分離
+
+```
+IWalletService（帳務層 — 立即生效，斷線安全）
+├── LocalWalletService      ← Phase 1 單機版（同步，記憶體）
+├── RemoteWalletService     ← Phase 2 client-server（非同步，呼叫 server API）
+└── ThirdPartyWalletService ← Phase 3 第三方整合
+
+IUIController.setDisplayBalance()（UI 顯示層 — 跟隨動畫）
+├── spin 開始：顯示 actualBalance - wagered
+├── cascade 中：顯示 startBalance + accumulatedWin（遞增動畫）
+├── spin 結束：同步到 actualBalance（snap to actual）
+```
+
+#### IWalletService 介面
+
+```typescript
+interface SpinTx {
+    txId:      string;
+    wagered:   number;
+    timestamp: number;
+}
+
+interface IWalletService {
+    getBalance(): number;
+    canAfford(amount: number): boolean;
+    beginSpin(wagered: number): SpinTx;          // 立即扣款
+    completeSpin(tx: SpinTx, totalWin: number): number;  // 立即入帳
+    getPendingTx(): SpinTx | null;               // 斷線復原
+    debit(amount: number): void;    // @deprecated
+    credit(amount: number): void;   // @deprecated
+}
+```
+
+#### Spin 流程時序（改後）
+
+```
+1. Controller.canAfford(wagered) → 確認餘額
+2. Controller.beginSpin(wagered) → wallet 立即扣款，回傳 SpinTx
+3. UI.setDisplayBalance(actualBalance) → 顯示扣款後餘額
+4. Engine.fullSpin() → 取得 FullSpinOutcome（所有結果已決定）
+5. UI 表演動畫（純視覺，不動帳務）
+   ├── cascade 中：UI.setDisplayBalance(startBal + accumulatedWin)
+   └── FG 中：同上
+6. Controller.completeSpin(tx, totalWin) → wallet 立即入帳
+7. UI.setDisplayBalance(finalBalance) → 同步最終餘額
+```
+
+**斷線安全分析**：
+- 步驟 2 完成：扣款已入帳，server 可偵測到未完成交易（getPendingTx）
+- 步驟 4 完成：引擎結果已計算，可重送
+- 步驟 6 完成：入帳已完成，即使 UI 沒播完也不影響帳務
+
+#### 向後相容
+
+GameFlowController 建構子新增可選的 `wallet?: IWalletService` 參數。
+若未提供，fallback 到舊版 `IAccountService` 行為。
+現有所有測試無需改動（不注入 wallet 即走舊路徑）。
+
+### 4A.2 FREE 字母亮燈 Bug Fix
+
+#### 問題
+Cascade 展開 rows 到 MAX_ROWS（雲推開），第 4 個 "E" 亮起，
+但 `FG_TRIGGER_PROB` (20%) 沒通過 → FG 沒進入。
+玩家看到「雲都推開了但沒進 FG」的矛盾體驗。
+
+#### 原因
+原碼：
+```typescript
+if (spin.fgTriggered || spin.finalRows >= MAX_ROWS) {
+    this._ui.updateFreeLetters(MAX_ROWS, true);  // 永遠 true
+}
+```
+`fourthE=true` 無條件傳入，不管 FG 是否真的觸發。
+
+#### 修正
+```typescript
+const fgWillTrigger = o.fgSpins.length > 0;  // 看實際結果
+if (spin.finalRows >= MAX_ROWS || spin.fgTriggered) {
+    this._ui.updateFreeLetters(MAX_ROWS, fgWillTrigger);  // 有 FG 才亮第 4 盞
+}
+```
+
+效果：
+- FG 觸發：F-R-E-E 全亮 → coin toss 儀式 → 進入 FG
+- FG 未觸發：F-R-E 亮（第 4 盞不亮）→ 玩家理解「差一點」
+
+#### 測試覆蓋
+新增 unit test：`updateFreeLetters(MAX_ROWS, false) when rows reach MAX but FG does NOT trigger`
+
+### 4A.3 配獎分佈分析框架
+
+#### 從 SCALE 模型轉向配獎分佈模型
+
+**舊方式（SCALE 模型）**：
+- 用 `PAYTABLE_SCALE`、`BUY_FG_PAYOUT_SCALE`、`EB_PAYOUT_SCALE` 全域乘數調 RTP
+- 問題：影響所有 bracket 比例，無法精細控制體感
+
+**新方式（配獎分佈模型）**：
+1. 定義 win brackets（如 GDD math sheet）
+2. 跑 Monte Carlo 模擬，測量各 bracket 出現比例
+3. 調整個別情境觸發比例（FG_TRIGGER_PROB、cascade 展開率、符號權重）
+4. 用 0 獎比例控制 RTP（目標 60-70% 0 獎 → 97.5% RTP）
+
+#### Win Brackets（GDD 規格）
+
+| Bracket | 定義 | 說明 |
+|---------|------|------|
+| 0 | win = 0 | 無獎 |
+| (0, 1) | 0 < win/wagered < 1 | 低於本金 |
+| [1, 2) | 1 ≤ win/wagered < 2 | 小贏 |
+| [2, 5) | 2 ≤ win/wagered < 5 | 中贏 |
+| [5, 10) | 5 ≤ win/wagered < 10 | 大贏 |
+| [10, 20) | | 巨贏 |
+| [20, 50) | | Mega |
+| [50, 100) | | Super |
+| [100, 200) | | Ultra |
+| [200, 500) | | Epic |
+| [500, 1000) | | Legendary |
+| [1000, 2000) | | Mythic |
+| [2000, 5000) | | Godlike |
+| >= 5000 | | Jackpot |
+
+#### 分析工具
+
+```
+# 獨立執行（產出完整報告）
+npx ts-node tests/analysis/WinDistribution.analysis.ts 500000
+
+# Jest 測試（CI 驗證 bracket 比例在合理範圍）
+npx jest tests/integration/WinDistribution.test.ts
+```
+
+輸出範例（Main Game, 100k spins）：
+```
+  Main Game — 100,000 spins
+  RTP:              97.805%
+  Game Hit Rate:    32.60%
+  0-Win Rate:       67.40%
+  FG Trigger Rate:  1.69%
+
+  Bracket          Count     Rate    MG      FG   AvgMult   Dist%  CumDist%  RTP%
+  0                67400   67.40%  67400      0     0.00      -       -      0.00%
+  (0, 1)           20932   20.93%  20922     10     0.36   64.21%   64.21%   7.50%
+  [1, 2)            4206    4.21%   4182     24     1.42   12.90%   77.11%   5.99%
+  [2, 5)            3669    3.67%   3531    138     3.15   11.25%   88.37%  11.54%
+  ...
+```
+
+#### 調機率流程
+
+```
+1. 觀察各 bracket 的 Dist% → 這是「有獎分佈」的 100%
+2. 用 0獎比例 控制 RTP（目標 60-70% 0獎 → 97.5% RTP）
+3. 如果要提高 RTP：減少 0獎比例（更多 spin 有獎）
+4. 如果要降低 RTP：增加 0獎比例（更多 spin 無獎）
+5. 調整手段：FG_TRIGGER_PROB、cascade 展開率、符號權重
+6. 不用全域 SCALE 乘數（影響所有 bracket 比例）
+```
+
+#### 當前配獎分佈觀察（v3.0）
+
+| 模式 | RTP | 0獎比例 | 體感評估 |
+|------|-----|---------|----------|
+| Main Game | 97.8% | 67.4% | ✓ 合理（60-70%） |
+| Buy FG | 98.7% | 0% | 正常（付 100× 保證 FG） |
+| Extra Bet | 96.4% | 70.3% | ⚠ 偏高，建議調整 |
+
+### 4A.4 新增檔案清單
+
+| 檔案 | 類型 | 說明 |
+|------|------|------|
+| `contracts/IWalletService.ts` | Interface | 錢包抽象介面 |
+| `services/LocalWalletService.ts` | 實作 | 單機版錢包（Phase 1） |
+| `tests/analysis/WinDistribution.analysis.ts` | 分析工具 | 配獎分佈報告產生器 |
+| `tests/integration/WinDistribution.test.ts` | 測試 | 配獎分佈 CI 驗證 |
+
+### 4A.5 修改檔案清單
+
+| 檔案 | 變更 |
+|------|------|
+| `contracts/IUIController.ts` | 新增 `setDisplayBalance(balance: number)` |
+| `core/GameFlowController.ts` | 注入 `IWalletService`，spin 流程改為 beginSpin/completeSpin，cascade 中不呼叫 credit |
+| `UIController.ts` | 實作 `setDisplayBalance`，`refresh()` 支援 displayBalance fallback |
+| `GameBootstrap.ts` | 注入 `LocalWalletService` |
+| 所有 test mocks | 新增 `setDisplayBalance: jest.fn()` |
+
+### 4A.6 測試結果（Phase 1.5, 2026-03-25）
+
+| 測試檔案 | 數量 | 狀態 |
+|---------|------|------|
+| Unit Tests（全部） | ~200 | ✅ 通過 |
+| Integration Tests（全部） | ~100 | ✅ 通過 |
+| E2E Tests（全部） | ~80 | ✅ 通過 |
+| WinDistribution.test.ts | 17 | ✅ 通過 |
+| **合計** | **464+** | ✅ **全部通過** |
+
+---
+
+## 4B. Phase 1.5B：Buy Free Game 配獎優化（2026-03-25）
+
+### 4B.1 需求
+
+1. Buy FG 用 100× BET 購買，配獎分佈以 **基礎 BET 倍數** 為單位分析
+2. 至少回 20× BET（20% 保底），避免花大錢得零頭
+3. 驚喜放在 > 100× BET，期待放在 100×–30000× BET
+4. 30000× BET MAX WIN 機率需高於 Main Game FG（否則沒有購買動機）
+5. 調高 (20, 100) bracket 獎項配置，RTP 控制在 97.5% ±0.5%
+
+### 4B.2 設計變更
+
+#### 新增常數（`GameConfig.ts`）
+
+```typescript
+// Buy FG 最低保底：20× BET（花 100× 至少拿回 20×）
+export const BUY_FG_MIN_WIN_MULT = 20;
+
+// Buy FG 專屬 Coin Toss（大幅提升 tier 到達率）
+export const COIN_TOSS_HEADS_PROB_BUY = [0.35, 0.25, 0.15, 0.08];
+
+// 配合新 tier 分佈重新校準
+export const BUY_FG_PAYOUT_SCALE = 1.87;  // (原 3.448)
+```
+
+#### 引擎變更（`SlotEngine.ts`）
+
+- `_determineFGTier(isBuyFG)`: Buy FG 使用 `COIN_TOSS_HEADS_PROB_BUY`
+- `computeFullSpin`: Buy FG 結算時加入 minimum floor `totalWin >= BUY_FG_MIN_WIN_MULT × totalBet`
+- 保底在 SCALE 之後、MAX_WIN cap 之前應用
+
+### 4B.3 Tier 到達率比較
+
+| Tier | 倍率 | 輪數 | Main Game | Buy FG | 倍率差 |
+|------|------|------|-----------|--------|--------|
+| 0 | ×3 | 8 | 85.00% | 65.00% | 0.8× |
+| 1 | ×7 | 12 | 13.50% | 26.25% | 1.9× |
+| 2 | ×17 | 20 | 1.43% | 7.44% | 5.2× |
+| 3 | ×27 | 20 | 0.07% | 1.21% | 16.4× |
+| 4 | ×77 | 20 | 0.0015% | 0.105% | **70×** |
+
+### 4B.4 Buy FG 配獎分佈（100 萬轉, BET 倍數）
+
+| Bracket(BET×) | 出現率% | 出現頻率 | 平均倍數 | RTP 貢獻% |
+|---------------|---------|----------|----------|-----------|
+| 0 | 0% | — | — | 0% |
+| (0, 20) | 0% | — | — | 0% |
+| [20, 100) | 76.90% | 1:1.3 | 38.64 | 29.71% |
+| [100, 200) | 12.15% | 1:8.2 | 139.15 | 16.91% |
+| [200, 500) | 7.66% | 1:13.1 | 308.27 | 23.61% |
+| [500, 1000) | 2.64% | 1:37.8 | 682.29 | 18.03% |
+| [1000, 2000) | 0.58% | 1:171 | 1,271.07 | 7.43% |
+| [2000, 5000) | 0.06% | 1:1,751 | 2,757.73 | 1.57% |
+| [5000, 10000) | 0.003% | 1:32,258 | 6,291.88 | 0.20% |
+| [10000, 30000) | rare | — | — | — |
+| **合計 RTP** | | | | **97.46%** |
+
+### 4B.5 30000× MAX WIN 可達性分析
+
+- Tier 4 (×77, 20 rounds) 每輪需 10.42× BET raw win（正常均值的 32 倍）
+- 2M 次 Buy FG 實測最高: **11,777× BET**（tier 4, 67 次 ≥5000×）
+- Main FG 2M 次: 最高 1,006× BET（tier 3 止）,0 次到達 tier 4
+- **結論**: Buy FG 到達 tier 4 的機率為 Main Game 的 70×，30000× BET 在數學上可達，需 10M+ 次才會出現
+
+### 4B.6 修改檔案清單
+
+| 檔案 | 變更內容 |
+|------|---------|
+| `GameConfig.ts` | 新增 `BUY_FG_MIN_WIN_MULT`, `COIN_TOSS_HEADS_PROB_BUY`; 修改 `BUY_FG_PAYOUT_SCALE` |
+| `SlotEngine.ts` | `_determineFGTier(isBuyFG)` 參數化; `computeFullSpin` 加 min floor |
+| `BetLevelRTP.test.ts` | 更新 Buy FG 模擬（使用 Buy 專屬 coin toss + floor） |
+| `ThreeMode.rtp.test.ts` | 同上 |
+| `FullGameRTP.simulation.test.ts` | 同上 |
+| `ProbabilityCore.unit.test.ts` | 新增 `COIN_TOSS_HEADS_PROB_BUY` 驗證 |
+| `BuyFGFlow.unit.test.ts` | 新增 minimum floor 驗證 |
+| `BuyFG.distribution.ts` | 新建: Buy FG BET 倍數分佈分析工具 |
+| `MaxWin.analysis.ts` | 新建: 30000× MAX WIN 可達性分析 |
+| `ThreeMode.parallel.ts` | 新建: 三模式平行 RTP + 分佈報告 |
+
+### 4B.7 測試結果（Phase 1.5B, 2026-03-25）
+
+| 測試項目 | 數量 | 狀態 |
+|---------|------|------|
+| Unit Tests | ~210 | ✅ 通過 |
+| Integration Tests | ~110 | ✅ 通過 |
+| E2E Tests | ~80 | ✅ 通過 |
+| **合計** | **549** | ✅ **全部通過** |
+
+**RTP 驗證（2M spins × 10 seeds）**:
+
+| 模式 | RTP | 0-win% | 備註 |
+|------|-----|--------|------|
+| Main Game | 97.86% | 67.5% | ✅ ±0.5% |
+| Buy FG | 97.46% | 0% | ✅ ±0.5% |
+| Extra Bet | 97.67% | 68.4% | ✅ ±0.5% |
 
 ---
 

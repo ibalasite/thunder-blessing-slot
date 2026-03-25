@@ -18,6 +18,14 @@ export const SYMBOL_WEIGHTS: Record<SymType, number> = {
     L1: 12, L2: 12, L3: 14, L4: 14,
 };
 
+// ── Extra Bet 符號權重（合計 90）─────────────────────────────────────────────
+// Wild +1、Premium +3、Low -4：提高消除命中率 → 降低 0獎比例至 <70%
+export const SYMBOL_WEIGHTS_EB: Record<SymType, number> = {
+    W: 4, SC: 4,
+    P1: 7, P2: 8, P3: 9, P4: 10,
+    L1: 11, L2: 11, L3: 13, L4: 13,
+};
+
 // ── Free Game 符號權重（GDD §2-2: 合計 90）────────────────────────────────
 export const SYMBOL_WEIGHTS_FG: Record<SymType, number> = {
     W: 4, SC: 6,
@@ -43,7 +51,7 @@ export const REEL_STRIP: SymType[] = (() => {
 // 本遊戲使用 payline 機制（左到右連線），命中率遠低於 scatter-pays，
 // 因此需要 PAYTABLE_SCALE 校準因子來補償，維持目標 RTP 97.5%。
 // 基礎值比例保持 GDD 規格不變，scale 由 Monte Carlo 模擬校準。
-export const PAYTABLE_SCALE = 3.57;
+export const PAYTABLE_SCALE = 3.622;
 
 const _BASE_PAYTABLE: Record<SymType, number[]> = {
     W:  [0, 0, 0, 0.17, 0.43, 1.17],
@@ -163,17 +171,28 @@ export const PAYLINES_BY_ROWS: Record<number, number[][]> = {
 export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 
 /**
- * 每局 FG Spin 後 Coin Toss 翻到 ZEUS（Heads）的機率。
- * 進場 Coin Toss 也使用 index 0（80%），正常與 Buy FG 相同。
- * 越低倍率越容易，每升一級漸難，讓玩家感受張力逐漸升高。
- * index 對應 FG_MULTIPLIERS 的倍率等級：
- *   [0] ×3  → 80%  (進場 & x3 後升到 x7)
- *   [1] ×7  → 68%  (x7 後升到 x17)
- *   [2] ×17 → 56%  (x17 後升到 x27)
- *   [3] ×27 → 48%  (x27 後升到 x77)
- *   [4] ×77 → 40%  (最高等級，維持 x77 繼續)
+ * Free Game 各 tier 的固定輪數。
+ * 進入 FG 前，Coin Toss 升級儀式決定最終 tier：
+ *   tier 0 → 8 次 ×3  (base, guaranteed minimum)
+ *   tier 1 → 12 次 ×7  (heads on 1st toss)
+ *   tier 2 → 20 次 ×17 (heads on 2nd toss)
+ *   tier 3 → 20 次 ×27 (heads on 3rd toss)
+ *   tier 4 → 20 次 ×77 (heads on 4th toss)
  */
-export const COIN_TOSS_HEADS_PROB = [0.80, 0.68, 0.56, 0.48, 0.40];
+export const FG_ROUND_COUNTS = [8, 12, 20, 20, 20];
+
+/**
+ * Coin Toss 升級機率（tier model 校準值）。
+ * 進入 FG 後先保底 tier 0（8 次 ×3），然後依序翻硬幣：
+ *   [0] 15% heads → 升到 tier 1 (12 次 ×7)
+ *   [1] 10% heads → 升到 tier 2 (20 次 ×17)
+ *   [2]  5% heads → 升到 tier 3 (20 次 ×27)
+ *   [3]  2% heads → 升到 tier 4 (20 次 ×77)
+ * 翻到反面即停止升級，以當前 tier 進入 FG。
+ * 原 GDD 值（80/68/56/48/40）為 per-spin 模型設計，
+ * 改為固定輪數 tier 模型後須重新校準以維持 97.5% RTP。
+ */
+export const COIN_TOSS_HEADS_PROB = [0.15, 0.10, 0.05, 0.02];
 /**
  * 正常遊戲自然觸發 FREE GAME 的門檻機率。
  * 基礎遊戲 Cascade 達到 MAX_ROWS 並再次勝出時，還需通過此機率檢查，才能進入 Coin Toss。
@@ -199,17 +218,42 @@ export const BET_MIN = 0.25;    // 25線 × betPerLine 的最小合法值
 export const BET_MAX = 10.00;   // 25線 × betPerLine 的最大合法值
 export const BET_STEP = 0.25;   // +/- 一次的步進量
 
+/** 所有合法押分等級（由 BET_MIN 到 BET_MAX，步進 BET_STEP） */
+export const BET_LEVELS: number[] = (() => {
+    const levels: number[] = [];
+    for (let b = BET_MIN; b <= BET_MAX + 1e-9; b += BET_STEP) {
+        levels.push(parseFloat(b.toFixed(2)));
+    }
+    return levels;
+})();
+
 // Extra Bet 倍率（玩家每轉付 totalBet × EXTRA_BET_MULT）
 export const EXTRA_BET_MULT = 3;
 
 // Buy Free Game 費用（玩家付 totalBet × BUY_COST_MULT 購買 FG）
 export const BUY_COST_MULT = 100;
 
+/**
+ * Buy FG 最低保底獎金（BET 倍數）。
+ * 花 100× BET 購買，至少回 20× BET（20% 保底），避免體感過差。
+ * Engine 在 computeFullSpin 結算時，若 totalWin < 此值 × totalBet，補至此值。
+ */
+export const BUY_FG_MIN_WIN_MULT = 20;
+
+/**
+ * Buy FG 專屬 Coin Toss 升級機率。
+ * 比一般模式 (15/10/5/2%) 大幅提高，讓 Buy FG 有更多機會升到高 tier，
+ * 產生 >1000× BET 的大獎，以及 30000× BET 的 MAX WIN。
+ * 這是 Buy FG 「花大錢買期待」的核心設計。
+ */
+export const COIN_TOSS_HEADS_PROB_BUY = [0.35, 0.25, 0.15, 0.08];
+
 // ── 模式專屬派獎倍率（各模式獨立校準至 97.5% RTP）───────────────
 // Buy FG 期間所有中獎額外乘以此值（含 intro cascade + FG chain）
-export const BUY_FG_PAYOUT_SCALE = 3.36;
-// Extra Bet 期間所有中獎額外乘以此值
-export const EB_PAYOUT_SCALE = 2.73;
+// 配合 COIN_TOSS_HEADS_PROB_BUY + BUY_FG_MIN_WIN_MULT 保底校準
+export const BUY_FG_PAYOUT_SCALE = 1.87;
+// Extra Bet 期間所有中獎額外乘以此值（配合 SYMBOL_WEIGHTS_EB 校準）
+export const EB_PAYOUT_SCALE = 2.37;
 
 // 最大獎金上限
 export const MAX_WIN_MULT = 30000;

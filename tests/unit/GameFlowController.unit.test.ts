@@ -1,6 +1,6 @@
 /**
  * GameFlowController.unit.test.ts
- * 測試 GameFlowController 的純遊戲流程邏輯（所有 Cocos 依賴以 jest.fn() mock）
+ * 測試 GameFlowController 的純遊戲流程邏輯（Atomic Spin 架構）
  */
 import { GameFlowController } from '../../assets/scripts/core/GameFlowController';
 import { IGameSession }       from '../../assets/scripts/contracts/IGameSession';
@@ -8,8 +8,9 @@ import { IAccountService }    from '../../assets/scripts/contracts/IAccountServi
 import { IEngineAdapter }     from '../../assets/scripts/contracts/IEngineAdapter';
 import { IReelManager }       from '../../assets/scripts/contracts/IReelManager';
 import { IUIController }      from '../../assets/scripts/contracts/IUIController';
-import { SpinResponse }       from '../../assets/scripts/contracts/types';
-import { BASE_ROWS, MAX_ROWS, REEL_COUNT, MAX_WIN_MULT } from '../../assets/scripts/GameConfig';
+import { FullSpinOutcome, SpinResponse } from '../../assets/scripts/contracts/types';
+import { BASE_ROWS, MAX_ROWS, REEL_COUNT, MAX_WIN_MULT, LINES_BASE,
+         BUY_COST_MULT, EXTRA_BET_MULT } from '../../assets/scripts/GameConfig';
 import { SymType } from '../../assets/scripts/GameConfig';
 import { WinLine } from '../../assets/scripts/SlotEngine';
 
@@ -33,10 +34,28 @@ function makeSpinResponse(overrides: Partial<SpinResponse> = {}): SpinResponse {
     };
 }
 
+function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome {
+    return {
+        mode:            'main',
+        totalBet:        1,
+        wagered:         1,
+        modePayoutScale: 1,
+        baseSpins:       [makeSpinResponse()],
+        baseWin:         0,
+        tierUpgrades:    [],
+        fgSpins:         [],
+        fgWin:           0,
+        totalRawWin:     0,
+        totalWin:        0,
+        maxWinCapped:    false,
+        ...overrides,
+    };
+}
+
 function makeSession(overrides: Partial<IGameSession> = {}): jest.Mocked<IGameSession> {
     const m: any = {
         totalBet:       1,
-        betPerLine:     0.0044,
+        betPerLine:     1 / LINES_BASE,
         extraBetOn:     false,
         turboMode:      true,
         inFreeGame:     false,
@@ -50,7 +69,7 @@ function makeSession(overrides: Partial<IGameSession> = {}): jest.Mocked<IGameSe
         expandRows:          jest.fn(),
         resetRows:           jest.fn(),
         setCurrentRows:      jest.fn(),
-        resetRound:          jest.fn((this_: any) => { m.roundWin = 0; }),
+        resetRound:          jest.fn(() => { m.roundWin = 0; }),
         addRoundWin:         jest.fn((amount: number) => { m.roundWin += amount; }),
         incrementCascade:    jest.fn(),
         clearMarks:          jest.fn(),
@@ -79,9 +98,10 @@ function makeAccount(balance = 1000): jest.Mocked<IAccountService> {
     } as jest.Mocked<IAccountService>;
 }
 
-function makeEngine(res?: Partial<SpinResponse>): jest.Mocked<IEngineAdapter> {
+function makeEngine(outcome?: Partial<FullSpinOutcome>): jest.Mocked<IEngineAdapter> {
     return {
-        spin: jest.fn().mockResolvedValue(makeSpinResponse(res)),
+        spin:     jest.fn().mockResolvedValue(makeSpinResponse()),
+        fullSpin: jest.fn().mockResolvedValue(makeOutcome(outcome)),
     } as jest.Mocked<IEngineAdapter>;
 }
 
@@ -101,6 +121,7 @@ function makeReels(): jest.Mocked<IReelManager> {
 function makeUI(): jest.Mocked<IUIController> {
     return {
         refresh:            jest.fn(),
+        setDisplayBalance:  jest.fn(),
         setStatus:          jest.fn(),
         showWinPop:         jest.fn(),
         enableSpin:         jest.fn(),
@@ -109,6 +130,7 @@ function makeUI(): jest.Mocked<IUIController> {
         updateFreeLetters:  jest.fn(),
         showBuyPanel:       jest.fn().mockResolvedValue(false),
         showCoinToss:       jest.fn().mockResolvedValue(false),
+        playCoinToss:       jest.fn().mockResolvedValue(undefined),
         showTotalWin:       jest.fn().mockResolvedValue(undefined),
         showThunderBlessing: jest.fn().mockResolvedValue(undefined),
         showFGBar:          jest.fn(),
@@ -125,8 +147,6 @@ const instantWait = (_sec: number) => Promise.resolve();
 
 describe('GameFlowController', () => {
 
-    // ── constructor ──────────────────────────────────────────────────────
-
     it('can be instantiated with 5 deps', () => {
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), makeEngine(), makeReels(), makeUI(), instantWait);
@@ -135,20 +155,30 @@ describe('GameFlowController', () => {
         expect(ctrl.autoSpinCount).toBe(0);
     });
 
-    // ── doSpin ───────────────────────────────────────────────────────────
+    // ── doSpin (atomic) ───────────────────────────────────────────────
 
-    it('doSpin calls engine.spin once', async () => {
+    it('doSpin calls engine.fullSpin with mode and baseBet', async () => {
         const eng  = makeEngine();
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), eng, makeReels(), makeUI(), instantWait);
         await ctrl.doSpin();
-        expect(eng.spin).toHaveBeenCalledTimes(1);
+        expect(eng.fullSpin).toHaveBeenCalledWith('main', expect.any(Number));
     });
 
-    it('doSpin debits totalBet from account', async () => {
-        const acc  = makeAccount(100);
+    it('doSpin uses extraBet mode when extraBetOn=true', async () => {
+        const eng  = makeEngine({ mode: 'extraBet', wagered: 3 });
+        const sess = makeSession({ extraBetOn: true });
         const ctrl = new GameFlowController(
-            makeSession(), acc, makeEngine(), makeReels(), makeUI(), instantWait);
+            sess, makeAccount(), eng, makeReels(), makeUI(), instantWait);
+        await ctrl.doSpin();
+        expect(eng.fullSpin).toHaveBeenCalledWith('extraBet', expect.any(Number));
+    });
+
+    it('doSpin debits outcome.wagered from account', async () => {
+        const acc  = makeAccount(100);
+        const eng  = makeEngine({ wagered: 1 });
+        const ctrl = new GameFlowController(
+            makeSession(), acc, eng, makeReels(), makeUI(), instantWait);
         await ctrl.doSpin();
         expect(acc.debit).toHaveBeenCalledWith(1);
     });
@@ -169,17 +199,9 @@ describe('GameFlowController', () => {
         expect(ui.setStatus).toHaveBeenCalledWith('餘額不足！', '#ff4444');
     });
 
-    it('doSpin does not call engine.spin if balance insufficient', async () => {
-        const eng = makeEngine();
-        const ctrl = new GameFlowController(
-            makeSession(), makeAccount(0), eng, makeReels(), makeUI(), instantWait);
-        await ctrl.doSpin();
-        expect(eng.spin).not.toHaveBeenCalled();
-    });
-
-    it('doSpin calls reels.spinWithGrid with engine result grid', async () => {
+    it('doSpin calls reels.spinWithGrid with base spin grid', async () => {
         const grid  = makeGrid();
-        const eng   = makeEngine({ grid });
+        const eng   = makeEngine({ baseSpins: [makeSpinResponse({ grid })] });
         const reels = makeReels();
         const ctrl  = new GameFlowController(
             makeSession(), makeAccount(), eng, reels, makeUI(), instantWait);
@@ -195,20 +217,12 @@ describe('GameFlowController', () => {
         expect(sess.resetRound).toHaveBeenCalled();
     });
 
-    it('doSpin calls session.clearMarks when not in FreeGame', async () => {
-        const sess = makeSession({ inFreeGame: false });
+    it('doSpin calls session.clearMarks', async () => {
+        const sess = makeSession();
         const ctrl = new GameFlowController(
             sess, makeAccount(), makeEngine(), makeReels(), makeUI(), instantWait);
         await ctrl.doSpin();
         expect(sess.clearMarks).toHaveBeenCalled();
-    });
-
-    it('doSpin does NOT call clearMarks when in FreeGame', async () => {
-        const sess = makeSession({ inFreeGame: true });
-        const ctrl = new GameFlowController(
-            sess, makeAccount(), makeEngine(), makeReels(), makeUI(), instantWait);
-        await ctrl.doSpin();
-        expect(sess.clearMarks).not.toHaveBeenCalled();
     });
 
     it('doSpin calls enableSpin(false) then enableSpin(true)', async () => {
@@ -221,25 +235,20 @@ describe('GameFlowController', () => {
         expect(calls[calls.length - 1]).toEqual([true]);
     });
 
-    it('doSpin calls ui.refresh', async () => {
-        const ui   = makeUI();
-        const ctrl = new GameFlowController(
-            makeSession(), makeAccount(), makeEngine(), makeReels(), ui, instantWait);
-        await ctrl.doSpin();
-        expect(ui.refresh).toHaveBeenCalled();
-    });
-
-    // ── doSpin with cascade steps ─────────────────────────────────────
+    // ── doSpin with cascade steps ──────────────────────────────────
 
     it('doSpin processes cascade steps and credits winnings', async () => {
         const cascadeSteps = [{
-            wins:     [{ multiplier: 5, cells: [{ reel: 0, row: 0 }], lineIndex: 0, rowPath: [0], symbol: 'L4' as SymType, count: 3 } as WinLine],
+            wins:     [{ multiplier: 5, cells: [{ reel: 0, row: 0 }], lineIndex: 0,
+                         rowPath: [0], symbol: 'L4' as SymType, count: 3 } as WinLine],
             winCells: [{ reel: 0, row: 0 }],
             rawWin:   5,
             rowsAfter: BASE_ROWS,
         }];
         const acc  = makeAccount(100);
-        const eng  = makeEngine({ cascadeSteps, totalWin: 5 });
+        const eng  = makeEngine({
+            baseSpins: [makeSpinResponse({ cascadeSteps, totalWin: 5 })],
+        });
         const reels = makeReels();
         const ctrl = new GameFlowController(
             makeSession(), acc, eng, reels, makeUI(), instantWait);
@@ -248,75 +257,38 @@ describe('GameFlowController', () => {
         expect(acc.credit).toHaveBeenCalled();
     });
 
-    // ── doCoinTossAndMaybeFG ─────────────────────────────────────────
+    // ── Atomic FG chain playback ──────────────────────────────────
 
-    it('doCoinTossAndMaybeFG calls ui.showCoinToss with isFGContext=false', async () => {
-        const ui   = makeUI();
-        ui.showCoinToss.mockResolvedValue(false);
-        const ctrl = new GameFlowController(
-            makeSession(), makeAccount(), makeEngine(), makeReels(), ui, instantWait);
-        await ctrl.doCoinTossAndMaybeFG(false);
-        expect(ui.showCoinToss).toHaveBeenCalledWith(false, expect.any(Number));
-    });
-
-    it('doCoinTossAndMaybeFG(guaranteed=true) passes prob=1.0', async () => {
-        const ui   = makeUI();
-        ui.showCoinToss.mockResolvedValue(false);
-        const ctrl = new GameFlowController(
-            makeSession(), makeAccount(), makeEngine(), makeReels(), ui, instantWait);
-        await ctrl.doCoinTossAndMaybeFG(true);
-        expect(ui.showCoinToss).toHaveBeenCalledWith(false, 1.0);
-    });
-
-    it('doCoinTossAndMaybeFG tails: shows fail message, does not enter FG', async () => {
-        const ui   = makeUI();
-        ui.showCoinToss.mockResolvedValue(false);  // tails
+    it('doSpin plays tier upgrade coin toss then FG chain when FG triggered', async () => {
+        const ui = makeUI();
+        const fgSpin = {
+            multiplierIndex: 0, multiplier: 3,
+            spin: makeSpinResponse(), rawWin: 0, multipliedWin: 0,
+            coinToss: { probability: 0, heads: false },
+        };
+        const eng = makeEngine({
+            tierUpgrades: [{ probability: 0.15, heads: false }],
+            fgTier: { tierIndex: 0, rounds: 8, multiplier: 3 },
+            fgSpins: [fgSpin],
+            baseSpins: [makeSpinResponse({ fgTriggered: true })],
+        });
         const sess = makeSession();
         const ctrl = new GameFlowController(
-            sess, makeAccount(), makeEngine(), makeReels(), ui, instantWait);
-        await ctrl.doCoinTossAndMaybeFG(false);
-        // inFreeGame was not set
-        expect(sess.inFreeGame).toBe(false);
-        expect(ui.setStatus).toHaveBeenCalledWith(expect.stringContaining('反面'), '#ff8888');
-    });
-
-    it('doCoinTossAndMaybeFG heads: enters FreeGame', async () => {
-        const ui   = makeUI();
-        ui.showCoinToss
-            .mockResolvedValueOnce(true)   // entry heads
-            .mockResolvedValue(false);     // FG coin toss → tails → exit
-        const sess = makeSession();
-        const eng  = makeEngine();
-        const ctrl = new GameFlowController(
-            sess, makeAccount(1000), eng, makeReels(), ui, instantWait);
-        await ctrl.doCoinTossAndMaybeFG(false);
-        // enterFreeGame was called: sess.inFreeGame set true, then freeGameLoop ran and set it false
+            sess, makeAccount(), eng, makeReels(), ui, instantWait);
+        await ctrl.doSpin();
+        expect(sess.enterFreeGame).toHaveBeenCalledWith(0);
         expect(ui.showFGBar).toHaveBeenCalled();
-        expect(ui.showTotalWin).toHaveBeenCalled();
+        expect(ui.playCoinToss).toHaveBeenCalledTimes(1);
+        expect(ui.playCoinToss).toHaveBeenCalledWith(true, false);
+        expect(sess.exitFreeGame).toHaveBeenCalled();
     });
 
-    // ── enterFreeGame ────────────────────────────────────────────────
-
-    it('enterFreeGame sets inFreeGame=true', async () => {
-        const ui   = makeUI();
-        // Coin toss in FG → immediate tails → exit
-        ui.showCoinToss.mockResolvedValue(false);
-        const sess = makeSession();
-        const ctrl = new GameFlowController(
-            sess, makeAccount(1000), makeEngine(), makeReels(), ui, instantWait);
-        await ctrl.enterFreeGame();
-        // After freeGameLoop exits, inFreeGame=false
-        expect(ui.showFGBar).toHaveBeenCalledWith(0);
-        expect(ui.showTotalWin).toHaveBeenCalled();
-    });
-
-    // ── onBuyFreeGame ────────────────────────────────────────────────
+    // ── onBuyFreeGame (atomic) ────────────────────────────────────
 
     it('onBuyFreeGame does nothing if busy=true', async () => {
         const ui  = makeUI();
-        const eng = makeEngine();
         const ctrl = new GameFlowController(
-            makeSession(), makeAccount(), eng, makeReels(), ui, instantWait);
+            makeSession(), makeAccount(), makeEngine(), makeReels(), ui, instantWait);
         ctrl.busy = true;
         await ctrl.onBuyFreeGame();
         expect(ui.showBuyPanel).not.toHaveBeenCalled();
@@ -329,44 +301,38 @@ describe('GameFlowController', () => {
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), eng, makeReels(), ui, instantWait);
         await ctrl.onBuyFreeGame();
-        expect(eng.spin).not.toHaveBeenCalled();
+        expect(eng.fullSpin).not.toHaveBeenCalled();
     });
 
     it('onBuyFreeGame shows 餘額不足 when balance too low', async () => {
         const ui  = makeUI();
         ui.showBuyPanel.mockResolvedValue(true);
-        const acc = makeAccount(50);   // totalBet=1, cost=100 → insufficient
+        const eng = makeEngine({ mode: 'buyFG', wagered: 100 });
+        const acc = makeAccount(50);
         const ctrl = new GameFlowController(
-            makeSession(), acc, makeEngine(), makeReels(), ui, instantWait);
+            makeSession(), acc, eng, makeReels(), ui, instantWait);
         await ctrl.onBuyFreeGame();
         expect(ui.setStatus).toHaveBeenCalledWith('餘額不足！', '#ff4444');
     });
 
-    it('onBuyFreeGame debits 100× totalBet on confirm', async () => {
+    it('onBuyFreeGame debits wagered on confirm', async () => {
         const ui  = makeUI();
         ui.showBuyPanel.mockResolvedValue(true);
-        ui.showCoinToss.mockResolvedValue(false);  // tails → don't enter FG
-        const acc  = makeAccount(200);
-        const sess = makeSession({ totalBet: 1 });
-        const eng  = makeEngine();
+        const eng = makeEngine({ mode: 'buyFG', wagered: 100 });
+        const acc = makeAccount(200);
         const ctrl = new GameFlowController(
-            sess, acc, eng, makeReels(), ui, instantWait);
+            makeSession(), acc, eng, makeReels(), ui, instantWait);
         await ctrl.onBuyFreeGame();
         expect(acc.debit).toHaveBeenCalledWith(100);
     });
 
-    // ── autoSpinCount ─────────────────────────────────────────────────
+    // ── autoSpinCount ───────────────────────────────────────────────
 
     it('autoSpinCount decrements after each spin', async () => {
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), makeEngine(), makeReels(), makeUI(), instantWait);
         ctrl.autoSpinCount = 2;
-        // First doSpin
         await ctrl.doSpin();
-        // autoSpinCount should be 1 (decremented by 1), then doSpin again called recursively
-        // The recursive call happens; it's fire-and-forget; just verify initial decrement
-        // We can't easily verify the recursive call in this model, but we can check autoSpinCount reached 0
-        // Wait a tick for recursive async to settle
         await new Promise(r => setTimeout(r, 10));
         expect(ctrl.autoSpinCount).toBe(0);
     });

@@ -31,11 +31,20 @@
 
 import {
     SymType, SYM,
-    SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_FG,
+    SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_EB, SYMBOL_WEIGHTS_FG,
     PAYTABLE, PAYLINES_BY_ROWS,
-    FG_MULTIPLIERS, SYMBOL_UPGRADE, TB_SECOND_HIT_PROB,
+    FG_MULTIPLIERS, FG_ROUND_COUNTS, SYMBOL_UPGRADE, TB_SECOND_HIT_PROB,
     REEL_COUNT, BASE_ROWS, MAX_ROWS, MAX_WIN_MULT,
+    FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
+    BUY_COST_MULT, EXTRA_BET_MULT,
+    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
+    BUY_FG_MIN_WIN_MULT,
 } from './GameConfig';
+
+import type {
+    GameMode, CoinTossOutcome, FGSpinOutcome, FullSpinOutcome,
+    SpinResponse,
+} from './contracts/types';
 
 // ─── 公開資料型別 ─────────────────────────────────────────────────────────────
 
@@ -108,8 +117,10 @@ export class SlotEngine {
 
     // ── 抽一個符號 ────────────────────────────────────────────────────────────
 
-    drawSymbol(useFG = false): SymType {
-        const weights = useFG ? SYMBOL_WEIGHTS_FG : SYMBOL_WEIGHTS;
+    drawSymbol(useFG = false, useEB = false): SymType {
+        const weights = useFG ? SYMBOL_WEIGHTS_FG
+                      : useEB ? SYMBOL_WEIGHTS_EB
+                      : SYMBOL_WEIGHTS;
         const total   = (Object.values(weights) as number[]).reduce((a, b) => a + b, 0);
         let r = this.rng() * total;
         for (const [sym, w] of Object.entries(weights) as [SymType, number][]) {
@@ -122,12 +133,12 @@ export class SlotEngine {
 
     // ── 生成 5×6 盤面 ─────────────────────────────────────────────────────────
 
-    generateGrid(useFG = false): SymType[][] {
+    generateGrid(useFG = false, useEB = false): SymType[][] {
         const grid: SymType[][] = [];
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             grid[ri] = [];
             for (let row = 0; row < MAX_ROWS; row++) {
-                grid[ri][row] = this.drawSymbol(useFG);
+                grid[ri][row] = this.drawSymbol(useFG, useEB);
             }
         }
         return grid;
@@ -235,22 +246,25 @@ export class SlotEngine {
         fgMultiplier?:   number;
         lightningMarks?: Set<string>;
         totalBet?:       number;
+        /** Override starting rows (e.g. Buy FG intro carries rows across spins) */
+        startRows?:      number;
     } = {}): SpinResult {
         const useFG    = opts.inFreeGame   ?? false;
+        const useEB    = opts.extraBet     ?? false;
         const fgMult   = opts.fgMultiplier ?? 1;
         const totalBet = opts.totalBet     ?? 1;
 
         // 持久化 marks (FG 中跨 spin 保留)
         const marks = opts.lightningMarks ?? new Set<string>();
 
-        // 生成初始盤面
-        let grid = this.generateGrid(useFG);
-        if (opts.extraBet) grid = this.applyExtraBetSC(grid);
+        // 生成初始盤面（EB 使用 SYMBOL_WEIGHTS_EB 提高消除命中率）
+        let grid = this.generateGrid(useFG, useEB);
+        if (useEB) grid = this.applyExtraBetSC(grid);
         const initialGrid = grid.map(c => [...c]) as SymType[][];
 
         const cascadeSteps: CascadeStep[] = [];
         let totalRawWin  = 0;
-        let rows         = BASE_ROWS;
+        let rows         = opts.startRows ?? BASE_ROWS;
         let fgTriggered  = false;
         let maxWinCapped = false;
         let tbStep: TBStep | undefined;
@@ -315,7 +329,7 @@ export class SlotEngine {
 
             // 就地補充被消除格子
             for (const c of winCells) {
-                grid[c.reel][c.row] = this.drawSymbol(useFG);
+                grid[c.reel][c.row] = this.drawSymbol(useFG, useEB);
             }
 
             cascadeSteps.push({ wins, winCells, rawWin, rowsAfter: newRows });
@@ -327,6 +341,211 @@ export class SlotEngine {
             cascadeSteps, tbStep,
             totalRawWin, fgTriggered,
             finalRows: rows, maxWinCapped,
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Atomic full-spin: 一次算完所有結果（含 FG chain），UI 只負責播放
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private _toSpinResponse(r: SpinResult, fgMult: number, marks: Set<string>): SpinResponse {
+        return {
+            grid:         r.finalGrid,
+            cascadeSteps: r.cascadeSteps,
+            tbStep:       r.tbStep,
+            totalWin:     parseFloat((r.totalRawWin * fgMult).toFixed(4)),
+            fgTriggered:  r.fgTriggered,
+            finalRows:    r.finalRows,
+            maxWinCapped: r.maxWinCapped,
+            newMarks:     Array.from(marks),
+        };
+    }
+
+    /**
+     * Coin Toss 升級儀式：決定 FG tier（輪數 + 倍率）。
+     * 從 tier 0（8次 ×3）開始，每次 heads 升一級，tails 停止。
+     * Buy FG 使用更高的升級機率（COIN_TOSS_HEADS_PROB_BUY）。
+     */
+    private _determineFGTier(isBuyFG = false): {
+        tierIndex: number; rounds: number; multiplier: number;
+        upgrades: CoinTossOutcome[];
+    } {
+        const probs = isBuyFG ? COIN_TOSS_HEADS_PROB_BUY : COIN_TOSS_HEADS_PROB;
+        let tierIndex = 0;
+        const upgrades: CoinTossOutcome[] = [];
+        const maxUpgrades = FG_MULTIPLIERS.length - 1;
+
+        for (let i = 0; i < maxUpgrades; i++) {
+            const prob = probs[i] ?? probs[probs.length - 1];
+            const heads = this.rng() < prob;
+            upgrades.push({ probability: prob, heads });
+            if (!heads) break;
+            tierIndex++;
+        }
+
+        return {
+            tierIndex,
+            rounds:     FG_ROUND_COUNTS[tierIndex],
+            multiplier: FG_MULTIPLIERS[tierIndex],
+            upgrades,
+        };
+    }
+
+    /**
+     * 執行固定輪數的 FG chain（由 tier 決定輪數和倍率）。
+     */
+    private _runFGChain(totalBet: number, maxWinBudget: number,
+                         rounds: number, multiplier: number, tierIndex: number): {
+        spins: FGSpinOutcome[]; totalWin: number; maxWinCapped: boolean;
+    } {
+        const marks = new Set<string>();
+        const spins: FGSpinOutcome[] = [];
+        let accumulated = 0;
+        let capped = false;
+
+        for (let i = 0; i < rounds; i++) {
+            const r = this.simulateSpin({
+                inFreeGame: true, fgMultiplier: multiplier,
+                totalBet, lightningMarks: marks,
+            });
+            const rawWin = r.totalRawWin;
+            let multipliedWin = rawWin * multiplier;
+
+            if (accumulated + multipliedWin >= maxWinBudget) {
+                multipliedWin = Math.max(0, maxWinBudget - accumulated);
+                capped = true;
+            }
+            accumulated += multipliedWin;
+
+            spins.push({
+                multiplierIndex: tierIndex,
+                multiplier,
+                spin:            this._toSpinResponse(r, multiplier, marks),
+                rawWin,
+                multipliedWin,
+                coinToss:        { probability: 0, heads: false },
+            });
+
+            if (capped) break;
+        }
+
+        return { spins, totalWin: accumulated, maxWinCapped: capped };
+    }
+
+    /**
+     * 原子轉動：一次算完 base spin + FG trigger + coin toss + FG chain。
+     * UI 收到後只需依序播放動畫。
+     */
+    computeFullSpin(opts: {
+        mode:     GameMode;
+        totalBet: number;
+    }): FullSpinOutcome {
+        const { mode, totalBet } = opts;
+        const extraBet = mode === 'extraBet';
+        const isBuyFG  = mode === 'buyFG';
+
+        const modePayoutScale = isBuyFG  ? BUY_FG_PAYOUT_SCALE
+                              : extraBet ? EB_PAYOUT_SCALE
+                              : 1;
+        const wagered = isBuyFG  ? totalBet * BUY_COST_MULT
+                      : extraBet ? totalBet * EXTRA_BET_MULT
+                      : totalBet;
+        const maxWinTotal = totalBet * MAX_WIN_MULT;
+
+        const baseSpins: SpinResponse[] = [];
+        let baseWin = 0;
+        let fgTriggeredByBase = false;
+        const baseMarks = new Set<string>();
+
+        if (isBuyFG) {
+            // Buy FG intro: rows accumulate across spins until MAX_ROWS
+            let currentRows = BASE_ROWS;
+            for (let s = 0; s < 50; s++) {
+                const r = this.simulateSpin({ totalBet, startRows: currentRows });
+                baseSpins.push(this._toSpinResponse(r, 1, baseMarks));
+                baseWin += r.totalRawWin;
+                currentRows = r.finalRows;
+                if (r.fgTriggered || currentRows >= MAX_ROWS) {
+                    fgTriggeredByBase = true;
+                    break;
+                }
+            }
+            // Safety: guarantee FG entry even if 50 spins wasn't enough
+            if (!fgTriggeredByBase) {
+                fgTriggeredByBase = true;
+            }
+        } else {
+            // Main / Extra Bet: single base spin
+            const r = this.simulateSpin({ totalBet, extraBet });
+            baseSpins.push(this._toSpinResponse(r, 1, baseMarks));
+            baseWin += r.totalRawWin;
+            fgTriggeredByBase = r.fgTriggered;
+        }
+
+        // FG trigger check (main/EB: need to pass FG_TRIGGER_PROB; buyFG: always)
+        let fgTriggerCheck: FullSpinOutcome['fgTriggerCheck'];
+        let triggerPassed = false;
+        if (fgTriggeredByBase) {
+            if (isBuyFG) {
+                triggerPassed = true;
+            } else {
+                const triggerRoll = this.rng();
+                triggerPassed = triggerRoll < FG_TRIGGER_PROB;
+                fgTriggerCheck = {
+                    reachedMaxRows: true,
+                    triggerRoll,
+                    passed: triggerPassed,
+                };
+            }
+        }
+
+        // GDD: trigger passed → guaranteed entry. Coin toss only determines tier.
+        const enterFG = triggerPassed;
+        let entryCoinToss: CoinTossOutcome | undefined;
+
+        // Tier upgrade coin toss ceremony + FG chain
+        let tierUpgrades: CoinTossOutcome[] = [];
+        let fgTier: FullSpinOutcome['fgTier'];
+        let fgSpins: FGSpinOutcome[] = [];
+        let fgWin = 0;
+        let maxWinCapped = false;
+        if (enterFG) {
+            const tier = this._determineFGTier(isBuyFG);
+            tierUpgrades = tier.upgrades;
+            fgTier = { tierIndex: tier.tierIndex, rounds: tier.rounds, multiplier: tier.multiplier };
+
+            const budget = maxWinTotal - baseWin * modePayoutScale;
+            const chain = this._runFGChain(
+                totalBet, budget > 0 ? budget / modePayoutScale : 0,
+                tier.rounds, tier.multiplier, tier.tierIndex,
+            );
+            fgSpins = chain.spins;
+            fgWin = chain.totalWin;
+            maxWinCapped = chain.maxWinCapped;
+        }
+
+        const totalRawWin = baseWin + fgWin;
+        let totalWin = totalRawWin * modePayoutScale;
+
+        // Buy FG 最低保底：至少回 BUY_FG_MIN_WIN_MULT × totalBet
+        if (isBuyFG && totalWin < BUY_FG_MIN_WIN_MULT * totalBet) {
+            totalWin = BUY_FG_MIN_WIN_MULT * totalBet;
+        }
+
+        if (totalWin > maxWinTotal) {
+            totalWin = maxWinTotal;
+            maxWinCapped = true;
+        }
+        totalWin = parseFloat(totalWin.toFixed(2));
+
+        return {
+            mode, totalBet, wagered, modePayoutScale,
+            baseSpins, baseWin,
+            fgTriggerCheck,
+            entryCoinToss,
+            tierUpgrades, fgTier,
+            fgSpins, fgWin,
+            totalRawWin, totalWin, maxWinCapped,
         };
     }
 }

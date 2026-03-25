@@ -18,11 +18,13 @@ import {
     SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_FG,
     PAYTABLE, PAYTABLE_SCALE,
     PAYLINES_25, PAYLINES_33, PAYLINES_45, PAYLINES_57, PAYLINES_BY_ROWS,
-    FG_MULTIPLIERS, COIN_TOSS_HEADS_PROB, FG_TRIGGER_PROB,
+    FG_MULTIPLIERS, COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
+    FG_TRIGGER_PROB,
     TB_SECOND_HIT_PROB, SYMBOL_UPGRADE,
     MAX_WIN_MULT, REEL_COUNT, BASE_ROWS, MAX_ROWS,
     BET_MIN, BET_MAX, BET_STEP, EXTRA_BET_MULT,
     BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
+    BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,12 +160,12 @@ describe('Paytable — GDD §4 Compliance', () => {
 
 describe('Coin Toss — GDD §9-3 Compliance', () => {
 
-    it('5 levels of coin toss probability', () => {
-        expect(COIN_TOSS_HEADS_PROB).toHaveLength(5);
+    it('4 tier-upgrade coin toss probabilities', () => {
+        expect(COIN_TOSS_HEADS_PROB).toHaveLength(4);
     });
 
-    it('Exact values: [0.80, 0.68, 0.56, 0.48, 0.40]', () => {
-        expect(COIN_TOSS_HEADS_PROB).toEqual([0.80, 0.68, 0.56, 0.48, 0.40]);
+    it('Exact values: [0.15, 0.10, 0.05, 0.02]', () => {
+        expect(COIN_TOSS_HEADS_PROB).toEqual([0.15, 0.10, 0.05, 0.02]);
     });
 
     it('Probabilities decrease monotonically (higher multiplier = harder)', () => {
@@ -172,12 +174,12 @@ describe('Coin Toss — GDD §9-3 Compliance', () => {
         }
     });
 
-    it('Entry coin toss (index 0) = 80%', () => {
-        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.80);
+    it('First tier-upgrade toss (index 0) = 15%', () => {
+        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.15);
     });
 
-    it('Highest level (x77) = 40%', () => {
-        expect(COIN_TOSS_HEADS_PROB[4]).toBe(0.40);
+    it('Last tier-upgrade step (index 3) = 2%', () => {
+        expect(COIN_TOSS_HEADS_PROB[3]).toBe(0.02);
     });
 
     it('All probabilities are valid (0 < p < 1)', () => {
@@ -185,6 +187,21 @@ describe('Coin Toss — GDD §9-3 Compliance', () => {
             expect(p).toBeGreaterThan(0);
             expect(p).toBeLessThan(1);
         }
+    });
+
+    it('Buy FG coin toss: 4 probabilities, higher than main game', () => {
+        expect(COIN_TOSS_HEADS_PROB_BUY).toHaveLength(4);
+        for (let i = 0; i < COIN_TOSS_HEADS_PROB_BUY.length; i++) {
+            expect(COIN_TOSS_HEADS_PROB_BUY[i]).toBeGreaterThan(COIN_TOSS_HEADS_PROB[i]);
+        }
+    });
+
+    it('Buy FG coin toss: exact values [0.35, 0.25, 0.15, 0.08]', () => {
+        expect(COIN_TOSS_HEADS_PROB_BUY).toEqual([0.35, 0.25, 0.15, 0.08]);
+    });
+
+    it('BUY_FG_MIN_WIN_MULT = 20', () => {
+        expect(BUY_FG_MIN_WIN_MULT).toBe(20);
     });
 
     it('Simulated coin toss at each level matches probability (100k trials)', () => {

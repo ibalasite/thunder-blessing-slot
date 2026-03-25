@@ -2,7 +2,7 @@
  * Full-Game RTP Simulation (1,000,000 spins)
  *
  * Simulates the complete game loop:
- *   Base spin → Cascade → FG trigger check → Coin Toss → Free Game chain
+ *   Base spin → Cascade → FG trigger check → Tier coin toss → Free Game chain
  *
  * Verifies:
  *   1. Overall RTP converges to 97.5% ± tolerance
@@ -19,10 +19,11 @@
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
     SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_FG,
-    FG_MULTIPLIERS, FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
+    FG_MULTIPLIERS, FG_ROUND_COUNTS, FG_TRIGGER_PROB,
+    COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
     MAX_WIN_MULT, TB_SECOND_HIT_PROB,
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
-    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE,
+    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, BUY_FG_MIN_WIN_MULT,
     SYM,
 } from '../../assets/scripts/GameConfig';
 
@@ -84,21 +85,25 @@ function simulateFullGame(
         // FG trigger probability gate (GDD §10-1: 20%)
         if (rng() >= FG_TRIGGER_PROB) continue;
 
-        // Entry Coin Toss (GDD §9-3: 80% at x3 level)
-        stats.coinTossCount++;
-        const entryHeads = rng() < COIN_TOSS_HEADS_PROB[0];
-        if (entryHeads) stats.coinTossHeads++;
-        if (!entryHeads) continue;
-
         stats.fgEntered++;
 
-        // Free Game chain
+        // Tier determination (tier upgrade ceremony before FG; no entry toss)
+        let tierIdx = 0;
+        for (let j = 0; j < COIN_TOSS_HEADS_PROB.length; j++) {
+            stats.coinTossCount++;
+            const heads = rng() < COIN_TOSS_HEADS_PROB[j];
+            if (heads) stats.coinTossHeads++;
+            if (!heads) break;
+            if (tierIdx < FG_MULTIPLIERS.length - 1) tierIdx++;
+        }
+
+        // Fixed-round FG chain
         const fgMarks = new Set<string>();
-        let multIdx = 0;
+        const rounds = FG_ROUND_COUNTS[tierIdx];
+        const mult   = FG_MULTIPLIERS[tierIdx];
         let fgRoundPayout = 0;
 
-        while (true) {
-            const mult = FG_MULTIPLIERS[multIdx];
+        for (let j = 0; j < rounds; j++) {
             const fg = engine.simulateSpin({
                 inFreeGame: true,
                 fgMultiplier: mult,
@@ -115,15 +120,6 @@ function simulateFullGame(
                 stats.maxWinHits++;
                 break;
             }
-
-            // Per-FG-spin Coin Toss (tiered probability)
-            const headsProb = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
-            stats.coinTossCount++;
-            const heads = rng() < headsProb;
-            if (heads) stats.coinTossHeads++;
-            if (!heads) break;
-
-            if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
         }
     }
 
@@ -205,55 +201,44 @@ describe('Full-Game RTP Simulation (1M spins)', () => {
 
 describe('Coin Toss Mechanics Verification', () => {
 
-    it('Entry coin toss heads rate ≈ 80% (COIN_TOSS_HEADS_PROB[0])', () => {
-        const rng = mulberry32(42);
-        const N = 100_000;
-        let heads = 0;
-        for (let i = 0; i < N; i++) {
-            if (rng() < COIN_TOSS_HEADS_PROB[0]) heads++;
-        }
-        const rate = heads / N;
-        expect(rate).toBeGreaterThan(0.78);
-        expect(rate).toBeLessThan(0.82);
-    });
-
     it('Tiered coin toss probabilities are correctly ordered', () => {
         for (let i = 1; i < COIN_TOSS_HEADS_PROB.length; i++) {
             expect(COIN_TOSS_HEADS_PROB[i]).toBeLessThanOrEqual(COIN_TOSS_HEADS_PROB[i - 1]);
         }
     });
 
-    it('Expected FG chain length matches theoretical calculation', () => {
+    it('Expected FG round count matches tier-based theoretical calculation', () => {
         const rng = mulberry32(42);
         const N = 50_000;
-        const chainLengths: number[] = [];
+        const roundCounts: number[] = [];
 
         for (let i = 0; i < N; i++) {
-            let len = 1;
-            let multIdx = 0;
-            while (true) {
-                const prob = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
-                if (rng() >= prob) break;
-                len++;
-                if (multIdx < COIN_TOSS_HEADS_PROB.length - 1) multIdx++;
+            let tierIdx = 0;
+            for (let j = 0; j < COIN_TOSS_HEADS_PROB.length; j++) {
+                if (rng() >= COIN_TOSS_HEADS_PROB[j]) break;
+                if (tierIdx < FG_MULTIPLIERS.length - 1) tierIdx++;
             }
-            chainLengths.push(len);
+            roundCounts.push(FG_ROUND_COUNTS[tierIdx]);
         }
 
-        const avgLen = chainLengths.reduce((a, b) => a + b, 0) / N;
-        // Theoretical: E[chain] = 1 + p0 + p0*p1 + p0*p1*p2 + ...
-        let theoretical = 1;
+        const avgRounds = roundCounts.reduce((a, b) => a + b, 0) / N;
+        // Theoretical: weighted sum of tier rounds × tier probability
+        // P(tier 0) = 1 - p0, P(tier 1) = p0(1-p1), P(tier 2) = p0*p1(1-p2), ...
+        let theoretical = 0;
         let cumProb = 1;
-        for (const p of COIN_TOSS_HEADS_PROB) {
-            cumProb *= p;
-            theoretical += cumProb;
+        for (let i = 0; i < FG_ROUND_COUNTS.length; i++) {
+            const pFail = i < COIN_TOSS_HEADS_PROB.length ? (1 - COIN_TOSS_HEADS_PROB[i]) : 1;
+            const tierProb = cumProb * pFail;
+            theoretical += FG_ROUND_COUNTS[i] * tierProb;
+            if (i < COIN_TOSS_HEADS_PROB.length) cumProb *= COIN_TOSS_HEADS_PROB[i];
         }
-        // After x77, it continues with 40% each time: adds cumProb * 0.4 / (1 - 0.4)
-        theoretical += cumProb * COIN_TOSS_HEADS_PROB[4] / (1 - COIN_TOSS_HEADS_PROB[4]);
+        // Remaining probability at max tier
+        theoretical += FG_ROUND_COUNTS[FG_ROUND_COUNTS.length - 1] * cumProb;
 
-        console.log(`Avg FG chain length: ${avgLen.toFixed(2)} (theoretical: ${theoretical.toFixed(2)})`);
-        expect(avgLen).toBeGreaterThan(theoretical * 0.9);
-        expect(avgLen).toBeLessThan(theoretical * 1.1);
+        console.log(`Avg FG rounds: ${avgRounds.toFixed(2)} (theoretical: ${theoretical.toFixed(2)})`);
+        expect(avgRounds).toBeGreaterThan(theoretical * 0.9);
+        expect(avgRounds).toBeLessThan(theoretical * 1.1);
+        expect(avgRounds).toBeGreaterThanOrEqual(8);
     });
 });
 
@@ -279,24 +264,27 @@ describe('Buy Feature Expected Value', () => {
                 if (intro.fgTriggered || intro.finalRows >= MAX_ROWS) break;
             }
 
-            if (rng() < COIN_TOSS_HEADS_PROB[0]) {
-                const fgMarks = new Set<string>();
-                let multIdx = 0;
-                while (true) {
-                    const mult = FG_MULTIPLIERS[multIdx];
-                    const fg = engine.simulateSpin({
-                        inFreeGame: true, fgMultiplier: mult,
-                        totalBet, lightningMarks: fgMarks,
-                    });
-                    sessionPay += fg.totalRawWin * mult;
-                    if (fg.maxWinCapped) break;
-                    const prob = COIN_TOSS_HEADS_PROB[multIdx] ?? 0.40;
-                    if (rng() >= prob) break;
-                    if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
-                }
+            let tierIdx = 0;
+            for (let j = 0; j < COIN_TOSS_HEADS_PROB_BUY.length; j++) {
+                if (rng() >= COIN_TOSS_HEADS_PROB_BUY[j]) break;
+                if (tierIdx < FG_MULTIPLIERS.length - 1) tierIdx++;
+            }
+            const rounds = FG_ROUND_COUNTS[tierIdx];
+            const mult   = FG_MULTIPLIERS[tierIdx];
+            const fgMarks = new Set<string>();
+            for (let j = 0; j < rounds; j++) {
+                const fg = engine.simulateSpin({
+                    inFreeGame: true, fgMultiplier: mult,
+                    totalBet, lightningMarks: fgMarks,
+                });
+                sessionPay += fg.totalRawWin * mult;
+                if (fg.maxWinCapped) break;
             }
 
-            totalReturn += sessionPay * BUY_FG_PAYOUT_SCALE;
+            let win = sessionPay * BUY_FG_PAYOUT_SCALE;
+            if (win < BUY_FG_MIN_WIN_MULT * totalBet) win = BUY_FG_MIN_WIN_MULT * totalBet;
+            if (win > MAX_WIN_MULT * totalBet) win = MAX_WIN_MULT * totalBet;
+            totalReturn += win;
         }
 
         const buyRtp = totalReturn / totalCost;
@@ -369,7 +357,7 @@ describe('GDD Config Verification', () => {
     });
 
     it('COIN_TOSS_HEADS_PROB matches GDD §9-3 tiered probabilities', () => {
-        expect(COIN_TOSS_HEADS_PROB).toEqual([0.80, 0.68, 0.56, 0.48, 0.40]);
+        expect(COIN_TOSS_HEADS_PROB).toEqual([0.15, 0.10, 0.05, 0.02]);
     });
 
     it('FG_MULTIPLIERS matches GDD §10-2', () => {
