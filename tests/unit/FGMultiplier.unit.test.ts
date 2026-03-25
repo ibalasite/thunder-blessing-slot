@@ -3,9 +3,9 @@
  * 驗證 Free Game 倍率（×3/×7/×17/×27/×77）是否正確乘入 WIN，
  * 以及 WIN 是否隨押分等比例變化。
  *
- * Atomic Spin 架構：
- *   測試直接呼叫 SlotEngine.computeFullSpin()，驗證 FG chain 中各倍率
- *   的 multipliedWin = rawWin × multiplier。
+ * New per-spin toss model:
+ *   FG chain 中每個 spin 有各自的 multiplier（升級序列），
+ *   multipliedWin = rawWin × multiplier。
  */
 
 import { SlotEngine, calcWinAmount } from '../../assets/scripts/SlotEngine';
@@ -23,16 +23,6 @@ function mulberry32(seed: number): () => number {
         t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-}
-
-/**
- * 期望值公式（模擬 _replayCascade 的計算路徑）：
- *   rawWin  = parseFloat((totalBet × paytable).toFixed(4))
- *   stepWin = Math.round(rawWin × fgMult × modeScale × 100 + ε) / 100
- */
-function expectedStepWin(totalBet: number, paytable: number, fgMult: number, modeScale = 1): number {
-    const rawWin = parseFloat((totalBet * paytable).toFixed(4));
-    return Math.round(rawWin * fgMult * modeScale * 100 + Number.EPSILON) / 100;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +61,6 @@ describe('FG 倍率 × WIN 精確驗證', () => {
         const r3 = eng3.simulateSpin({ totalBet: 1, inFreeGame: true, fgMultiplier: 3 });
         const r77 = eng77.simulateSpin({ totalBet: 1, inFreeGame: true, fgMultiplier: 77 });
 
-        // Same seed → same grid → same rawWin
         expect(r3.totalRawWin).toBe(r77.totalRawWin);
         if (r3.totalRawWin > 0) {
             const win3 = r3.totalRawWin * 3;
@@ -82,12 +71,12 @@ describe('FG 倍率 × WIN 精確驗證', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. computeFullSpin FG chain: 倍率逐步升級
+// 2. computeFullSpin FG chain: per-spin toss model
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('computeFullSpin FG chain（固定輪數 tier 模型）', () => {
+describe('computeFullSpin FG chain（per-spin toss model）', () => {
 
-    it('FG chain 中每個 spin 使用相同的 multiplier（tier 決定）', () => {
+    it('FG chain 中 multiplier 遞增（per-spin toss 升級）', () => {
         const N = 1000;
         let chainsFound = 0;
         const rng = mulberry32(42);
@@ -97,9 +86,8 @@ describe('computeFullSpin FG chain（固定輪數 tier 模型）', () => {
             const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
             if (o.fgSpins.length > 1) {
                 chainsFound++;
-                const mult = o.fgSpins[0].multiplier;
-                for (const fg of o.fgSpins) {
-                    expect(fg.multiplier).toBe(mult);
+                for (let j = 1; j < o.fgSpins.length; j++) {
+                    expect(o.fgSpins[j].multiplier).toBeGreaterThanOrEqual(o.fgSpins[j - 1].multiplier);
                 }
             }
         }
@@ -133,7 +121,7 @@ describe('computeFullSpin FG chain（固定輪數 tier 模型）', () => {
         }
     });
 
-    it('FG chain 至少 8 輪（tier 0 最少保底）', () => {
+    it('FG chain 至少 1 spin（首轉保證）', () => {
         const N = 500;
         const rng = mulberry32(42);
         const engine = new SlotEngine(rng);
@@ -143,26 +131,36 @@ describe('computeFullSpin FG chain（固定輪數 tier 模型）', () => {
             const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
             if (o.fgSpins.length > 0) {
                 fgFound++;
-                expect(o.fgSpins.length).toBeGreaterThanOrEqual(8);
-                if (o.fgTier) {
-                    expect(o.fgTier.rounds).toBeGreaterThanOrEqual(8);
-                }
+                expect(o.fgSpins.length).toBeGreaterThanOrEqual(1);
             }
         }
         console.log(`FG sessions found: ${fgFound} / ${N}`);
     });
 
-    it('tierUpgrades 和 fgTier 在進入 FG 時存在', () => {
+    it('fgTriggered = true 時必有 entryCoinToss', () => {
         const N = 1000;
         const rng = mulberry32(42);
         const engine = new SlotEngine(rng);
 
         for (let i = 0; i < N; i++) {
             const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
-            if (o.fgSpins.length > 0) {
-                expect(o.tierUpgrades.length).toBeGreaterThanOrEqual(1);
-                expect(o.fgTier).toBeDefined();
-                expect(o.fgTier!.rounds).toBe(o.fgSpins.length);
+            if (o.fgTriggered) {
+                expect(o.entryCoinToss).toBeDefined();
+            }
+        }
+    });
+
+    it('每個 FG spin 有 coinToss 結果', () => {
+        const N = 1000;
+        const rng = mulberry32(42);
+        const engine = new SlotEngine(rng);
+
+        for (let i = 0; i < N; i++) {
+            const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
+            for (const fg of o.fgSpins) {
+                expect(fg.coinToss).toBeDefined();
+                expect(fg.coinToss.probability).toBeGreaterThan(0);
+                expect(fg.coinToss.probability).toBeLessThanOrEqual(1);
             }
         }
     });
@@ -176,7 +174,6 @@ describe('FG WIN 隨押分等比例（線性）', () => {
 
     it('bet=2 的 rawWin = bet=1 的 2 倍（同 seed）', () => {
         const seed = 42;
-
         const rng1 = mulberry32(seed);
         const rng2 = mulberry32(seed);
         const e1 = new SlotEngine(rng1);
@@ -191,7 +188,6 @@ describe('FG WIN 隨押分等比例（線性）', () => {
 
     it('bet=0.25 和 bet=5.0 的 WIN 比例 = 20:1', () => {
         const seed = 123;
-
         const rng1 = mulberry32(seed);
         const rng2 = mulberry32(seed);
         const e1 = new SlotEngine(rng1);
@@ -211,11 +207,11 @@ describe('FG WIN 隨押分等比例（線性）', () => {
 
 describe('FG ×3 在不同賠率符號的 WIN', () => {
 
-    const fgMult   = FG_MULTIPLIERS[0]; // ×3
+    const fgMult   = FG_MULTIPLIERS[0];
     const totalBet = 0.25;
 
     const cases: [SymType, number][] = [
-        ['P1', PAYTABLE['P1'][3]], // 3-of-kind
+        ['P1', PAYTABLE['P1'][3]],
         ['P2', PAYTABLE['P2'][3]],
         ['P3', PAYTABLE['P3'][3]],
         ['P4', PAYTABLE['P4'][3]],

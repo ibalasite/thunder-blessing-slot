@@ -433,15 +433,15 @@ describe('E2E — 完整 FG 倍率流程', () => {
         expect(FG_MULTIPLIERS[4]).toBe(77);
     });
 
-    it('COIN_TOSS_HEADS_PROB 共 4 個（tier 升級），由高到低', () => {
-        expect(COIN_TOSS_HEADS_PROB).toHaveLength(4);
+    it('COIN_TOSS_HEADS_PROB 共 5 個（per-spin toss），由高到低', () => {
+        expect(COIN_TOSS_HEADS_PROB).toHaveLength(5);
         for (let i = 1; i < COIN_TOSS_HEADS_PROB.length; i++) {
-            expect(COIN_TOSS_HEADS_PROB[i]).toBeLessThan(COIN_TOSS_HEADS_PROB[i - 1]);
+            expect(COIN_TOSS_HEADS_PROB[i]).toBeLessThanOrEqual(COIN_TOSS_HEADS_PROB[i - 1]);
         }
     });
 
-    it('FG 進場無入場硬幣；tier 升級第一步 COIN_TOSS_HEADS_PROB[0]=15%', () => {
-        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.15);
+    it('Entry toss = 80%, per-spin toss at x3 = 80%', () => {
+        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.80);
         expect(FG_MULTIPLIERS[0]).toBe(3);
     });
 

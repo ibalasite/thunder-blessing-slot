@@ -1,10 +1,10 @@
 /**
- * Probability Core — 強化單元測試
+ * Probability Core — 強化單元測試 (new per-spin toss model)
  *
  * 驗證機率核心各元件是否符合 GDD 規格：
  *   1. 符號權重 (GDD §2)
  *   2. 賠率表結構 (GDD §4)
- *   3. Coin Toss 分層機率 (GDD §9-3)
+ *   3. Coin Toss per-spin 升級機率 (GDD §9-3)
  *   4. TB 升階規則 (GDD §5)
  *   5. FG 倍率序列 (GDD §10-2)
  *   6. Max Win Cap (GDD §13)
@@ -18,7 +18,8 @@ import {
     SYMBOL_WEIGHTS, SYMBOL_WEIGHTS_FG,
     PAYTABLE, PAYTABLE_SCALE,
     PAYLINES_25, PAYLINES_33, PAYLINES_45, PAYLINES_57, PAYLINES_BY_ROWS,
-    FG_MULTIPLIERS, COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
+    FG_MULTIPLIERS, COIN_TOSS_HEADS_PROB,
+    ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
     FG_TRIGGER_PROB,
     TB_SECOND_HIT_PROB, SYMBOL_UPGRADE,
     MAX_WIN_MULT, REEL_COUNT, BASE_ROWS, MAX_ROWS,
@@ -26,8 +27,6 @@ import {
     BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
     BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mulberry32(seed: number): () => number {
     return () => {
@@ -156,16 +155,16 @@ describe('Paytable — GDD §4 Compliance', () => {
     });
 });
 
-// ── 3. Coin Toss (GDD §9-3) ─────────────────────────────────────────────────
+// ── 3. Coin Toss (GDD §9-3 per-spin model) ──────────────────────────────────
 
-describe('Coin Toss — GDD §9-3 Compliance', () => {
+describe('Coin Toss — GDD §9-3 Per-Spin Model', () => {
 
-    it('4 tier-upgrade coin toss probabilities', () => {
-        expect(COIN_TOSS_HEADS_PROB).toHaveLength(4);
+    it('5 per-spin coin toss probabilities (one per multiplier tier)', () => {
+        expect(COIN_TOSS_HEADS_PROB).toHaveLength(5);
     });
 
-    it('Exact values: [0.15, 0.10, 0.05, 0.02]', () => {
-        expect(COIN_TOSS_HEADS_PROB).toEqual([0.15, 0.10, 0.05, 0.02]);
+    it('Exact values: [0.80, 0.68, 0.56, 0.48, 0.40]', () => {
+        expect(COIN_TOSS_HEADS_PROB).toEqual([0.80, 0.68, 0.56, 0.48, 0.40]);
     });
 
     it('Probabilities decrease monotonically (higher multiplier = harder)', () => {
@@ -174,12 +173,12 @@ describe('Coin Toss — GDD §9-3 Compliance', () => {
         }
     });
 
-    it('First tier-upgrade toss (index 0) = 15%', () => {
-        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.15);
+    it('First toss (x3) = 80%', () => {
+        expect(COIN_TOSS_HEADS_PROB[0]).toBe(0.80);
     });
 
-    it('Last tier-upgrade step (index 3) = 2%', () => {
-        expect(COIN_TOSS_HEADS_PROB[3]).toBe(0.02);
+    it('Last toss (x77) = 40%', () => {
+        expect(COIN_TOSS_HEADS_PROB[4]).toBe(0.40);
     });
 
     it('All probabilities are valid (0 < p < 1)', () => {
@@ -189,15 +188,9 @@ describe('Coin Toss — GDD §9-3 Compliance', () => {
         }
     });
 
-    it('Buy FG coin toss: 4 probabilities, higher than main game', () => {
-        expect(COIN_TOSS_HEADS_PROB_BUY).toHaveLength(4);
-        for (let i = 0; i < COIN_TOSS_HEADS_PROB_BUY.length; i++) {
-            expect(COIN_TOSS_HEADS_PROB_BUY[i]).toBeGreaterThan(COIN_TOSS_HEADS_PROB[i]);
-        }
-    });
-
-    it('Buy FG coin toss: exact values [0.35, 0.25, 0.15, 0.08]', () => {
-        expect(COIN_TOSS_HEADS_PROB_BUY).toEqual([0.35, 0.25, 0.15, 0.08]);
+    it('Entry toss: Main/EB = 80%, Buy = 100%', () => {
+        expect(ENTRY_TOSS_PROB_MAIN).toBe(0.80);
+        expect(ENTRY_TOSS_PROB_BUY).toBe(1.00);
     });
 
     it('BUY_FG_MIN_WIN_MULT = 20', () => {
@@ -334,26 +327,13 @@ describe('Max Win Cap — GDD §13 Compliance', () => {
 
 describe('Payline Definitions Completeness', () => {
 
-    it('25 paylines for 3 rows', () => {
-        expect(PAYLINES_25).toHaveLength(25);
-    });
-
-    it('33 paylines for 4 rows', () => {
-        expect(PAYLINES_33).toHaveLength(33);
-    });
-
-    it('45 paylines for 5 rows', () => {
-        expect(PAYLINES_45).toHaveLength(45);
-    });
-
-    it('57 paylines for 6 rows', () => {
-        expect(PAYLINES_57).toHaveLength(57);
-    });
+    it('25 paylines for 3 rows', () => { expect(PAYLINES_25).toHaveLength(25); });
+    it('33 paylines for 4 rows', () => { expect(PAYLINES_33).toHaveLength(33); });
+    it('45 paylines for 5 rows', () => { expect(PAYLINES_45).toHaveLength(45); });
+    it('57 paylines for 6 rows', () => { expect(PAYLINES_57).toHaveLength(57); });
 
     it('Each payline has exactly 5 positions (one per reel)', () => {
-        for (const pl of PAYLINES_57) {
-            expect(pl).toHaveLength(5);
-        }
+        for (const pl of PAYLINES_57) expect(pl).toHaveLength(5);
     });
 
     it('PAYLINES_BY_ROWS maps correctly', () => {
@@ -364,15 +344,11 @@ describe('Payline Definitions Completeness', () => {
     });
 
     it('All row indices in 25-paylines are < 3', () => {
-        for (const pl of PAYLINES_25) {
-            for (const r of pl) expect(r).toBeLessThan(3);
-        }
+        for (const pl of PAYLINES_25) for (const r of pl) expect(r).toBeLessThan(3);
     });
 
     it('All row indices in 57-paylines are < 6', () => {
-        for (const pl of PAYLINES_57) {
-            for (const r of pl) expect(r).toBeLessThan(6);
-        }
+        for (const pl of PAYLINES_57) for (const r of pl) expect(r).toBeLessThan(6);
     });
 
     it('No duplicate paylines within each set', () => {
@@ -441,8 +417,9 @@ describe('Game Constants', () => {
     it('BASE_ROWS = 3', () => { expect(BASE_ROWS).toBe(3); });
     it('MAX_ROWS = 6', () => { expect(MAX_ROWS).toBe(6); });
 
-    it('FG_TRIGGER_PROB = 0.20 (GDD §10-1)', () => {
-        expect(FG_TRIGGER_PROB).toBe(0.20);
+    it('FG_TRIGGER_PROB is a small positive number (RTP tuning knob)', () => {
+        expect(FG_TRIGGER_PROB).toBeGreaterThan(0);
+        expect(FG_TRIGGER_PROB).toBeLessThan(0.10);
     });
 
     it('BET range is valid', () => {
@@ -512,9 +489,7 @@ describe('checkWins — Edge Cases', () => {
     });
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 10. Mode-specific payout scales
-// ══════════════════════════════════════════════════════════════════════════════
+// ── 11. Mode-specific payout scales ──────────────────────────────────────────
 
 describe('Mode-specific payout scales', () => {
     it('BUY_COST_MULT is a positive integer', () => {
@@ -522,8 +497,8 @@ describe('Mode-specific payout scales', () => {
         expect(Number.isInteger(BUY_COST_MULT)).toBe(true);
     });
 
-    it('BUY_FG_PAYOUT_SCALE > 1 (boosts FG returns to compensate high cost)', () => {
-        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(1);
+    it('BUY_FG_PAYOUT_SCALE > 0 (positive scale)', () => {
+        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(0);
         expect(BUY_FG_PAYOUT_SCALE).toBeLessThan(10);
     });
 

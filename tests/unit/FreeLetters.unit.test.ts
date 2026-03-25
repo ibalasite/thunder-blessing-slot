@@ -45,7 +45,7 @@ function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome 
         modePayoutScale: 1,
         baseSpins:       [makeSpinResponse()],
         baseWin:         0,
-        tierUpgrades:    [],
+        fgTriggered:     false,
         fgSpins:         [],
         fgWin:           0,
         totalRawWin:     0,
@@ -207,38 +207,33 @@ describe('FREE letters update during cascade', () => {
             multiplierIndex: 0, multiplier: 3,
             spin: makeSpinResponse({ cascadeSteps: fgCascade, finalRows: 6 }),
             rawWin: 0.5, multipliedWin: 1.5,
-            coinToss: { probability: 0, heads: false },
+            coinToss: { probability: 0.80, heads: false },
         };
         const eng = makeEngine({
+            fgTriggered: true,
+            entryCoinToss: { probability: 0.80, heads: true },
             baseSpins: [makeSpinResponse({ fgTriggered: true })],
-            tierUpgrades: [{ probability: 0.15, heads: false }],
-            fgTier: { tierIndex: 0, rounds: 8, multiplier: 3 },
             fgSpins: [fgSpin],
         });
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), eng, makeReels(), ui, instantWait);
         await ctrl.doSpin();
 
-        // During FG cascade, updateFreeLetters should NOT be called with the FG cascade rows
-        // The only calls should be: reset(BASE_ROWS), then post-base-spin update, then FG doesn't call it
-        const callsAfterFGEnter = (ui.updateFreeLetters as jest.Mock).mock.calls;
-        // Check no calls with fgMultiplier context — we can check that 
-        // updateFreeLetters is NOT called between showFGBar and hideFGBar
         const showFGBarCalls = (ui.showFGBar as jest.Mock).mock.calls.length;
         expect(showFGBarCalls).toBeGreaterThan(0);
     });
 
-    it('updateFreeLetters(MAX_ROWS, true) only when FG actually triggers', async () => {
+    it('updateFreeLetters(MAX_ROWS, true) when FG triggers and entry toss heads', async () => {
         const ui = makeUI();
         const fgSpin = {
             multiplierIndex: 0, multiplier: 3,
             spin: makeSpinResponse(), rawWin: 0, multipliedWin: 0,
-            coinToss: { probability: 0, heads: false },
+            coinToss: { probability: 0.80, heads: false },
         };
         const eng = makeEngine({
+            fgTriggered: true,
+            entryCoinToss: { probability: 0.80, heads: true },
             baseSpins: [makeSpinResponse({ fgTriggered: true, finalRows: MAX_ROWS })],
-            tierUpgrades: [{ probability: 0.15, heads: false }],
-            fgTier: { tierIndex: 0, rounds: 8, multiplier: 3 },
             fgSpins: [fgSpin],
         });
         const ctrl = new GameFlowController(
@@ -250,19 +245,19 @@ describe('FREE letters update during cascade', () => {
         expect(maxRowsCall).toBeDefined();
     });
 
-    it('updateFreeLetters(MAX_ROWS, false) when rows reach MAX but FG does NOT trigger', async () => {
+    it('updateFreeLetters(MAX_ROWS, false) when FG triggers but entry toss fails', async () => {
         const ui = makeUI();
         const eng = makeEngine({
+            fgTriggered: true,
+            entryCoinToss: { probability: 0.80, heads: false },
             baseSpins: [makeSpinResponse({ fgTriggered: true, finalRows: MAX_ROWS })],
-            tierUpgrades: [],
-            fgSpins: [],     // FG trigger check failed → no FG spins
+            fgSpins: [],
         });
         const ctrl = new GameFlowController(
             makeSession(), makeAccount(), eng, makeReels(), ui, instantWait);
         await ctrl.doSpin();
 
         const calls = (ui.updateFreeLetters as jest.Mock).mock.calls;
-        // 4th E should NOT light (false) when FG doesn't actually happen
         const maxRowsTrueCall = calls.find((c: any) => c[0] === MAX_ROWS && c[1] === true);
         const maxRowsFalseCall = calls.find((c: any) => c[0] === MAX_ROWS && c[1] === false);
         expect(maxRowsTrueCall).toBeUndefined();
@@ -284,15 +279,15 @@ describe('Buy FG controller flow', () => {
         const fgSpin = {
             multiplierIndex: 0, multiplier: 3,
             spin: makeSpinResponse(), rawWin: 1, multipliedWin: 3,
-            coinToss: { probability: 0, heads: false },
+            coinToss: { probability: 0.80, heads: false },
         };
         const eng = makeEngine({
             mode:            'buyFG',
             wagered:         100,
-            modePayoutScale: 3.36,
+            modePayoutScale: 0.98,
+            fgTriggered:     true,
+            entryCoinToss:   { probability: 1.0, heads: true },
             baseSpins:       introSpins,
-            tierUpgrades:    [{ probability: 0.15, heads: false }],
-            fgTier:          { tierIndex: 0, rounds: 8, multiplier: 3 },
             fgSpins:         [fgSpin],
         });
 
@@ -327,15 +322,15 @@ describe('Buy FG controller flow', () => {
         const fgSpin = {
             multiplierIndex: 0, multiplier: 3,
             spin: makeSpinResponse(), rawWin: 0, multipliedWin: 0,
-            coinToss: { probability: 0, heads: false },
+            coinToss: { probability: 0.80, heads: false },
         };
         const eng = makeEngine({
             mode:            'buyFG',
             wagered:         100,
-            modePayoutScale: 3.36,
+            modePayoutScale: 0.98,
+            fgTriggered:     true,
+            entryCoinToss:   { probability: 1.0, heads: true },
             baseSpins:       introSpins,
-            tierUpgrades:    [{ probability: 0.15, heads: false }],
-            fgTier:          { tierIndex: 0, rounds: 8, multiplier: 3 },
             fgSpins:         [fgSpin],
         });
 

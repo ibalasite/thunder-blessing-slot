@@ -15,9 +15,9 @@ import { SlotEngine, calcWinAmount, WinLine } from '../../assets/scripts/SlotEng
 import {
     BET_LEVELS, BET_MIN, BET_MAX, BET_STEP,
     BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, BUY_COST_MULT, EXTRA_BET_MULT,
-    FG_MULTIPLIERS, FG_ROUND_COUNTS, FG_TRIGGER_PROB,
-    COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
-    MAX_WIN_MULT, MAX_ROWS, BUY_FG_MIN_WIN_MULT,
+    FG_MULTIPLIERS, FG_TRIGGER_PROB, FG_SPIN_BONUS,
+    COIN_TOSS_HEADS_PROB, ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
+    MAX_WIN_MULT, MAX_ROWS, BASE_ROWS, BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
 import type { GameMode } from '../../assets/scripts/contracts/types';
 
@@ -86,25 +86,65 @@ describe('Mathematical: RTP is bet-level independent', () => {
 // 2. Batch RTP verification: 3 modes × all bet levels
 // ══════════════════════════════════════════════════════════════════════════════
 
-function runFGChain(engine: SlotEngine, rng: () => number, totalBet: number, isBuyFG = false): number {
-    const probs = isBuyFG ? COIN_TOSS_HEADS_PROB_BUY : COIN_TOSS_HEADS_PROB;
-    let tierIdx = 0;
-    for (let j = 0; j < probs.length; j++) {
-        if (rng() >= probs[j]) break;
-        if (tierIdx < FG_MULTIPLIERS.length - 1) tierIdx++;
+function drawFGBonus(rng: () => number): number {
+    const total = FG_SPIN_BONUS.reduce((s, t) => s + t.weight, 0);
+    let r = rng() * total;
+    for (const tier of FG_SPIN_BONUS) {
+        r -= tier.weight;
+        if (r <= 0) return tier.mult;
     }
-    const rounds = FG_ROUND_COUNTS[tierIdx];
-    const mult   = FG_MULTIPLIERS[tierIdx];
-    const marks  = new Set<string>();
+    return FG_SPIN_BONUS[FG_SPIN_BONUS.length - 1].mult;
+}
+
+function runFGChain(engine: SlotEngine, rng: () => number, totalBet: number, guaranteeWins = false, isBuyFG = false): number {
+    const marks = new Set<string>();
     let acc = 0;
-    for (let j = 0; j < rounds; j++) {
-        const fg = engine.simulateSpin({
-            inFreeGame: true, fgMultiplier: mult, totalBet, lightningMarks: marks,
-        });
-        acc += fg.totalRawWin * mult;
-        if (fg.maxWinCapped) break;
+    let multIdx = 0;
+    for (let safety = 0; safety < 200; safety++) {
+        const mult = FG_MULTIPLIERS[multIdx];
+        let rawWin: number;
+        if (guaranteeWins) {
+            rawWin = 0;
+            for (let attempt = 0; attempt < 50; attempt++) {
+                const fg = engine.simulateSpin({
+                    buyFG: true, fgMultiplier: mult, totalBet, lightningMarks: marks,
+                    maxCascade: 1,
+                });
+                if (fg.totalRawWin > 0 || attempt === 49) { rawWin = fg.totalRawWin; break; }
+            }
+        } else {
+            const fg = engine.simulateSpin({
+                inFreeGame: true, fgMultiplier: mult, totalBet, lightningMarks: marks,
+            });
+            rawWin = fg.totalRawWin;
+        }
+        const spinBonus = drawFGBonus(rng);
+        acc += rawWin * mult * spinBonus;
+        if (isBuyFG) {
+            if (multIdx >= FG_MULTIPLIERS.length - 1) break;
+        } else {
+            const tossProb = COIN_TOSS_HEADS_PROB[multIdx] ?? COIN_TOSS_HEADS_PROB[COIN_TOSS_HEADS_PROB.length - 1];
+            if (rng() >= tossProb) break;
+        }
+        if (multIdx < FG_MULTIPLIERS.length - 1) multIdx++;
     }
     return acc;
+}
+
+function runPhaseA(engine: SlotEngine, totalBet: number, extraBet = false, isBuyFG = false): number {
+    let win = 0;
+    let currentRows = BASE_ROWS;
+    const marks = new Set<string>();
+    for (let s = 0; s < 100; s++) {
+        const r = engine.simulateSpin({
+            totalBet, extraBet: !isBuyFG && extraBet,
+            buyFG: isBuyFG, startRows: currentRows, lightningMarks: marks,
+        });
+        win += r.totalRawWin;
+        currentRows = r.finalRows;
+        if (currentRows >= MAX_ROWS) break;
+    }
+    return win;
 }
 
 function simMode(
@@ -125,20 +165,19 @@ function simMode(
         let spinPay = 0;
 
         if (mode === 'buyFG') {
-            for (let s = 0; s < 20; s++) {
-                const r = engine.simulateSpin({ totalBet });
-                spinPay += r.totalRawWin;
-                if (r.fgTriggered || r.finalRows >= MAX_ROWS) break;
-            }
-            spinPay += runFGChain(engine, rng, totalBet, true);
+            spinPay += runPhaseA(engine, totalBet, false, true);
+            spinPay += runFGChain(engine, rng, totalBet, true, true);
         } else {
             const extraBet = mode === 'extraBet';
-            const base = engine.simulateSpin({ totalBet, extraBet });
-            spinPay += base.totalRawWin;
-            if (!base.maxWinCapped && base.fgTriggered) {
-                if (rng() < FG_TRIGGER_PROB) {
+            const fgTriggered = rng() < FG_TRIGGER_PROB;
+            if (fgTriggered) {
+                spinPay += runPhaseA(engine, totalBet, extraBet);
+                if (rng() < ENTRY_TOSS_PROB_MAIN) {
                     spinPay += runFGChain(engine, rng, totalBet);
                 }
+            } else {
+                const base = engine.simulateSpin({ totalBet, extraBet });
+                spinPay += base.totalRawWin;
             }
         }
 

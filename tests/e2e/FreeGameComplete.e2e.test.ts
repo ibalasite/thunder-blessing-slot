@@ -172,8 +172,8 @@ function assertFGComplete(r: RunResult): void {
     const totalWinAmount = ui.record.showTotalWinCalls[ui.record.showTotalWinCalls.length - 1];
     expect(totalWinAmount).toBeGreaterThanOrEqual(0);
 
-    // Status includes "Free Game 完成"
-    const hasFGComplete = ui.record.statusMessages.some(m => m.includes('Free Game 完成'));
+    // Status includes "Free Game complete"
+    const hasFGComplete = ui.record.statusMessages.some(m => m.includes('Free Game complete'));
     expect(hasFGComplete).toBe(true);
 }
 
@@ -205,11 +205,14 @@ describe('E2E: Buy Free Game → 完整 FG 流程 → Total Win', () => {
         }
     });
 
-    it('Buy FG FG chain 至少 8 輪（GDD minimum tier）', async () => {
+    it('Buy FG FG chain always 5 spins, all tosses heads', async () => {
         for (let seed = 0; seed < 20; seed++) {
             const engine = new SlotEngine(mulberry32(seed));
             const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1 });
-            expect(o.fgSpins.length).toBeGreaterThanOrEqual(8);
+            expect(o.fgSpins.length).toBe(5);
+            for (const fg of o.fgSpins) {
+                expect(fg.coinToss.heads).toBe(true);
+            }
         }
     });
 
@@ -344,7 +347,7 @@ describe('E2E: FG 結束後遊戲狀態正確', () => {
 
 describe('E2E: FG 流程時序正確', () => {
 
-    it('Buy FG 時序：showFGBar(ceremony) → coin toss → hideFGBar → showFGBar(chain) → hideFGBar → showTotalWin', async () => {
+    it('Buy FG 時序：showFGBar → entry toss → FG spins → hideFGBar → showTotalWin', async () => {
         const r = await runFGFlow('buyFG', 42);
 
         const ui = r.ui;
@@ -353,19 +356,13 @@ describe('E2E: FG 流程時序正確', () => {
         const totalWinOrder = (ui.showTotalWin as jest.Mock).mock.invocationCallOrder;
         const coinOrder = (ui.playCoinToss as jest.Mock).mock.invocationCallOrder;
 
-        // showFGBar called twice: ceremony (tier 0) + FG chain
-        expect(showFGOrder.length).toBeGreaterThanOrEqual(2);
+        expect(showFGOrder.length).toBeGreaterThanOrEqual(1);
 
-        // First showFGBar (ceremony) → coin tosses → first hideFGBar (ceremony end)
-        const tierCoinOrders = coinOrder.filter((_: any, i: number) =>
-            (ui.playCoinToss as jest.Mock).mock.calls[i][0] === true
-        );
-        if (tierCoinOrders.length > 0) {
-            expect(Math.min(...showFGOrder)).toBeLessThan(Math.min(...tierCoinOrders));
-            expect(Math.max(...tierCoinOrders)).toBeLessThan(Math.min(...hideOrder));
+        if (coinOrder.length > 0) {
+            expect(Math.min(...showFGOrder)).toBeLessThan(Math.min(...coinOrder));
         }
 
-        // Last hideFGBar (FG chain end) → showTotalWin
+        // hideFGBar → showTotalWin
         expect(Math.max(...hideOrder)).toBeLessThan(Math.min(...totalWinOrder));
     });
 

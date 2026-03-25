@@ -42,7 +42,7 @@ function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome 
         modePayoutScale: 1,
         baseSpins:       [makeSpinResponse()],
         baseWin:         0,
-        tierUpgrades:    [],
+        fgTriggered:     false,
         fgSpins:         [],
         fgWin:           0,
         totalRawWin:     0,
@@ -259,16 +259,16 @@ describe('GameFlowController', () => {
 
     // ── Atomic FG chain playback ──────────────────────────────────
 
-    it('doSpin plays tier upgrade coin toss then FG chain when FG triggered', async () => {
+    it('doSpin plays entry coin toss then FG chain when FG triggered', async () => {
         const ui = makeUI();
         const fgSpin = {
             multiplierIndex: 0, multiplier: 3,
             spin: makeSpinResponse(), rawWin: 0, multipliedWin: 0,
-            coinToss: { probability: 0, heads: false },
+            coinToss: { probability: 0.80, heads: false },
         };
         const eng = makeEngine({
-            tierUpgrades: [{ probability: 0.15, heads: false }],
-            fgTier: { tierIndex: 0, rounds: 8, multiplier: 3 },
+            fgTriggered: true,
+            entryCoinToss: { probability: 0.80, heads: true },
             fgSpins: [fgSpin],
             baseSpins: [makeSpinResponse({ fgTriggered: true })],
         });
@@ -278,7 +278,8 @@ describe('GameFlowController', () => {
         await ctrl.doSpin();
         expect(sess.enterFreeGame).toHaveBeenCalledWith(0);
         expect(ui.showFGBar).toHaveBeenCalled();
-        expect(ui.playCoinToss).toHaveBeenCalledTimes(1);
+        // Entry toss (heads) + FG spin toss (tails)
+        expect(ui.playCoinToss).toHaveBeenCalledWith(true, true);
         expect(ui.playCoinToss).toHaveBeenCalledWith(true, false);
         expect(sess.exitFreeGame).toHaveBeenCalled();
     });

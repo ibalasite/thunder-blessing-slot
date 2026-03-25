@@ -26,7 +26,7 @@ import { calcWinAmount, findScatters } from '../SlotEngine';
 import {
     BASE_ROWS, MAX_ROWS, MAX_WIN_MULT, LINES_BASE,
     BUY_COST_MULT, EXTRA_BET_MULT, SymType,
-    FG_MULTIPLIERS, FG_ROUND_COUNTS, SYMBOL_LABELS,
+    FG_MULTIPLIERS, SYMBOL_LABELS,
 } from '../GameConfig';
 
 export class GameFlowController {
@@ -181,6 +181,7 @@ export class GameFlowController {
         this._session.resetRound();
         this._session.clearMarks();
         this._reels.reset();
+        this._ui.updateFreeLetters(BASE_ROWS);
         this._ui.refresh();
 
         // ── 2. UI 表演 ─────────────────────────
@@ -209,9 +210,9 @@ export class GameFlowController {
         o: FullSpinOutcome, balanceAfterDebit?: number,
     ): Promise<void> {
         const scale = o.modePayoutScale;
-        const fgWillTrigger = o.fgSpins.length > 0;
+        const fgWillTrigger = o.fgTriggered && o.entryCoinToss?.heads === true;
 
-        // ── 1. Play base spins ──────────────────────────────
+        // ── 1. Play Phase A: base cascade spins ──────────────
         for (let i = 0; i < o.baseSpins.length; i++) {
             if (i > 0) this._reels.reset();
             const spin = o.baseSpins[i];
@@ -224,166 +225,121 @@ export class GameFlowController {
                 await this._replayTB(spin.tbStep.gridAfter);
             }
 
-            // FREE letter: 4th E only if FG will actually trigger
-            if (spin.finalRows >= MAX_ROWS || spin.fgTriggered) {
-                this._ui.updateFreeLetters(MAX_ROWS, fgWillTrigger);
+            if (o.fgTriggered) {
+                this._ui.updateFreeLetters(spin.finalRows, fgWillTrigger && spin.finalRows >= MAX_ROWS);
             } else if (!this._session.inFreeGame) {
                 this._ui.updateFreeLetters(spin.finalRows, false);
             }
 
-            if (o.mode === 'buyFG' && !(spin.fgTriggered || spin.finalRows >= MAX_ROWS)
-                    && i < o.baseSpins.length - 1) {
-                this._ui.setStatus('★ Buy Free Game — 旋轉中…', '#ffdd44');
+            if (o.fgTriggered && spin.finalRows < MAX_ROWS && i < o.baseSpins.length - 1) {
+                this._ui.setStatus(o.mode === 'buyFG'
+                    ? 'Buy Free Game — collecting FREE...'
+                    : 'FREE — collecting...', '#ffdd44');
                 await this._wait(0.3);
             }
         }
 
-        // ── 2. Tier upgrade ceremony (GDD: coin toss determines rounds + multiplier) ──
-        if (o.tierUpgrades && o.tierUpgrades.length > 0 && o.fgTier) {
-            const MULTS  = FG_MULTIPLIERS;
-            const ROUNDS = FG_ROUND_COUNTS;
-
-            // 2a. 宣告進入 Free Game
-            this._ui.setStatus('🎉 恭喜！即將進入 Free Game！', '#00ff88');
-            await this._wait(1.0);
-
-            // 2b. 顯示倍率條，從 tier 0 開始
+        // ── 2. Entry Coin Toss (if FG triggered) ─────────────
+        if (o.fgTriggered && o.entryCoinToss) {
             this._ui.showFGBar(0);
-            this._ui.setStatus(
-                `起始等級 ×${MULTS[0]} — ${ROUNDS[0]} 輪`, '#ffffff');
-            await this._wait(0.8);
+            this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+            await this._wait(0.5);
 
-            // 2c. 逐次 coin toss 升級
-            let currentTier = 0;
-            for (let i = 0; i < o.tierUpgrades.length; i++) {
-                const toss = o.tierUpgrades[i];
-                const nextTier = currentTier + 1;
+            await this._ui.playCoinToss(true, o.entryCoinToss.heads);
 
-                // 顯示本次翻轉目標
-                this._ui.setStatus(
-                    `🪙 翻轉硬幣 — 升級至 ×${MULTS[nextTier]}？`, '#ffaa44');
-                await this._wait(0.5);
+            if (!o.entryCoinToss.heads) {
+                this._ui.setStatus('Coin Toss — Tails. Free Game not entered.', '#ff6666');
+                await this._wait(0.8);
+                this._ui.hideFGBar();
 
-                // 玩家翻硬幣
-                await this._ui.playCoinToss(true, toss.heads);
-
-                if (toss.heads) {
-                    currentTier = nextTier;
-                    this._ui.updateMultBar(currentTier);
-                    this._ui.setStatus(
-                        `✨ 升級成功！×${MULTS[currentTier - 1]} → ×${MULTS[currentTier]} — ${ROUNDS[currentTier]} 輪！`,
-                        '#ffd700');
-                    await this._wait(1.0);
-
-                    if (i >= o.tierUpgrades.length - 1) break;
-                } else {
-                    this._ui.setStatus(
-                        `硬幣反面 — 等級確定！`, '#ffaa44');
-                    await this._wait(0.6);
-                    break;
+                if (this._session.roundWin > 0) {
+                    await this._ui.showTotalWin(this._session.roundWin);
                 }
+                return;
             }
 
-            // 2d. 展示未挑戰的等級（讓 ×27 / ×77 等高階 tier 有存在感）
-            // currentTier+1 的 tails 已在上面的 coin toss 中展示過，
-            // 這裡從 currentTier+2 開始展示剩餘更高的等級
-            for (let t = currentTier + 2; t < MULTS.length; t++) {
-                this._ui.updateMultBar(t);
-                this._ui.setStatus(
-                    `×${MULTS[t]} — ${ROUNDS[t]} 輪（需先通過 ×${MULTS[t - 1]}）`,
-                    '#555555');
-                await this._wait(0.5);
-            }
-
-            // 2e. 最終確認等級
-            this._ui.updateMultBar(o.fgTier.tierIndex);
-            if (currentTier === MULTS.length - 1) {
-                this._ui.setStatus(
-                    `🌟 最高等級達成！×${MULTS[currentTier]} — ${ROUNDS[currentTier]} 輪！`,
-                    '#ff4444');
-            } else {
-                this._ui.setStatus(
-                    `🎰 Free Game ×${o.fgTier.multiplier} — ${o.fgTier.rounds} 輪開始！`,
-                    '#00ff88');
-            }
-            await this._wait(1.2);
-            this._ui.hideFGBar();
+            this._ui.setStatus('Free Game x3 — START!', '#00ff88');
+            await this._wait(0.8);
         }
 
-        // ── 3. Free Game chain (fixed rounds) ────────────────
-        if (o.fgSpins.length > 0 && o.fgTier) {
-            this._session.enterFreeGame(o.fgTier.tierIndex);
-            this._ui.showFGBar(o.fgTier.tierIndex);
+        // ── 3. FG Spin Loop (per-spin coin toss) ─────────────
+        if (o.fgSpins.length > 0) {
+            this._session.enterFreeGame(0);
+            this._ui.showFGBar(0);
             this._ui.refresh();
 
-            const totalRounds = o.fgTier.rounds;
-            const fgMult = o.fgTier.multiplier;
             let fgAccumulatedWin = 0;
 
             for (let i = 0; i < o.fgSpins.length; i++) {
                 const fg = o.fgSpins[i];
+                const mult = fg.multiplier;
+                const multIdx = fg.multiplierIndex;
 
-                // 3a. 宣告本輪（含累計）
-                const roundLabel = `FREE GAME ×${fgMult} — 第 ${i + 1}/${totalRounds} 轉`;
-                this._ui.setStatus(roundLabel, '#00cfff');
+                this._ui.updateMultBar(multIdx);
+                this._ui.setStatus(
+                    `FREE GAME x${mult} — REMAINING: 1`, '#00cfff');
                 await this._wait(0.3);
 
-                // 3b. 記錄本輪開始前的 roundWin，用於計算本輪小計
                 const winBefore = this._session.roundWin;
 
-                // 3c. 滾輪轉動 + cascade 表演
                 this._reels.reset();
                 this._session.setGrid(fg.spin.grid);
                 this._session.setCurrentRows(fg.spin.finalRows);
                 await this._reels.spinWithGrid(fg.spin.grid, true);
-                await this._replayCascade(fg.spin, fg.multiplier, scale, balanceAfterDebit);
+                await this._replayCascade(fg.spin, mult, scale, balanceAfterDebit);
 
-                // 3d. Thunder Blessing（如果有）
                 if (fg.spin.tbStep) {
                     await this._replayTB(fg.spin.tbStep.gridAfter);
                 }
 
-                // 3e. 本輪小計：顯示本轉贏得 + 累計 FG 獎金
                 const spinWin = this._session.roundWin - winBefore;
                 fgAccumulatedWin += spinWin;
 
                 if (spinWin > 0) {
                     this._ui.setStatus(
-                        `第 ${i + 1} 轉贏得 ${spinWin.toFixed(2)} (×${fgMult})` +
-                        `　累計：${fgAccumulatedWin.toFixed(2)}`,
-                        '#ffd700');
+                        `WIN ${spinWin.toFixed(2)} (x${mult})` +
+                        `  TOTAL: ${fgAccumulatedWin.toFixed(2)}`, '#ffd700');
                     await this._wait(0.6);
                 } else {
                     this._ui.setStatus(
-                        `第 ${i + 1} 轉 — 無獎　累計：${fgAccumulatedWin.toFixed(2)}`,
-                        '#aaaaaa');
+                        `x${mult} — no win  TOTAL: ${fgAccumulatedWin.toFixed(2)}`, '#aaaaaa');
                     await this._wait(0.3);
                 }
-
                 this._ui.refresh();
 
-                // 3f. Max Win cap 檢查
                 if (this._session.roundWin >= o.totalBet * MAX_WIN_MULT * scale) {
-                    this._ui.setStatus('★ MAX WIN ★', '#ff4444');
+                    this._ui.setStatus('MAX WIN!', '#ff4444');
                     await this._wait(1.0);
                     break;
                 }
+
+                // Per-spin Coin Toss
+                if (fg.coinToss.heads && i < o.fgSpins.length - 1) {
+                    const nextMult = o.fgSpins[i + 1].multiplier;
+                    this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+                    await this._wait(0.3);
+                    await this._ui.playCoinToss(true, true);
+                    this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
+                    await this._wait(0.6);
+                } else if (!fg.coinToss.heads) {
+                    this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+                    await this._wait(0.3);
+                    await this._ui.playCoinToss(true, false);
+                    this._ui.setStatus('Coin Toss — Tails. Free Game ends.', '#ff6666');
+                    await this._wait(0.6);
+                }
             }
 
-            // ── 4. FG 結算 ────────────────────────────────────
+            // ── 4. FG Settlement ──────────────────────────────
             this._session.exitFreeGame();
             this._session.clearMarks();
             this._ui.hideFGBar();
 
-            // 4a. 結算摘要
             this._ui.setStatus(
-                `🏆 Free Game 完成！×${fgMult} — ${totalRounds} 輪` +
-                `　FG 獎金：${fgAccumulatedWin.toFixed(2)}`,
-                '#ff8888');
+                `Free Game complete! Total FG win: ${fgAccumulatedWin.toFixed(2)}`, '#ff8888');
             this._ui.refresh();
             await this._wait(1.0);
 
-            // 4b. Total Win 面板
             await this._ui.showTotalWin(this._session.roundWin);
         }
     }
@@ -428,7 +384,7 @@ export class GameFlowController {
                 const wl = w as WinLine;
                 return `${SYMBOL_LABELS[wl.symbol] ?? wl.symbol}×${wl.count}`;
             });
-            const symSummary = [...new Set(winDetails)].join('+');
+            const symSummary = Array.from(new Set(winDetails)).join('+');
 
             this._ui.showWinPop(stepWin, this._session.roundWin);
             this._ui.setStatus(

@@ -33,6 +33,15 @@ export const SYMBOL_WEIGHTS_FG: Record<SymType, number> = {
     L1: 9, L2: 9, L3: 10, L4: 10,
 };
 
+// ── Buy Free Game 專用符號權重（合計 90）─────────────────────────────────
+// WILD/Premium 大幅降低 → 平均每 spin 產出低，但理論最高仍可達 30,000x
+// 搭配 BUY_FG_PAYOUT_SCALE = 1.0 使用（不壓縮獎金）
+export const SYMBOL_WEIGHTS_BUY_FG: Record<SymType, number> = {
+    W: 1, SC: 2,
+    P1: 2, P2: 3, P3: 4, P4: 6,
+    L1: 14, L2: 14, L3: 22, L4: 22,
+};
+
 // Reel strip — 依照權重展開（每個滾輪共用同一張 strip，可日後分開）
 // 注意：不在 module 載入時洗牌（避免 seeded 測試不穩定）；
 // ReelManager 每次存取時自行 Math.random() 取樣，洗牌無意義。
@@ -171,36 +180,33 @@ export const PAYLINES_BY_ROWS: Record<number, number[][]> = {
 export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 
 /**
- * Free Game 各 tier 的固定輪數。
- * 進入 FG 前，Coin Toss 升級儀式決定最終 tier：
- *   tier 0 → 8 次 ×3  (base, guaranteed minimum)
- *   tier 1 → 12 次 ×7  (heads on 1st toss)
- *   tier 2 → 20 次 ×17 (heads on 2nd toss)
- *   tier 3 → 20 次 ×27 (heads on 3rd toss)
- *   tier 4 → 20 次 ×77 (heads on 4th toss)
+ * Per-spin Coin Toss 升級機率（GDD §9-3）。
+ * FG 每轉結束後翻硬幣決定是否升級並繼續：
+ *   [0] x3 → x7:   80% heads
+ *   [1] x7 → x17:  68% heads
+ *   [2] x17 → x27: 56% heads
+ *   [3] x27 → x77: 48% heads
+ *   [4] x77 維持:   40% heads
+ * 翻到反面即 FG 結束。
  */
-export const FG_ROUND_COUNTS = [8, 12, 20, 20, 20];
+export const COIN_TOSS_HEADS_PROB = [0.80, 0.68, 0.56, 0.48, 0.40];
 
 /**
- * Coin Toss 升級機率（tier model 校準值）。
- * 進入 FG 後先保底 tier 0（8 次 ×3），然後依序翻硬幣：
- *   [0] 15% heads → 升到 tier 1 (12 次 ×7)
- *   [1] 10% heads → 升到 tier 2 (20 次 ×17)
- *   [2]  5% heads → 升到 tier 3 (20 次 ×27)
- *   [3]  2% heads → 升到 tier 4 (20 次 ×77)
- * 翻到反面即停止升級，以當前 tier 進入 FG。
- * 原 GDD 值（80/68/56/48/40）為 per-spin 模型設計，
- * 改為固定輪數 tier 模型後須重新校準以維持 97.5% RTP。
+ * Entry Coin Toss 機率：進入 FG 前翻硬幣。
+ * Main/EB: 80% → 可能失敗（Phase A 分數仍保留）。
+ * Buy FG:  100% → 保證進入。
  */
-export const COIN_TOSS_HEADS_PROB = [0.15, 0.10, 0.05, 0.02];
+export const ENTRY_TOSS_PROB_MAIN = 0.80;
+export const ENTRY_TOSS_PROB_BUY  = 1.00;
+
 /**
- * 正常遊戲自然觸發 FREE GAME 的門檻機率。
- * 基礎遊戲 Cascade 達到 MAX_ROWS 並再次勝出時，還需通過此機率檢查，才能進入 Coin Toss。
- * 調低此值可降低 FG 觸發頻率，是控制整體 RTP 的主要旋鈕。
- * Buy Free Game 不受此限制（付費保證）。
- * GDD §10-1: 20%
+ * FG 觸發機率（spin 開始時決定）。
+ * 新模型：每次 spin 一開始就 roll 此機率，決定是否觸發 FG。
+ * 若觸發，cascade 保證展開至 MAX_ROWS（兩段表演合一）。
+ * Buy FG 不受此限制（付費 = 100% 觸發）。
+ * 此值為 RTP 校準旋鈕。
  */
-export const FG_TRIGGER_PROB = 0.20;
+export const FG_TRIGGER_PROB = 0.008;
 // 雷霆祝福：第二擊觸發機率（GDD §5: 40%）
 export const TB_SECOND_HIT_PROB = 0.40;
 
@@ -240,20 +246,24 @@ export const BUY_COST_MULT = 100;
  */
 export const BUY_FG_MIN_WIN_MULT = 20;
 
-/**
- * Buy FG 專屬 Coin Toss 升級機率。
- * 比一般模式 (15/10/5/2%) 大幅提高，讓 Buy FG 有更多機會升到高 tier，
- * 產生 >1000× BET 的大獎，以及 30000× BET 的 MAX WIN。
- * 這是 Buy FG 「花大錢買期待」的核心設計。
- */
-export const COIN_TOSS_HEADS_PROB_BUY = [0.35, 0.25, 0.15, 0.08];
-
 // ── 模式專屬派獎倍率（各模式獨立校準至 97.5% RTP）───────────────
-// Buy FG 期間所有中獎額外乘以此值（含 intro cascade + FG chain）
-// 配合 COIN_TOSS_HEADS_PROB_BUY + BUY_FG_MIN_WIN_MULT 保底校準
-export const BUY_FG_PAYOUT_SCALE = 1.87;
-// Extra Bet 期間所有中獎額外乘以此值（配合 SYMBOL_WEIGHTS_EB 校準）
-export const EB_PAYOUT_SCALE = 2.37;
+// Buy FG: costs 100×, Phase A + FG chain wins × this scale
+export const BUY_FG_PAYOUT_SCALE = 0.995;
+// Extra Bet: costs 3×, all wins × this scale
+export const EB_PAYOUT_SCALE = 2.64;
+
+/**
+ * FG 每 spin 閃電加成（所有模式共用）。
+ * 每次 FG spin 前隨機抽取，乘入該 spin 的 multipliedWin。
+ * E[bonus] ≈ 2.10，搭配各模式 PAYOUT_SCALE / FG_TRIGGER_PROB 校準 RTP。
+ * 讓分配表能自然延伸至 30,000x max win。
+ */
+export const FG_SPIN_BONUS = [
+    { mult: 1,   weight: 900 },
+    { mult: 5,   weight: 80 },
+    { mult: 20,  weight: 15 },
+    { mult: 100, weight: 5 },
+];
 
 // 最大獎金上限
 export const MAX_WIN_MULT = 30000;

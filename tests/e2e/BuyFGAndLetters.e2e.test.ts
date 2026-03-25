@@ -189,6 +189,43 @@ describe('E2E: FREE letters progressive lighting', () => {
             expect(ui.letterCalls[0].rows).toBe(BASE_ROWS);
         }
     });
+
+    it('Buy FG resets FREE letters to BASE_ROWS before playback', async () => {
+        for (let seed = 0; seed < 10; seed++) {
+            const session = new GameSession();
+            const account = new LocalAccountService(10000);
+            const engine  = createEngine(mulberry32(seed));
+            const adapter = new LocalEngineAdapter(engine);
+            const ui      = makeUI();
+            const ctrl    = new GameFlowController(
+                session, account, adapter, makeReels(), ui, () => Promise.resolve());
+
+            await ctrl.onBuyFreeGame();
+
+            expect(ui.letterCalls.length).toBeGreaterThan(0);
+            expect(ui.letterCalls[0].rows).toBe(BASE_ROWS);
+        }
+    });
+
+    it('fourthE is never true when rows < MAX_ROWS (regression)', async () => {
+        for (let seed = 0; seed < 50; seed++) {
+            const session = new GameSession();
+            const account = new LocalAccountService(10000);
+            const engine  = createEngine(mulberry32(seed));
+            const adapter = new LocalEngineAdapter(engine);
+            const ui      = makeUI();
+            const ctrl    = new GameFlowController(
+                session, account, adapter, makeReels(), ui, () => Promise.resolve());
+
+            await ctrl.onBuyFreeGame();
+
+            const bad = ui.letterCalls.filter(c => c.fourthE && c.rows < MAX_ROWS);
+            if (bad.length > 0) {
+                throw new Error(
+                    `seed ${seed}: fourthE=true at rows=${bad[0].rows} (< MAX_ROWS=${MAX_ROWS})`);
+            }
+        }
+    });
 });
 
 describe('E2E: Buy FG tier upgrade coin toss', () => {
@@ -213,11 +250,14 @@ describe('E2E: Buy FG tier upgrade coin toss', () => {
         }
     });
 
-    it('Buy FG FG chain always has >= 8 spins', async () => {
+    it('Buy FG FG chain always has exactly 5 spins (guaranteed full progression)', async () => {
         for (let seed = 0; seed < 30; seed++) {
             const engine  = createEngine(mulberry32(seed));
             const o = (engine as any).computeFullSpin({ mode: 'buyFG', totalBet: 1 });
-            expect(o.fgSpins.length).toBeGreaterThanOrEqual(8);
+            expect(o.fgSpins.length).toBe(5);
+            for (const fg of o.fgSpins) {
+                expect(fg.coinToss.heads).toBe(true);
+            }
         }
     });
 });
