@@ -1906,11 +1906,13 @@ Render Web Service（apps/api）
 
 > 目標：Windows 11 + Mac 都能一鍵啟動完整 stack，所有 unit test 通過，local 可玩
 >
-> **完成狀態（2026-03-28）**：步驟 1–10、12、15、16 已完成；138 unit tests，100% line/function coverage，≥90% branch coverage。步驟 11、13、14 待實作。
+> **完成狀態（2026-03-29）**：全面重構為 Fastify + Clean Architecture。步驟 11、13、14 待實作。
+>
+> **重構決策**：Next.js → Fastify（高併發）+ Clean Architecture（Domain Entities + Use Cases 層）+ 100% unit test coverage。
 
 | 步驟 | 內容 | 估算 | 狀態 |
 |------|------|:----:|:----:|
-| 2A-1 | Mono-repo 搬遷：pnpm workspace，Cocos 留根目錄 + `apps/web`（Next.js）+ `apps/worker` | 1 天 | ✅ |
+| 2A-1 | Mono-repo 搬遷：pnpm workspace，Cocos 留根目錄 + `apps/web`（Fastify）+ `apps/worker` | 1 天 | ✅ |
 | 2A-2 | Supabase local 啟動 + migration 拆分（§9-C DDL → `supabase/migrations/*.sql`）| 1 天 | ✅ |
 | 2A-3 | `IRNGProvider` / `IAuthProvider` / `IWalletRepository` / `ICacheAdapter` / `IProbabilityProvider` 介面定義 | 0.5 天 | ✅ |
 | 2A-4 | `CryptoRNGProvider` + `SeededRNGProvider`（unit test 100%）| 0.5 天 | ✅ |
@@ -1919,7 +1921,7 @@ Render Web Service（apps/api）
 | 2A-7 | `SupabaseSpinLogRepository` + `ISpinLogRepository`（mock 覆蓋）| 1 天 | ✅ |
 | 2A-8 | `UpstashCacheAdapter` + `NullCacheAdapter`（unit test 100%）| 0.5 天 | ✅ |
 | 2A-9 | `BetRangeService` + `container.ts` Composition Root（unit test 100%）| 2 天 | ✅ |
-| 2A-10 | Next.js Route Handlers（auth / wallet / game / spin）+ `withAuth` / `withAdminAuth` middleware（unit test 100%）| 2 天 | ✅ |
+| 2A-10 | Fastify Controllers（auth / wallet / game）+ Domain Entities + Use Cases 層 + `requireAuth` / `requireAdminIp` preHandler（unit test 100%）| 3 天 | ✅ |
 | 2A-11 | Integration tests（Supabase local 真實 DB + NullCacheAdapter）| 1.5 天 | ⏳ |
 | 2A-12 | K8s overlays/dev 設定（ingress-nginx，local Rancher Desktop）| 0.5 天 | ✅ |
 | 2A-13 | Cocos RemoteGameApiAdapter + RemoteWalletApiAdapter + IPaymentService 串接 | 1 天 | ⏳ |
@@ -3288,7 +3290,139 @@ E2E           — 完整玩家行為；Phase 2 後接真實 HTTP
 
 ---
 
-## 11. CI/CD 整合
+## 11. Clean Architecture 規範
+
+### 11-A. 層次結構與依賴規則
+
+```
+┌──────────────────────────────────────────────────┐
+│  Infrastructure / Frameworks & Drivers           │
+│  Fastify app.ts · server.ts · CryptoRNGProvider  │
+│  SupabaseAuthAdapter · UpstashCacheAdapter        │
+└────────────────────┬─────────────────────────────┘
+                     │ implements interfaces
+┌────────────────────▼─────────────────────────────┐
+│  Interface Adapters                              │
+│  Controllers（Fastify route handlers ≤15 lines） │
+│  requireAuth / requireAdminIp preHandlers        │
+│  Repository implementations（Supabase/Redis）    │
+└────────────────────┬─────────────────────────────┘
+                     │ calls
+┌────────────────────▼─────────────────────────────┐
+│  Use Cases（Application Business Rules）         │
+│  SpinUseCase · DepositUseCase · LoginUseCase…    │
+│  每個 Use Case 只依賴 Domain interfaces          │
+└────────────────────┬─────────────────────────────┘
+                     │ uses
+┌────────────────────▼─────────────────────────────┐
+│  Domain（Enterprise Business Rules）             │
+│  WalletEntity · SpinEntity · AuthUser            │
+│  IWalletRepository · IAuthProvider · ICacheAdapter│
+│  IRNGProvider · IProbabilityProvider             │
+└──────────────────────────────────────────────────┘
+```
+
+**依賴規則（Dependency Rule）**：所有 import 只能往內層指，不得反向。Infrastructure 不得被 Domain 或 Use Case import。
+
+### 11-B. 目錄結構
+
+```
+apps/web/src/
+├── domain/
+│   ├── entities/           # 有 invariants 的 Domain 物件
+│   │   ├── WalletEntity.ts
+│   │   └── SpinEntity.ts
+│   └── interfaces/         # Ports（抽象介面）
+│       ├── IAuthProvider.ts
+│       ├── IWalletRepository.ts
+│       ├── ISpinLogRepository.ts
+│       ├── ICacheAdapter.ts
+│       ├── IProbabilityProvider.ts
+│       └── IRNGProvider.ts
+├── usecases/               # 一個 Use Case = 一個 execute() 方法
+│   ├── auth/               # Register / Login / Refresh / Logout
+│   ├── wallet/             # GetWallet / Deposit / Withdraw / GetTransactions
+│   └── game/               # GetBetRange / Spin / Replay
+├── adapters/
+│   ├── controllers/        # Fastify route handlers（純 HTTP 轉換，≤15 行/handler）
+│   ├── repositories/       # Supabase 實作（排除單元測試覆蓋）
+│   └── cache/              # NullCacheAdapter / UpstashCacheAdapter
+├── infrastructure/
+│   ├── fastify/            # app.ts（plugin 註冊）/ server.ts（entry point）
+│   ├── rng/                # CryptoRNGProvider / SeededRNGProvider
+│   └── config/             # env.ts（Zod schema）
+├── shared/
+│   ├── errors/             # AppError / errorHandler（回傳 plain object，非 HTTP 物件）
+│   └── engine/             # slotEngine.ts（Cocos bridge，排除覆蓋）
+└── container.ts            # Composition Root
+```
+
+### 11-C. Domain Entity 要求
+
+每個 Entity 必須封裝不變式（Invariants），不能是純 DTO：
+
+```typescript
+// WalletEntity — 必須有以下方法：
+canDebit(amount: Decimal): boolean         // balance >= amount
+assertCanDebit(amount: Decimal): void      // throws AppError.insufficientFunds()
+assertDepositLimit(amount: Decimal): void  // throws AppError.validation() 超限
+assertWithdrawMin(amount: Decimal): void   // throws AppError.validation() 低於最低
+static fromRow(row: WalletRow): WalletEntity
+```
+
+### 11-D. Use Case 要求
+
+每個 Use Case 必須：
+- 有明確的 `Input` / `Output` DTO interface
+- 透過 constructor 注入所有依賴（不直接呼叫 `container`）
+- 單一 `execute(input: Input): Promise<Output>` 方法
+- 不 import 任何 Fastify / HTTP 物件
+- 100% 可單元測試（純 mock 依賴）
+
+```typescript
+// 範例：SpinUseCase
+class SpinUseCase {
+  constructor(
+    private walletRepo: IWalletRepository,
+    private spinLogRepo: ISpinLogRepository,
+    private probabilityProvider: IProbabilityProvider,
+    private cache: ICacheAdapter,
+    private rng: IRNGProvider,
+  ) {}
+  async execute(input: SpinInput): Promise<SpinOutput> { ... }
+}
+```
+
+所有業務邏輯（bet 驗證、lock 取得、debit/credit、spin log）集中在 execute() 內，不外漏至 Controller。
+
+### 11-E. Controller 要求
+
+每個 Fastify route handler 函式 **≤ 15 行**，只做：
+1. 從 `request.body` / `request.params` / `request.headers` 取值
+2. 呼叫對應 Use Case 的 `execute()`
+3. `reply.send(result)`
+
+不允許有 if/else 業務判斷、不允許直接呼叫 Repository。
+
+### 11-F. 測試覆蓋率要求
+
+| 層次 | 測試方式 | 覆蓋率目標 |
+|------|---------|-----------|
+| Domain Entities | 純 unit test | 100% |
+| Use Cases | 純 unit test（mock 依賴）| 100% |
+| Controllers | `app.inject()` 整合測試 | 100% |
+| errorHandler / AppError | 純 unit test | 100% |
+| Fastify app.ts | `app.inject()` smoke test | 100% |
+| Supabase adapters | 排除（需真實 DB）| 整合測試覆蓋 |
+| UpstashCacheAdapter | 排除（需真實 Redis）| 整合測試覆蓋 |
+| slotEngine.ts | 排除（需 Cocos runtime）| — |
+| server.ts | 排除（只呼叫 listen）| — |
+
+**全域 Jest threshold：branches ≥ 90%，functions/lines/statements = 100%**
+
+---
+
+## 12. CI/CD 整合
 
 Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 
@@ -3314,7 +3448,7 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 |------|------|------|
 | Interface vs Abstract Class | Interface | 零 runtime overhead，易 mock |
 | SlotEngine 共用方式 | 直接 import（同一 TS package）| Server/Client 跑完全相同機率邏輯，防分歧 |
-| 後端框架 | **Next.js**（App Router Route Handlers）| API Routes + 靜態前端同一服務；Testable（NextRequest 可直接單元測試）；Render 部署簡單 |
+| 後端框架 | **Fastify v5**（純 API server）| 高併發：~30,000 req/s（Next.js ~5,000）；原生 TypeScript；`app.inject()` 使測試無需 mock HTTP；@fastify/helmet 取代 next.config.ts headers；Cocos 靜態檔透過 @fastify/static 服務 |
 | Session 存儲 | Redis + PostgreSQL | Redis for locks/TTL，PostgreSQL for durable data |
 | Production RNG | 純 `crypto.randomBytes()`（per-value，無 PRNG 層）| 每個隨機值直接來自 OS entropy；最高安全等級；可審計（rng_bytes 存 spin_log）|
 | Test RNG | SeededRNGProvider（mulberry32 + seed）| 確定性重現，覆蓋率 100% |
@@ -3326,7 +3460,7 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 | 測試覆蓋率 | Server unit test 100% coverage | TDD；每個 Route Handler / Service / Adapter 完整覆蓋 |
 | Mock Provider 封鎖 | production 環境拒絕 `provider=mock`（S-01）| Gaming compliance：禁止無限注資 |
 | Seeded RNG 封鎖 | `SeededRNGProvider` 構造函式生產環境 throw（S-02）| Gaming compliance：禁止可預測 RNG |
-| HTTP Security Headers | Next.js `next.config.ts` 全域加 CSP/HSTS/X-Frame（S-04）| OWASP A05 Security Misconfiguration |
+| HTTP Security Headers | `@fastify/helmet` plugin 全域加 CSP/HSTS/X-Frame（S-04）| OWASP A05 Security Misconfiguration；取代 next.config.ts |
 | JWT alg 白名單 | `algorithms: ['HS256']`，禁 `alg:none`（S-06）| OWASP A02 Cryptographic Failures |
 | Session 上限 | 每用戶最多 5 個有效 session，LRU 淘汰（S-07）| 防帳號共用 / token 洩漏擴散 |
 | Admin IP Allowlist | `ADMIN_ALLOWED_IPS` ENV 控制，空值不限（S-12）| Admin API 額外保護層 |
@@ -3348,8 +3482,8 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 
 ---
 
-*文件版本：v6.1 | 更新日期：2026-03-28*
-*整合來源：docs/EDD-refactor-architecture.md v5.0 + Security Review（2026-03-28）+ Phase 2A 實作完成記錄（2026-03-28）*
+*文件版本：v7.0 | 更新日期：2026-03-29*
+*整合來源：EDD v6.1 + Clean Architecture 規範 + Fastify 重構決策（2026-03-29）*
 *參考：GDD_Thunder_Blessing_Slot.md | Probability_Design.md*
 *Security Review：18 項安全強化（S-01~S-18），詳見 §9-O*
-*Phase 2A 進度：13/16 步驟完成（138 unit tests，100% line/function，≥90% branch coverage）*
+*Phase 2A 進度：重構中（Fastify + Clean Architecture + 100% coverage）*

@@ -1,4 +1,4 @@
-import type { ICacheAdapter } from '../../interfaces/ICacheAdapter';
+import type { ICacheAdapter } from '../../domain/interfaces/ICacheAdapter';
 
 /**
  * No-op cache for local dev and integration tests.

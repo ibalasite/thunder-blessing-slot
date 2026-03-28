@@ -4,16 +4,25 @@
  * touching any business logic.
  */
 
-import type { IAuthProvider } from './interfaces/IAuthProvider';
-import type { IWalletRepository } from './interfaces/IWalletRepository';
-import type { ISpinLogRepository } from './interfaces/ISpinLogRepository';
-import type { ICacheAdapter } from './interfaces/ICacheAdapter';
-import type { IRNGProvider } from './interfaces/IRNGProvider';
-import type { IProbabilityProvider } from './interfaces/IProbabilityProvider';
-
+import type { IAuthProvider } from './domain/interfaces/IAuthProvider';
+import type { IWalletRepository } from './domain/interfaces/IWalletRepository';
+import type { ISpinLogRepository } from './domain/interfaces/ISpinLogRepository';
+import type { ICacheAdapter } from './domain/interfaces/ICacheAdapter';
+import type { IProbabilityProvider } from './domain/interfaces/IProbabilityProvider';
+import type { IRNGProvider } from './domain/interfaces/IRNGProvider';
+import { RegisterUseCase } from './usecases/auth/RegisterUseCase';
+import { LoginUseCase } from './usecases/auth/LoginUseCase';
+import { RefreshTokenUseCase } from './usecases/auth/RefreshTokenUseCase';
+import { LogoutUseCase } from './usecases/auth/LogoutUseCase';
+import { GetWalletUseCase } from './usecases/wallet/GetWalletUseCase';
+import { DepositUseCase } from './usecases/wallet/DepositUseCase';
+import { WithdrawUseCase } from './usecases/wallet/WithdrawUseCase';
+import { GetTransactionsUseCase } from './usecases/wallet/GetTransactionsUseCase';
+import { GetBetRangeUseCase } from './usecases/game/GetBetRangeUseCase';
+import { SpinUseCase } from './usecases/game/SpinUseCase';
+import { ReplayUseCase } from './usecases/game/ReplayUseCase';
 import { NullCacheAdapter } from './adapters/cache/NullCacheAdapter';
-import { UpstashCacheAdapter } from './adapters/cache/UpstashCacheAdapter';
-import { CryptoRNGProvider } from './rng/CryptoRNGProvider';
+import { CryptoRNGProvider } from './infrastructure/rng/CryptoRNGProvider';
 
 // Lazy imports to avoid loading Supabase SDK at test time
 let _authProvider: IAuthProvider | null = null;
@@ -24,9 +33,12 @@ let _rng: IRNGProvider | null = null;
 let _probabilityProvider: IProbabilityProvider | null = null;
 
 function buildCache(): ICacheAdapter {
-  const { UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN } = process.env;
-  if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
-    return new UpstashCacheAdapter(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN);
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { UpstashCacheAdapter } = require('./adapters/cache/UpstashCacheAdapter');
+    return new UpstashCacheAdapter(url, token);
   }
   return new NullCacheAdapter();
 }
@@ -39,10 +51,12 @@ export const container = {
   get authProvider(): IAuthProvider {
     /* istanbul ignore next */
     if (!_authProvider) {
-      // Dynamic import avoids Supabase SDK loading in test environment
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { SupabaseAuthAdapter } = require('./adapters/supabase/SupabaseAuthAdapter');
-      _authProvider = new SupabaseAuthAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { SupabaseAuthAdapter } = require('./adapters/repositories/SupabaseAuthAdapter');
+      _authProvider = new SupabaseAuthAdapter(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
     }
     return _authProvider!;
   },
@@ -51,8 +65,11 @@ export const container = {
     /* istanbul ignore next */
     if (!_walletRepo) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { SupabaseWalletRepository } = require('./adapters/supabase/SupabaseWalletRepository');
-      _walletRepo = new SupabaseWalletRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { SupabaseWalletRepository } = require('./adapters/repositories/SupabaseWalletRepository');
+      _walletRepo = new SupabaseWalletRepository(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
     }
     return _walletRepo!;
   },
@@ -61,8 +78,11 @@ export const container = {
     /* istanbul ignore next */
     if (!_spinLogRepo) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { SupabaseSpinLogRepository } = require('./adapters/supabase/SupabaseSpinLogRepository');
-      _spinLogRepo = new SupabaseSpinLogRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { SupabaseSpinLogRepository } = require('./adapters/repositories/SupabaseSpinLogRepository');
+      _spinLogRepo = new SupabaseSpinLogRepository(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
     }
     return _spinLogRepo!;
   },
@@ -84,6 +104,47 @@ export const container = {
       _probabilityProvider = new BetRangeService(container.cache);
     }
     return _probabilityProvider!;
+  },
+
+  // Use Cases (stateless — new instance each call)
+  get registerUseCase(): RegisterUseCase {
+    return new RegisterUseCase(this.authProvider);
+  },
+  get loginUseCase(): LoginUseCase {
+    return new LoginUseCase(this.authProvider, this.cache);
+  },
+  get refreshTokenUseCase(): RefreshTokenUseCase {
+    return new RefreshTokenUseCase(this.authProvider);
+  },
+  get logoutUseCase(): LogoutUseCase {
+    return new LogoutUseCase(this.authProvider);
+  },
+  get getWalletUseCase(): GetWalletUseCase {
+    return new GetWalletUseCase(this.walletRepository);
+  },
+  get depositUseCase(): DepositUseCase {
+    return new DepositUseCase(this.walletRepository);
+  },
+  get withdrawUseCase(): WithdrawUseCase {
+    return new WithdrawUseCase(this.walletRepository);
+  },
+  get getTransactionsUseCase(): GetTransactionsUseCase {
+    return new GetTransactionsUseCase(this.walletRepository);
+  },
+  get getBetRangeUseCase(): GetBetRangeUseCase {
+    return new GetBetRangeUseCase(this.probabilityProvider);
+  },
+  get spinUseCase(): SpinUseCase {
+    return new SpinUseCase(
+      this.walletRepository,
+      this.spinLogRepository,
+      this.probabilityProvider,
+      this.cache,
+      this.rng,
+    );
+  },
+  get replayUseCase(): ReplayUseCase {
+    return new ReplayUseCase(this.spinLogRepository);
   },
 
   /** For tests: override any adapter without restarting. */

@@ -1,0 +1,139 @@
+import { SpinUseCase } from '../../../../src/usecases/game/SpinUseCase';
+import {
+  createMockWalletRepo,
+  createMockSpinLogRepo,
+  createMockProbabilityProvider,
+  createMockCache,
+  createMockRng,
+  TEST_WALLET,
+  TEST_SPIN_LOG,
+  MOCK_BYTES,
+} from '../../helpers/mockContainer';
+import { AppError } from '../../../../src/shared/errors/AppError';
+
+// Mock slotEngine
+jest.mock('../../../../src/shared/engine/slotEngine', () => ({
+  createSlotEngine: jest.fn(() => ({
+    computeFullSpin: jest.fn().mockReturnValue({ totalWin: 5, grid: [] }),
+  })),
+}));
+
+const baseInput = {
+  userId: 'user-1',
+  sessionId: 'session-1',
+  mode: 'main' as const,
+  betLevel: 1,
+  currency: 'USD' as const,
+  extraBetOn: false,
+  clientSeed: null,
+};
+
+function makeUseCase(overrides: {
+  wallet?: Partial<ReturnType<typeof createMockWalletRepo>>;
+  spinLog?: Partial<ReturnType<typeof createMockSpinLogRepo>>;
+  probability?: Partial<ReturnType<typeof createMockProbabilityProvider>>;
+  cache?: Partial<ReturnType<typeof createMockCache>>;
+  rng?: Partial<ReturnType<typeof createMockRng>>;
+} = {}) {
+  return new SpinUseCase(
+    createMockWalletRepo(overrides.wallet as any ?? {}),
+    createMockSpinLogRepo(overrides.spinLog as any ?? {}),
+    createMockProbabilityProvider(overrides.probability as any ?? {}),
+    createMockCache(overrides.cache as any ?? {}),
+    createMockRng(overrides.rng as any ?? {}),
+  );
+}
+
+describe('SpinUseCase', () => {
+  it('executes a successful spin and returns result', async () => {
+    const useCase = makeUseCase();
+    const result = await useCase.execute(baseInput);
+    expect(result.spinId).toBe(TEST_SPIN_LOG.id);
+    expect(result.playerBet).toBe('0.01');
+    expect(result.playerWin).toBe('0.05');
+    expect(result.currency).toBe('USD');
+  });
+
+  it('throws VALIDATION_ERROR when betLevel out of range', async () => {
+    const useCase = makeUseCase();
+    await expect(useCase.execute({ ...baseInput, betLevel: 9999 })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('throws VALIDATION_ERROR when betLevel not in allowed levels', async () => {
+    const useCase = makeUseCase();
+    await expect(useCase.execute({ ...baseInput, betLevel: 3 })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('throws NOT_FOUND when wallet missing', async () => {
+    const useCase = makeUseCase({ wallet: { getByUserId: jest.fn().mockResolvedValue(null) } as any });
+    await expect(useCase.execute(baseInput)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws INSUFFICIENT_FUNDS when balance too low', async () => {
+    const useCase = makeUseCase({
+      wallet: {
+        getByUserId: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '0' }),
+        debit: jest.fn(),
+        credit: jest.fn(),
+        getTransactions: jest.fn(),
+        createWallet: jest.fn(),
+      } as any,
+    });
+    await expect(useCase.execute(baseInput)).rejects.toMatchObject({ code: 'INSUFFICIENT_FUNDS' });
+  });
+
+  it('throws VALIDATION_ERROR when lock not acquired', async () => {
+    const useCase = makeUseCase({ cache: { acquireLock: jest.fn().mockResolvedValue(false) } as any });
+    await expect(useCase.execute(baseInput)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('releases lock even when error occurs', async () => {
+    const releaseLock = jest.fn().mockResolvedValue(undefined);
+    const useCase = makeUseCase({
+      cache: {
+        acquireLock: jest.fn().mockResolvedValue(true),
+        releaseLock,
+      } as any,
+      wallet: {
+        getByUserId: jest.fn().mockResolvedValue(TEST_WALLET),
+        debit: jest.fn().mockRejectedValue(new Error('DB error')),
+        credit: jest.fn(),
+        getTransactions: jest.fn(),
+        createWallet: jest.fn(),
+      } as any,
+    });
+    await expect(useCase.execute(baseInput)).rejects.toThrow('DB error');
+    expect(releaseLock).toHaveBeenCalled();
+  });
+
+  it('does not credit when win is 0', async () => {
+    const { createSlotEngine } = require('../../../../src/shared/engine/slotEngine');
+    (createSlotEngine as jest.Mock).mockReturnValueOnce({
+      computeFullSpin: jest.fn().mockReturnValue({ totalWin: 0, grid: [] }),
+    });
+    const credit = jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '99' });
+    const useCase = makeUseCase({
+      wallet: {
+        getByUserId: jest.fn().mockResolvedValue(TEST_WALLET),
+        debit: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '99' }),
+        credit,
+        getTransactions: jest.fn(),
+        createWallet: jest.fn(),
+      } as any,
+    });
+    await useCase.execute(baseInput);
+    expect(credit).not.toHaveBeenCalled();
+  });
+
+  it('handles extraBet mode correctly', async () => {
+    const useCase = makeUseCase();
+    const result = await useCase.execute({ ...baseInput, mode: 'extraBet' });
+    expect(result.playerBet).toBe('0.02'); // betLevel 1 * 2 * 0.01
+  });
+
+  it('handles buyFG mode correctly', async () => {
+    const useCase = makeUseCase();
+    const result = await useCase.execute({ ...baseInput, mode: 'buyFG' });
+    expect(result.playerBet).toBe('1'); // betLevel 1 * 100 * 0.01
+  });
+});

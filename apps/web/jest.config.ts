@@ -12,19 +12,18 @@ const config: Config = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
-    '!src/app/layout.tsx',
-    // Supabase adapters require real DB — covered in integration tests (2A-11)
-    '!src/adapters/supabase/**',
-    // UpstashCacheAdapter requires live Redis — covered in integration tests
+    // Supabase adapters require real DB
+    '!src/adapters/repositories/Supabase*.ts',
+    // Upstash requires live Redis
     '!src/adapters/cache/UpstashCacheAdapter.ts',
-    // Worker files covered separately
-    '!src/worker/**',
-    // Cocos engine bridge — requires real Cocos runtime (not available in Jest)
+    // Cocos engine bridge
     '!src/shared/engine/slotEngine.ts',
+    // Entry point only calls listen()
+    '!src/infrastructure/fastify/server.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 90,    // Remaining misses are unreachable ?? fallback branches
+      branches: 90,
       functions: 100,
       lines: 100,
       statements: 100,

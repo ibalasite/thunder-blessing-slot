@@ -1,8 +1,7 @@
 import { container } from '../../src/container';
 import { NullCacheAdapter } from '../../src/adapters/cache/NullCacheAdapter';
-import { CryptoRNGProvider } from '../../src/rng/CryptoRNGProvider';
-import type { ICacheAdapter } from '../../src/interfaces/ICacheAdapter';
-import type { IRNGProvider } from '../../src/interfaces/IRNGProvider';
+import { CryptoRNGProvider } from '../../src/infrastructure/rng/CryptoRNGProvider';
+import type { ICacheAdapter } from '../../src/domain/interfaces/ICacheAdapter';
 
 afterEach(() => container._reset());
 
@@ -27,7 +26,6 @@ describe('container._override() + _reset()', () => {
     container._override({ cache: customCache });
     container._reset();
     // After reset, accessing cache should create a new NullCacheAdapter
-    // (no UPSTASH env vars set in test)
     expect(container.cache).not.toBe(customCache);
     expect(container.cache).toBeInstanceOf(NullCacheAdapter);
   });
@@ -68,5 +66,26 @@ describe('container._override() + _reset()', () => {
     expect(typeof pp.getBetRange).toBe('function');
     // Second access returns same instance (singleton)
     expect(container.probabilityProvider).toBe(pp);
+  });
+
+  it('use case getters return new instances each time when providers are overridden', () => {
+    // Override all providers so Supabase adapters are not loaded
+    const { NullCacheAdapter: NC } = require('../../src/adapters/cache/NullCacheAdapter');
+    const fakeAuth = { register: jest.fn(), login: jest.fn(), refreshAccessToken: jest.fn(), logout: jest.fn(), verifyAccessToken: jest.fn(), getUserById: jest.fn() };
+    const fakeWallet = { getByUserId: jest.fn(), credit: jest.fn(), debit: jest.fn(), getTransactions: jest.fn(), createWallet: jest.fn() };
+    const fakeSpinLog = { create: jest.fn(), getById: jest.fn(), getByUser: jest.fn() };
+    const fakeProb = { getBetRange: jest.fn() };
+    container._override({ authProvider: fakeAuth, walletRepository: fakeWallet, spinLogRepository: fakeSpinLog, cache: new NC(), probabilityProvider: fakeProb });
+    expect(container.registerUseCase).toBeDefined();
+    expect(container.loginUseCase).toBeDefined();
+    expect(container.refreshTokenUseCase).toBeDefined();
+    expect(container.logoutUseCase).toBeDefined();
+    expect(container.getWalletUseCase).toBeDefined();
+    expect(container.depositUseCase).toBeDefined();
+    expect(container.withdrawUseCase).toBeDefined();
+    expect(container.getTransactionsUseCase).toBeDefined();
+    expect(container.getBetRangeUseCase).toBeDefined();
+    expect(container.spinUseCase).toBeDefined();
+    expect(container.replayUseCase).toBeDefined();
   });
 });

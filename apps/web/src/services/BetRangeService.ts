@@ -1,6 +1,6 @@
-import type { ICacheAdapter } from '../interfaces/ICacheAdapter';
-import type { IProbabilityProvider, BetRange } from '../interfaces/IProbabilityProvider';
-import type { Currency } from '../interfaces/IWalletRepository';
+import type { ICacheAdapter } from '../domain/interfaces/ICacheAdapter';
+import type { IProbabilityProvider, BetRange } from '../domain/interfaces/IProbabilityProvider';
+import type { Currency } from '../domain/interfaces/IWalletRepository';
 
 const CACHE_TTL_SECONDS = 3600; // 1 hour
 

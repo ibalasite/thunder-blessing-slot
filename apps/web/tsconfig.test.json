@@ -5,6 +5,8 @@
     "moduleResolution": "node",
     "esModuleInterop": true,
     "noEmit": true,
-    "jsx": "react"
-  }
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*", "tests/**/*"]
 }

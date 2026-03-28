@@ -17,7 +17,7 @@ function loadEnv(overrides: Record<string, string | undefined> = {}) {
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, REQUIRED_ENV, overrides);
   try {
-    const mod = require('../../../src/config/env');
+    const mod = require('../../../src/infrastructure/config/env');
     return { env: mod.env, restore: () => { Object.assign(process.env, saved); } };
   } catch (err) {
     Object.assign(process.env, saved);

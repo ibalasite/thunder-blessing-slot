@@ -1,4 +1,4 @@
-import type { ICacheAdapter } from '../../interfaces/ICacheAdapter';
+import type { ICacheAdapter } from '../../domain/interfaces/ICacheAdapter';
 
 /**
  * Upstash Redis adapter (REST API, no persistent connection needed).

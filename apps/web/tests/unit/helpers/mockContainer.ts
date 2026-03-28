@@ -3,24 +3,39 @@
  * Use in beforeEach to inject mocks; call container._reset() in afterEach.
  */
 import { container } from '../../../src/container';
-import type { IAuthProvider, AuthUser, AuthTokens } from '../../../src/interfaces/IAuthProvider';
-import type { IWalletRepository, Wallet, WalletTransaction } from '../../../src/interfaces/IWalletRepository';
-import type { ISpinLogRepository, SpinLog } from '../../../src/interfaces/ISpinLogRepository';
-import type { ICacheAdapter } from '../../../src/interfaces/ICacheAdapter';
-import type { IProbabilityProvider, BetRange } from '../../../src/interfaces/IProbabilityProvider';
+import type { IAuthProvider } from '../../../src/domain/interfaces/IAuthProvider';
+import type { IWalletRepository, Wallet } from '../../../src/domain/interfaces/IWalletRepository';
+import type { ISpinLogRepository, SpinLog } from '../../../src/domain/interfaces/ISpinLogRepository';
+import type { ICacheAdapter } from '../../../src/domain/interfaces/ICacheAdapter';
+import type { IProbabilityProvider, BetRange } from '../../../src/domain/interfaces/IProbabilityProvider';
+import type { IRNGProvider } from '../../../src/domain/interfaces/IRNGProvider';
 
-export const TEST_USER: AuthUser = {
-  id: 'user-123',
-  email: 'test@example.com',
-  createdAt: new Date('2026-01-01'),
-};
-
+export const TEST_USER = { id: 'user-1', email: 'test@example.com', createdAt: new Date('2026-01-01') };
 export const TEST_WALLET: Wallet = {
-  id: 'wallet-456',
-  userId: 'user-123',
+  id: 'wallet-1',
+  userId: 'user-1',
   currency: 'USD',
-  balance: '100.0000',
+  balance: '100.00',
   updatedAt: new Date('2026-01-01'),
+};
+export const TEST_TOKENS = { accessToken: 'access-tok', refreshToken: 'refresh-tok' };
+export const TEST_SPIN_LOG: SpinLog = {
+  id: 'spin-1',
+  userId: 'user-1',
+  sessionId: 'session-1',
+  mode: 'main',
+  currency: 'USD',
+  betLevel: 1,
+  winLevel: 5,
+  baseUnit: '0.01',
+  playerBet: '0.01',
+  playerWin: '0.05',
+  gridSnapshot: [],
+  rngBytes: Buffer.alloc(4),
+  rngByteCount: 4,
+  serverSeed: 'abc',
+  clientSeed: null,
+  createdAt: new Date('2026-01-01'),
 };
 
 export const TEST_BET_RANGE: BetRange = {
@@ -34,8 +49,8 @@ export const TEST_BET_RANGE: BetRange = {
 export function createMockAuthProvider(overrides: Partial<IAuthProvider> = {}): IAuthProvider {
   return {
     register: jest.fn().mockResolvedValue(TEST_USER),
-    login: jest.fn().mockResolvedValue({ user: TEST_USER, tokens: { accessToken: 'at', refreshToken: 'rt' } }),
-    refreshAccessToken: jest.fn().mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt' } as AuthTokens),
+    login: jest.fn().mockResolvedValue({ user: TEST_USER, tokens: TEST_TOKENS }),
+    refreshAccessToken: jest.fn().mockResolvedValue(TEST_TOKENS),
     logout: jest.fn().mockResolvedValue(undefined),
     verifyAccessToken: jest.fn().mockResolvedValue(TEST_USER),
     getUserById: jest.fn().mockResolvedValue(TEST_USER),
@@ -46,19 +61,19 @@ export function createMockAuthProvider(overrides: Partial<IAuthProvider> = {}): 
 export function createMockWalletRepo(overrides: Partial<IWalletRepository> = {}): IWalletRepository {
   return {
     getByUserId: jest.fn().mockResolvedValue(TEST_WALLET),
+    credit: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '105.00' }),
+    debit: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '99.00' }),
+    getTransactions: jest.fn().mockResolvedValue([]),
     createWallet: jest.fn().mockResolvedValue(TEST_WALLET),
-    credit: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '200.0000' }),
-    debit: jest.fn().mockResolvedValue({ ...TEST_WALLET, balance: '99.0000' }),
-    getTransactions: jest.fn().mockResolvedValue([] as WalletTransaction[]),
     ...overrides,
   };
 }
 
 export function createMockSpinLogRepo(overrides: Partial<ISpinLogRepository> = {}): ISpinLogRepository {
   return {
-    create: jest.fn().mockResolvedValue({ id: 'spin-789', userId: 'user-123' } as SpinLog),
-    getById: jest.fn().mockResolvedValue(null),
-    getByUser: jest.fn().mockResolvedValue([] as SpinLog[]),
+    create: jest.fn().mockResolvedValue(TEST_SPIN_LOG),
+    getById: jest.fn().mockResolvedValue(TEST_SPIN_LOG),
+    getByUser: jest.fn().mockResolvedValue([TEST_SPIN_LOG]),
     ...overrides,
   };
 }
@@ -82,6 +97,18 @@ export function createMockProbabilityProvider(overrides: Partial<IProbabilityPro
   };
 }
 
+export const MOCK_BYTES = [Buffer.from([0x01, 0x02, 0x03, 0x04])];
+
+export function createMockRng(overrides: Partial<IRNGProvider> = {}): IRNGProvider {
+  return {
+    random: jest.fn().mockReturnValue(0.5),
+    randomInt: jest.fn().mockReturnValue(3),
+    getSpinBytes: jest.fn().mockReturnValue(MOCK_BYTES),
+    resetSpinBytes: jest.fn(),
+    ...overrides,
+  };
+}
+
 /** Set up all mocks in container. Call in beforeEach. */
 export function setupMockContainer(overrides: {
   auth?: Partial<IAuthProvider>;
@@ -89,40 +116,14 @@ export function setupMockContainer(overrides: {
   spinLog?: Partial<ISpinLogRepository>;
   cache?: Partial<ICacheAdapter>;
   probability?: Partial<IProbabilityProvider>;
-} = {}) {
+  rng?: Partial<IRNGProvider>;
+} = {}): void {
   container._override({
-    authProvider: createMockAuthProvider(overrides.auth),
-    walletRepository: createMockWalletRepo(overrides.wallet),
-    spinLogRepository: createMockSpinLogRepo(overrides.spinLog),
-    cache: createMockCache(overrides.cache),
-    probabilityProvider: createMockProbabilityProvider(overrides.probability),
+    authProvider: createMockAuthProvider(overrides.auth ?? {}),
+    walletRepository: createMockWalletRepo(overrides.wallet ?? {}),
+    spinLogRepository: createMockSpinLogRepo(overrides.spinLog ?? {}),
+    cache: createMockCache(overrides.cache ?? {}),
+    probabilityProvider: createMockProbabilityProvider(overrides.probability ?? {}),
+    rng: createMockRng(overrides.rng ?? {}),
   });
-}
-
-/** Make a NextRequest-like mock. */
-export function makeRequest(
-  url: string,
-  options: {
-    method?: string;
-    body?: unknown;
-    headers?: Record<string, string>;
-    cookies?: Record<string, string>;
-  } = {},
-) {
-  const { NextRequest } = require('next/server');
-  const req = new NextRequest(new URL(url, 'http://localhost'), {
-    method: options.method ?? 'GET',
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  // Inject cookies
-  if (options.cookies) {
-    for (const [name, value] of Object.entries(options.cookies)) {
-      req.cookies.set(name, value);
-    }
-  }
-  return req;
 }
