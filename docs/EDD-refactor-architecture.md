@@ -1922,13 +1922,13 @@ Render Web Service（apps/api）
 | 2A-8 | `UpstashCacheAdapter` + `NullCacheAdapter`（unit test 100%）| 0.5 天 | ✅ |
 | 2A-9 | `BetRangeService` + `container.ts` Composition Root（unit test 100%）| 2 天 | ✅ |
 | 2A-10 | Fastify Controllers（auth / wallet / game）+ Domain Entities + Use Cases 層 + `requireAuth` / `requireAdminIp` preHandler（unit test 100%）| 3 天 | ✅ |
-| 2A-11 | Integration tests（Supabase local 真實 DB + NullCacheAdapter）| 1.5 天 | ⏳ |
+| 2A-11 | Integration tests（Supabase local 真實 DB + NullCacheAdapter）| 1.5 天 | ✅ |
 | 2A-12 | K8s overlays/dev 設定（ingress-nginx，local Rancher Desktop）| 0.5 天 | ✅ |
-| 2A-13 | Cocos RemoteGameApiAdapter + RemoteWalletApiAdapter + IPaymentService 串接 | 1 天 | ⏳ |
-| 2A-14 | E2E tests（Playwright，Cocos UI + API 完整流）| 1.5 天 | ⏳ |
+| 2A-13 | Cocos RemoteApiClient + RemoteEngineAdapter + RemoteWalletService 串接 | 1 天 | ✅ |
+| 2A-14 | E2E tests（Fastify inject，full HTTP flow，engine mocked）| 1.5 天 | ✅ |
 | 2A-15 | Security hardening S-01~S-18（P0 全部完成，P1/P2 同步完成）| 1 天 | ✅ |
 | 2A-16 | README（Windows 11 + Mac 建置步驟）+ GitHub Actions CI/CD workflows | 0.5 天 | ✅ |
-| **2A 合計** | | **17 天** | **13/16 ✅** |
+| **2A 合計** | | **17 天** | **16/16 ✅** |
 
 ### Phase 2B：Production 部署
 
@@ -3482,8 +3482,8 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 
 ---
 
-*文件版本：v7.0 | 更新日期：2026-03-29*
+*文件版本：v7.1 | 更新日期：2026-03-28*
 *整合來源：EDD v6.1 + Clean Architecture 規範 + Fastify 重構決策（2026-03-29）*
 *參考：GDD_Thunder_Blessing_Slot.md | Probability_Design.md*
 *Security Review：18 項安全強化（S-01~S-18），詳見 §9-O*
-*Phase 2A 進度：重構中（Fastify + Clean Architecture + 100% coverage）*
+*Phase 2A 進度：16/16 ✅ 全部完成（2A-11 integration tests、2A-13 Cocos remote adapters、2A-14 E2E API tests）*

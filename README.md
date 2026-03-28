@@ -61,23 +61,125 @@ thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
 
 | | Mac | Windows 11 |
 |--|-----|------------|
-| Node.js | 22 LTS | 22 LTS |
-| pnpm | 10+ | 10+ |
+| Node.js | 20+ LTS | 20+ LTS |
+| pnpm | 9+ | 9+ |
 | Cocos Creator | 3.8.x | 3.8.x |
+| Docker Desktop | 必須（Supabase）| 必須（Supabase）|
 | Supabase CLI | 2.x | 2.x |
-| Rancher Desktop | 1.x（可選）| 1.x（可選）|
 
 ---
 
-## Mac 本地開發建置步驟
+## 本地執行步驟 (Phase 2A API Stack)
+
+### Mac
+
+**Prerequisites（已安裝）：**
+- Node.js >= 20, pnpm >= 9
+- Docker Desktop（for Supabase local）
+- Supabase CLI
+
+```bash
+# 1. 安裝 Supabase CLI
+brew install supabase/tap/supabase
+
+# 2. 安裝依賴
+pnpm install
+
+# 3. 建立 .env.local
+cp apps/web/.env.example apps/web/.env.local
+# 編輯 apps/web/.env.local — JWT_SECRET 至少 32 字元
+
+# 4. 啟動 Supabase local（需要 Docker）
+supabase start
+# 記下輸出的 service_role key 和 anon key
+
+# 5. 更新 .env.local
+# SUPABASE_SERVICE_ROLE_KEY=<剛才的 service_role key>
+
+# 6. 執行 DB migrations
+supabase db push
+
+# 7. 載入 seed 資料（demo 帳號）
+supabase db reset   # 或手動: psql $(supabase db url) < supabase/seed.sql
+
+# 8. 啟動 API server
+cd apps/web
+pnpm dev
+# API 在 http://localhost:3000
+
+# 9. 確認 server 正常
+curl http://localhost:3000/api/v1/health
+# {"status":"ok"}
+
+# 10. 跑 unit tests
+pnpm test:coverage
+
+# 11. 跑 integration tests（需要 Supabase 運行中）
+INTEGRATION=1 pnpm test:int
+
+# 12. 跑 E2E tests（需要 Supabase 運行中）
+E2E=1 pnpm test:e2e
+```
+
+### Windows 11
+
+```powershell
+# 1. 安裝 Supabase CLI（使用 Scoop）
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+
+# 2. 安裝依賴
+pnpm install
+
+# 3. 建立 .env.local
+Copy-Item apps\web\.env.example apps\web\.env.local
+# 用文字編輯器更新 JWT_SECRET（至少 32 字元）
+
+# 4. 啟動 Supabase local（需要 Docker Desktop）
+supabase start
+
+# 5. 更新 .env.local（SUPABASE_SERVICE_ROLE_KEY）
+
+# 6. 執行 DB migrations
+supabase db push
+
+# 7. 載入 seed 資料
+supabase db reset
+
+# 8. 啟動 API server
+Set-Location apps\web
+pnpm dev
+# API 在 http://localhost:3000
+
+# 9. 確認 server 正常
+Invoke-RestMethod http://localhost:3000/api/v1/health
+
+# 10. 跑 unit tests
+pnpm test:coverage
+
+# 11. 跑 integration tests（需要 Supabase 運行中）
+$env:INTEGRATION=1; pnpm test:int
+
+# 12. 跑 E2E tests（需要 Supabase 運行中）
+$env:E2E=1; pnpm test:e2e
+```
+
+**Supabase 停止：**
+```bash
+supabase stop
+```
+
+---
+
+## Mac 完整開發環境建置步驟
 
 ### 1. 安裝必要工具
 
 ```bash
-# 安裝 Node.js 22 (使用 nvm)
+# 安裝 Node.js 20+ (使用 nvm)
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-nvm install 22
-nvm use 22
+nvm install 20
+nvm use 20
 
 # 安裝 pnpm
 npm install -g pnpm
@@ -135,7 +237,7 @@ supabase db push
 supabase db reset --db-url postgresql://postgres:postgres@localhost:54322/postgres
 ```
 
-### 5. 啟動 Next.js 開發伺服器
+### 5. 啟動 Fastify API 開發伺服器
 
 ```bash
 # 從 workspace root 啟動
@@ -144,21 +246,26 @@ pnpm web
 # 或直接進入 apps/web
 cd apps/web && pnpm dev
 
-# API 在 http://localhost:3001
-# 測試 health: curl http://localhost:3001/api/v1/health
+# API 在 http://localhost:3000
+# 測試 health: curl http://localhost:3000/api/v1/health
 ```
 
 ### 6. 執行測試
 
 ```bash
 # 遊戲引擎測試（根目錄）
-pnpm test                              # 全部（888 tests）
-pnpm test:unit                         # 單元測試
-pnpm test:integration                  # 整合測試
+pnpm test                                    # 全部（888 tests）
 
-# API Server 測試（apps/web，100% coverage）
-pnpm web:test                          # 全部 + coverage
-cd apps/web && pnpm test:unit          # unit only
+# API Server 測試（apps/web）
+cd apps/web
+pnpm test:coverage                           # unit tests + coverage
+pnpm test                                    # unit tests only
+
+# Integration tests（需要 Supabase 運行中）
+INTEGRATION=1 pnpm test:int
+
+# E2E tests（需要 Supabase 運行中）
+E2E=1 pnpm test:e2e
 ```
 
 ### 7. 開啟 Cocos Creator 遊戲
@@ -171,7 +278,7 @@ cd apps/web && pnpm test:unit          # unit only
 
 ---
 
-## Windows 11 本地開發建置步驟
+## Windows 11 完整開發環境建置步驟
 
 ### 1. 安裝必要工具
 
@@ -181,14 +288,14 @@ cd apps/web && pnpm test:unit          # unit only
 # 安裝 winget（如尚未安裝）
 # 通常 Windows 11 已內建 winget
 
-# 安裝 Node.js 22
+# 安裝 Node.js 20+
 winget install OpenJS.NodeJS.LTS
 
 # 或使用 nvm-windows
 winget install CoreyButler.NVMforWindows
 # 重開 PowerShell 後：
-nvm install 22
-nvm use 22
+nvm install 20
+nvm use 20
 
 # 安裝 pnpm
 npm install -g pnpm
@@ -209,7 +316,7 @@ winget install Git.Git
 
 | 工具 | 下載網址 |
 |------|---------|
-| Node.js 22 LTS | https://nodejs.org/en/download |
+| Node.js 20+ LTS | https://nodejs.org/en/download |
 | Git | https://git-scm.com/download/win |
 | Supabase CLI | https://github.com/supabase/cli/releases（`.exe`）|
 | Cocos Dashboard | https://www.cocos.com/creator |
@@ -254,14 +361,18 @@ supabase start
 supabase db push
 ```
 
-### 5. 啟動 Next.js 開發伺服器
+### 5. 啟動 Fastify API 開發伺服器
 
 ```powershell
 # 從 workspace root 啟動（PowerShell）
 pnpm web
 
-# API 在 http://localhost:3001
-# 測試：在瀏覽器開啟 http://localhost:3001/api/v1/health
+# 或直接進入 apps/web
+Set-Location apps\web
+pnpm dev
+
+# API 在 http://localhost:3000
+# 測試：在瀏覽器開啟 http://localhost:3000/api/v1/health
 ```
 
 ### 6. 執行測試
@@ -270,8 +381,15 @@ pnpm web
 # 遊戲引擎測試
 pnpm test
 
-# API Server 測試
-pnpm web:test
+# API Server 測試（apps/web）
+Set-Location apps\web
+pnpm test:coverage
+
+# Integration tests（需要 Supabase 運行中）
+$env:INTEGRATION=1; pnpm test:int
+
+# E2E tests（需要 Supabase 運行中）
+$env:E2E=1; pnpm test:e2e
 ```
 
 ### 7. 開啟 Cocos Creator 遊戲
@@ -292,7 +410,7 @@ pnpm web:test
 pnpm install --no-frozen-lockfile
 ```
 
-### Supabase 啟動失敗（Docker 未啟動）
+### Docker not running → Supabase 啟動失敗
 
 ```bash
 # Mac
@@ -301,11 +419,18 @@ open -a Docker
 # Windows: 手動開啟 Docker Desktop 應用程式
 ```
 
+### Port 54321 already in use
+
+```bash
+supabase stop
+supabase start
+```
+
 ### JWT_SECRET 長度不足
 
 `JWT_SECRET` 必須至少 32 個字元，否則 `env.ts` Zod 驗證會失敗並輸出錯誤訊息。
 
-### apps/web 找不到 next
+### apps/web 缺少依賴
 
 ```bash
 cd apps/web && pnpm install
@@ -325,10 +450,10 @@ cd apps/web && pnpm install
 
 ## 架構文件
 
-完整 Phase 2A 架構設計請參閱 [docs/EDD-refactor-architecture.md](docs/EDD-refactor-architecture.md)（v6.1）。
+完整 Phase 2A 架構設計請參閱 [docs/EDD-refactor-architecture.md](docs/EDD-refactor-architecture.md)（v7.1）。
 
 ---
 
 *RTP 目標：97.5% ± 0.5%（4 種模式均已驗證）*
 *測試數量：888 tests（遊戲引擎）+ 138 tests（API unit，100% coverage）= 1,026 tests*
-*Phase 2A：13/16 步驟完成（2026-03-28）*
+*Phase 2A：16/16 步驟全部完成（2026-03-28）*

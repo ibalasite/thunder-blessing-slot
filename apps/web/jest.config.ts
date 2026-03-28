@@ -8,7 +8,8 @@ const config: Config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  testMatch: ['<rootDir>/tests/**/*.test.ts'],
+  testMatch: ['<rootDir>/tests/unit/**/*.test.ts', '<rootDir>/tests/e2e/**/*.test.ts'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/integration/'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

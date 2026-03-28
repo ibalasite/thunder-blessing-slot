@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node -r tsconfig-paths/register src/infrastructure/fastify/server.ts",
+    "dev": "NODE_ENV=development ts-node -r tsconfig-paths/register src/infrastructure/fastify/server.ts",
     "build": "tsc",
     "start": "node dist/infrastructure/fastify/server.js",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:int": "jest --config jest.integration.config.ts",
+    "test:e2e": "jest --config jest.e2e.config.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
