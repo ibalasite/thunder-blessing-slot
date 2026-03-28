@@ -149,13 +149,11 @@ describe('LocalEngineAdapter', () => {
         expect(res2.totalWin).toBeCloseTo(res1.totalWin * 2, 4);
     });
 
-    // ── fgMultIndex out-of-range fallback ─────────────────────────
+    // ── fgMultIndex out-of-range validation ─────────────────────────
 
-    it('falls back to multiplier 1 if fgMultIndex is out of range', async () => {
+    it('throws RangeError if fgMultIndex is out of range', async () => {
         const adapter = new LocalEngineAdapter(new SlotEngine(Math.random));
-        const res = await adapter.spin(makeReq({ fgMultIndex: 99 }));
-        // With fallback mult=1, totalWin = totalRawWin
-        const rawWin = res.cascadeSteps.reduce((s, step) => s + step.rawWin, 0);
-        expect(res.totalWin).toBeCloseTo(rawWin, 4);
+        await expect(adapter.spin(makeReq({ fgMultIndex: 99 }))).rejects.toThrow(RangeError);
+        await expect(adapter.spin(makeReq({ fgMultIndex: 99 }))).rejects.toThrow(/Invalid fgMultIndex: 99/);
     });
 });

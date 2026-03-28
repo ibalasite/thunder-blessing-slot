@@ -7,6 +7,7 @@
 import type { IWalletService, SpinTx } from '../contracts/IWalletService';
 import { InsufficientFundsError } from '../contracts/IAccountService';
 import { DEFAULT_BALANCE } from '../GameConfig';
+import { addMoney, subtractMoney } from '../core/money';
 
 export class LocalWalletService implements IWalletService {
     private _balance: number;
@@ -29,7 +30,7 @@ export class LocalWalletService implements IWalletService {
         if (!this.canAfford(wagered)) {
             throw new InsufficientFundsError(this._balance, wagered);
         }
-        this._balance = parseFloat((this._balance - wagered).toFixed(4));
+        this._balance = subtractMoney(this._balance, wagered);
         const tx: SpinTx = {
             txId:      `local-${++this._txCounter}`,
             wagered,
@@ -43,7 +44,7 @@ export class LocalWalletService implements IWalletService {
         if (this._pendingTx?.txId !== tx.txId) {
             throw new Error(`Invalid SpinTx: expected ${this._pendingTx?.txId}, got ${tx.txId}`);
         }
-        this._balance = parseFloat((this._balance + totalWin).toFixed(4));
+        this._balance = addMoney(this._balance, totalWin);
         this._pendingTx = null;
         return this._balance;
     }
@@ -57,10 +58,10 @@ export class LocalWalletService implements IWalletService {
         if (!this.canAfford(amount)) {
             throw new InsufficientFundsError(this._balance, amount);
         }
-        this._balance = parseFloat((this._balance - amount).toFixed(4));
+        this._balance = subtractMoney(this._balance, amount);
     }
 
     credit(amount: number): void {
-        this._balance = parseFloat((this._balance + amount).toFixed(4));
+        this._balance = addMoney(this._balance, amount);
     }
 }

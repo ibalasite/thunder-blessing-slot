@@ -21,6 +21,7 @@ import { IReelManager }    from '../contracts/IReelManager';
 import { IUIController }   from '../contracts/IUIController';
 import type { IWalletService, SpinTx } from '../contracts/IWalletService';
 import type { FullSpinOutcome, GameMode, SpinResponse, FGSpinOutcome } from '../contracts/types';
+import { logger } from './logger';
 import { WinLine }         from '../SlotEngine';
 import { calcWinAmount, findScatters } from '../SlotEngine';
 import {
@@ -73,15 +74,18 @@ export class GameFlowController {
 
         const mode: GameMode = this._session.extraBetOn ? 'extraBet' : 'main';
         const baseBet = this._baseTotalBet;
+        logger.info('Spin started', { bet: baseBet, mode });
         const outcome = await this._engine.fullSpin(mode, baseBet);
 
         const w = this._wallet;
         if (w) {
             if (!w.canAfford(outcome.wagered)) {
+                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: outcome.wagered, balance: w.getBalance() });
                 this._ui.setStatus('餘額不足！', '#ff4444'); return;
             }
         } else {
             if (!this._account.canAfford(outcome.wagered)) {
+                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: outcome.wagered });
                 this._ui.setStatus('餘額不足！', '#ff4444'); return;
             }
         }
@@ -136,7 +140,7 @@ export class GameFlowController {
             if (this.autoSpinCount > 0) this.autoSpinCount--;
             this._ui.updateAutoSpinLabel(this.autoSpinCount);
             this._ui.updateFreeLetters(BASE_ROWS);
-            this.doSpin();
+            await this.doSpin();
         } else if (this.autoSpinCount !== 0) {
             this.autoSpinCount = 0;
             this._ui.updateAutoSpinLabel(0);
@@ -154,7 +158,7 @@ export class GameFlowController {
 
         const ebMult = this._session.extraBetOn ? EXTRA_BET_MULT : 1;
         const baseBet = parseFloat((this._session.betPerLine * LINES_BASE * ebMult).toFixed(4));
-        const outcome = await this._engine.fullSpin('buyFG', baseBet);
+        const outcome = await this._engine.fullSpin('buyFG', baseBet, this._session.extraBetOn);
 
         const w = this._wallet;
         if (w) {
@@ -264,6 +268,7 @@ export class GameFlowController {
 
         // ── 3. FG Spin Loop (per-spin coin toss) ─────────────
         if (o.fgSpins.length > 0) {
+            logger.info('Free game entered', { multIndex: 0, spins: o.fgSpins.length });
             this._session.enterFreeGame(0);
             this._ui.showFGBar(0);
             this._ui.refresh();
@@ -308,8 +313,8 @@ export class GameFlowController {
                 this._ui.refresh();
 
                 if (this._session.roundWin >= o.totalBet * MAX_WIN_MULT * scale) {
-                    this._ui.setStatus('MAX WIN!', '#ff4444');
-                    await this._wait(1.0);
+                    this._ui.setStatus('MAX WIN REACHED! 🎉', '#FFD700');
+                    await this._wait(1.5);
                     break;
                 }
 
@@ -331,6 +336,7 @@ export class GameFlowController {
             }
 
             // ── 4. FG Settlement ──────────────────────────────
+            logger.info('Free game exited', { totalWin: this._session.roundWin });
             this._session.exitFreeGame();
             this._session.clearMarks();
             this._ui.hideFGBar();
@@ -375,8 +381,9 @@ export class GameFlowController {
 
             this._session.addRoundWin(stepWin);
 
-            if (this._wallet && balanceAfterDebit !== undefined) {
-                this._ui.setDisplayBalance(balanceAfterDebit + this._session.roundWin);
+            if (this._wallet) {
+                this._ui.setDisplayBalance(
+                    (this._wallet?.getBalance() ?? this._account.getBalance()) + this._session.roundWin);
             }
 
             // ③ 組合中獎符號摘要（顯示消了什麼、得多少分）
@@ -422,9 +429,13 @@ export class GameFlowController {
         await this._wait(0.4);
     }
 
-    // ══════════════════════════════════════════════════
-    // Auto Spin
-    // ══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // AUTO SPIN MANAGEMENT
+    // Handles auto-spin state: start, stop, and count tracking.
+    // onAutoSpinClick — toggled by the UI spin button when auto is active.
+    // startAutoSpin   — called by the auto-spin panel after the player
+    //                   selects a spin count (or ∞).
+    // ═══════════════════════════════════════════════════════════════════
 
     onAutoSpinClick(): void {
         if (this.autoSpinCount !== 0) {

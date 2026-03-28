@@ -8,12 +8,9 @@ import {
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
     FG_MULTIPLIERS,
     DEFAULT_BET, DEFAULT_BALANCE,
+    LINES_BASE, LINES_MAX,
 } from '../GameConfig';
 import { IGameSession } from '../contracts/IGameSession';
-
-// betPerLine 對應 25 條線 × betPerLine = totalBet
-const LINES_BASE = 25;
-const LINES_MAX  = 57;
 
 export class GameSession implements IGameSession {
     // ── 盤面 ──────────────────────────────────────────────
@@ -93,7 +90,7 @@ export class GameSession implements IGameSession {
     }
 
     computeTotalBet(): void {
-        const lines = this.currentRows <= 3 ? LINES_BASE : LINES_MAX;
+        const lines = this.currentRows <= BASE_ROWS ? LINES_BASE : LINES_MAX;
         this._totalBet = parseFloat(
             (this._betPerLine * lines * (this._extraBetOn ? 3 : 1)).toFixed(2)
         );

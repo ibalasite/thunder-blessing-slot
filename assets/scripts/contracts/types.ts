@@ -9,6 +9,9 @@
 import { SymType } from '../GameConfig';
 import { WinLine, CascadeStep, TBStep } from '../SlotEngine';
 
+/** Type-safe cell coordinate key in "reel,row" format */
+export type CellKeyStr = `${number},${number}`;
+
 // 重新導出，讓 contracts 層不需要直接 import SlotEngine
 export type { SymType, WinLine, CascadeStep, TBStep };
 
@@ -63,6 +66,7 @@ export interface FGSpinOutcome {
  */
 export interface FullSpinOutcome {
     mode:             GameMode;
+    extraBetOn:       boolean;    // true when Extra Bet was active (orthogonal to mode)
     totalBet:         number;
     wagered:          number;
     modePayoutScale:  number;

@@ -39,7 +39,7 @@ import {
     FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
     ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
     BUY_COST_MULT, EXTRA_BET_MULT,
-    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
+    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, EB_BUY_FG_PAYOUT_SCALE,
     BUY_FG_MIN_WIN_MULT, FG_SPIN_BONUS,
 } from './GameConfig';
 
@@ -218,7 +218,9 @@ export class SlotEngine {
         const upgrade = (sym: SymType): SymType =>
             ((SYMBOL_UPGRADE[sym as string] ?? sym) as SymType);
 
-        // 第一擊
+        // 第一擊：所有閃電標記格升階一次
+        // First hit: every marked cell is upgraded once via SYMBOL_UPGRADE chain.
+        // Example: L1 → P4 (low-tier lightning symbol becomes mid-tier premium)
         for (let ri = 0; ri < REEL_COUNT; ri++) {
             for (let row = 0; row < rows; row++) {
                 if (marks.has(`${ri},${row}`)) {
@@ -226,7 +228,21 @@ export class SlotEngine {
                 }
             }
         }
-        // 第二擊（機率 TB_SECOND_HIT_PROB）
+
+        // 第二擊（機率 TB_SECOND_HIT_PROB）：同一批標記格再升階一次
+        //
+        // Second hit (TB_SECOND_HIT_PROB ≈ 40% chance): the SAME marked cells
+        // are upgraded AGAIN — applied to the already-upgraded symbols from the first hit.
+        // This is intentional design: the second hit chains on top of the first hit.
+        //
+        // Example chain:
+        //   L1  →(first hit)→  P4  →(second hit)→  P3
+        //   P4  →(first hit)→  P3  →(second hit)→  P2
+        //   P3  →(first hit)→  P2  →(second hit)→  P1  (highest premium)
+        //
+        // This double-upgrade mechanic creates the "Thunder Blessing" excitement:
+        // players can go from a low-symbol grid to high-premium symbols in one activation,
+        // significantly boosting win potential on the same cascade step.
         if (this.rng() < TB_SECOND_HIT_PROB) {
             for (let ri = 0; ri < REEL_COUNT; ri++) {
                 for (let row = 0; row < rows; row++) {
@@ -377,15 +393,18 @@ export class SlotEngine {
      * Phase A 分數一定算入 TOTAL WIN，即使 Entry Toss 失敗。
      */
     computeFullSpin(opts: {
-        mode:     GameMode;
-        totalBet: number;
+        mode:        GameMode;
+        totalBet:    number;
+        extraBetOn?: boolean;  // orthogonal flag: EB SC guarantee active (even in buyFG mode)
     }): FullSpinOutcome {
         const { mode, totalBet } = opts;
-        const extraBet = mode === 'extraBet';
         const isBuyFG  = mode === 'buyFG';
+        // extraBet flag: true for 'extraBet' mode OR when extraBetOn is explicitly set
+        const extraBet = mode === 'extraBet' || opts.extraBetOn === true;
 
-        const modePayoutScale = isBuyFG  ? BUY_FG_PAYOUT_SCALE
-                              : extraBet ? EB_PAYOUT_SCALE
+        const modePayoutScale = (isBuyFG && extraBet) ? EB_BUY_FG_PAYOUT_SCALE
+                              : isBuyFG              ? BUY_FG_PAYOUT_SCALE
+                              : extraBet             ? EB_PAYOUT_SCALE
                               : 1;
         const wagered = isBuyFG  ? totalBet * BUY_COST_MULT
                       : extraBet ? totalBet * EXTRA_BET_MULT
@@ -405,7 +424,7 @@ export class SlotEngine {
             for (let s = 0; s < 100; s++) {
                 const r = this.simulateSpin({
                     totalBet,
-                    extraBet: !isBuyFG && extraBet,
+                    extraBet,      // pass SC guarantee for extraBet AND extraBetOn+buyFG
                     buyFG: isBuyFG,
                     startRows: currentRows,
                     lightningMarks: baseMarks,
@@ -446,11 +465,12 @@ export class SlotEngine {
 
                 let r: SpinResult;
                 if (isBuyFG) {
-                    r = this._guaranteedWinSpin(totalBet, mult, fgMarks);
+                    r = this._guaranteedWinSpin(totalBet, mult, fgMarks, extraBet);
                 } else {
                     r = this.simulateSpin({
                         inFreeGame: true, fgMultiplier: mult,
                         totalBet, lightningMarks: fgMarks,
+                        extraBet,
                     });
                 }
 
@@ -503,7 +523,7 @@ export class SlotEngine {
         totalWin = parseFloat(totalWin.toFixed(2));
 
         return {
-            mode, totalBet, wagered, modePayoutScale,
+            mode, extraBetOn: extraBet, totalBet, wagered, modePayoutScale,
             baseSpins, baseWin,
             fgTriggered,
             entryCoinToss,
@@ -522,11 +542,15 @@ export class SlotEngine {
         return FG_SPIN_BONUS[FG_SPIN_BONUS.length - 1].mult;
     }
 
-    private _guaranteedWinSpin(totalBet: number, mult: number, marks: Set<string>): SpinResult {
+    private _guaranteedWinSpin(
+        totalBet: number, mult: number, marks: Set<string>,
+        extraBet = false,
+    ): SpinResult {
         for (let attempt = 0; attempt < 50; attempt++) {
             const r = this.simulateSpin({
                 buyFG: true, fgMultiplier: mult,
                 totalBet, lightningMarks: marks,
+                extraBet,   // apply SC guarantee when extraBetOn+buyFG
                 maxCascade: 1,
             });
             if (r.totalRawWin > 0) return r;
@@ -534,6 +558,7 @@ export class SlotEngine {
         return this.simulateSpin({
             buyFG: true, fgMultiplier: mult,
             totalBet, lightningMarks: marks,
+            extraBet,
             maxCascade: 1,
         });
     }
@@ -548,12 +573,18 @@ export function createEngine(rng: () => number): SlotEngine {
  * 自由函式版 checkWins（向後相容 WinChecker import）
  * 第三個參數 totalBet 為保留參數，邏輯上不使用（獎金計算由 calcWinAmount 負責）
  *
- * NOTE: 此函式僅用於 pure win detection（不消耗 RNG），
- * 內部使用 dummy RNG（永遠不會被呼叫）。
+ * NOTE: 此函式僅用於 pure win detection（不消耗 RNG）。
+ * checkWins() 方法只做 PAYLINES 掃描，完全不呼叫 this.rng()，
+ * 因此 _sharedEngine 使用一個永遠拋出的 guard RNG 是安全的。
+ * 若未來有人誤將需要 RNG 的邏輯加入此路徑，guard 會立即報錯。
  */
 export function checkWins(grid: SymType[][], rows: number, _totalBet?: number): WinLine[] {
     return _sharedEngine.checkWins(grid, rows);
 }
 
-const _dummyRng = () => 0;
-const _sharedEngine = new SlotEngine(_dummyRng);
+/**
+ * Guard RNG: _sharedEngine 僅供 checkWins()（pure logic，不需要隨機數）。
+ * 如果任何路徑意外呼叫了這個 RNG，立刻丟出錯誤以便快速定位問題。
+ */
+const _guardRng = () => { throw new Error('_sharedEngine RNG should never be called — checkWins() is pure'); };
+const _sharedEngine = new SlotEngine(_guardRng);

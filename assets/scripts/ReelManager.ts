@@ -24,6 +24,33 @@ interface SymCell {
     sym:     SymType;
 }
 
+/**
+ * ReelLayout — Static helpers for reel cell coordinate calculations.
+ * Centralises all row↔Y and reel↔X conversions so that the positioning
+ * logic lives in one place rather than being repeated across ReelManager.
+ */
+class ReelLayout {
+    /**
+     * Convert a row index to a Y coordinate in the reel area.
+     * row=0 is the bottom-most row; Y increases upward.
+     */
+    static rowToY(row: number): number {
+        const totalH = MAX_ROWS * SYMBOL_H + (MAX_ROWS - 1) * SYMBOL_GAP;
+        const bottom = -(totalH / 2 - SYMBOL_H / 2);
+        return bottom + row * (SYMBOL_H + SYMBOL_GAP);
+    }
+
+    /**
+     * Compute the Y position of the cloud mask bottom edge.
+     * The edge sits at the midpoint between the topmost visible row
+     * and the first hidden row above it.
+     */
+    static cloudBottomY(visibleRows: number): number {
+        const topVisY = ReelLayout.rowToY(visibleRows - 1);
+        return topVisY + SYMBOL_H / 2 + SYMBOL_GAP / 2;
+    }
+}
+
 @ccclass('ReelManager')
 export class ReelManager extends Component implements IReelManager {
     // 事件匯流排 (GameBootstrap 監聽用)
@@ -35,7 +62,7 @@ export class ReelManager extends Component implements IReelManager {
     /** 由 GameBootstrap 在場景建立後注入 */
     init(session: IGameSession, rng?: RNGFunction): void {
         this._session = session;
-        this._rng = rng ?? (() => Math.random());
+        this._rng = rng ?? (() => { throw new Error('RNG not injected into ReelManager'); });
     }
 
     private _randomStripSym(): SymType {
@@ -111,9 +138,7 @@ export class ReelManager extends Component implements IReelManager {
 
     /** row 轉換為 Y 座標（row=0 在最底部，row 增加 = 往上） */
     private rowToY(row: number, _totalRows: number): number {
-        const totalH = MAX_ROWS * SYMBOL_H + (MAX_ROWS - 1) * SYMBOL_GAP;
-        const bottom = -(totalH / 2 - SYMBOL_H / 2);
-        return bottom + row * (SYMBOL_H + SYMBOL_GAP);
+        return ReelLayout.rowToY(row);
     }
 
     /** 更新符號格外觀 */
@@ -287,15 +312,22 @@ export class ReelManager extends Component implements IReelManager {
         if (cloudRows <= 0) { this.cloudNode.active = false; return; }
         this.cloudNode.active = true;
 
+        // Cloud mask geometry: the mask top edge sits at the midpoint between
+        // the topmost visible row and the first hidden row above it.
+        // SYMBOL_HALF = half-height of one symbol cell
+        // GAP_HALF = half-height of the gap between symbols
+        const SYMBOL_HALF = SYMBOL_H / 2;
+        const GAP_HALF = SYMBOL_GAP / 2;
+
         // 寬度覆蓋整個滾輪區（含左右各半格餘量）
         const totalW = REEL_COUNT * (SYMBOL_W + REEL_GAP) + SYMBOL_W;
         // 雲霧覆蓋上方隱藏列（row visibleRows ~ MAX_ROWS-1）
         // cloudBottom = 最後可見列頂邊 + 半行間距
         const topVisY   = this.rowToY(visibleRows - 1, MAX_ROWS);
-        const cloudBottom = topVisY + SYMBOL_H / 2 + SYMBOL_GAP / 2;
+        const cloudBottom = topVisY + SYMBOL_HALF + GAP_HALF;
         // cloudTop = 最頂列頂邊 + 餘量
         const topRowY   = this.rowToY(MAX_ROWS - 1, MAX_ROWS);
-        const cloudTop  = topRowY + SYMBOL_H / 2 + 6;
+        const cloudTop  = topRowY + SYMBOL_HALF + 6;
         const cloudH    = cloudTop - cloudBottom;
 
         // ① 半透明底色：符號仍可見，但有色調標示雲朵區域

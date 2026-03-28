@@ -26,11 +26,21 @@ export function createCSPRNG(): RNGFunction {
         };
     }
 
-    // Node.js fallback
+    // Node.js fallback with entropy buffer (256 uint32s per syscall)
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const nodeCrypto = require('crypto') as typeof import('crypto');
-        return () => nodeCrypto.randomBytes(4).readUInt32BE(0) / 0x100000000;
+        let buf = Buffer.alloc(0);
+        let bufOffset = 0;
+        return () => {
+            if (bufOffset + 4 > buf.length) {
+                buf = nodeCrypto.randomBytes(1024); // 256 uint32s per syscall
+                bufOffset = 0;
+            }
+            const val = buf.readUInt32BE(bufOffset);
+            bufOffset += 4;
+            return val / 0x100000000;
+        };
     } catch {
         throw new Error(
             'No CSPRNG available. ' +

@@ -100,7 +100,7 @@ interface ModeReport {
     perSeedRTPs:    number[];
 }
 
-function simulateMultiSeed(mode: GameMode, nPerSeed: number, seeds: number[]): ModeReport {
+function simulateMultiSeed(mode: GameMode, nPerSeed: number, seeds: number[], extraBetOn = false): ModeReport {
     const totalBet = 1;
     let totalWagered  = 0;
     let totalReturn   = 0;
@@ -123,7 +123,7 @@ function simulateMultiSeed(mode: GameMode, nPerSeed: number, seeds: number[]): M
         let seedReturn  = 0;
 
         for (let i = 0; i < nPerSeed; i++) {
-            const o: FullSpinOutcome = engine.computeFullSpin({ mode, totalBet });
+            const o: FullSpinOutcome = engine.computeFullSpin({ mode, totalBet, extraBetOn });
             const wagered = o.wagered;
             const win     = o.totalWin;
             const mult    = win / totalBet;
@@ -171,7 +171,7 @@ function simulateMultiSeed(mode: GameMode, nPerSeed: number, seeds: number[]): M
     const variance = sumSqDev / N;
 
     return {
-        mode:   mode === 'main' ? 'Main Game' : mode === 'buyFG' ? 'Buy Free Game' : 'Extra Bet',
+        mode:   mode === 'main' ? 'Main Game' : mode === 'buyFG' ? (extraBetOn ? 'EB+Buy Free Game' : 'Buy Free Game') : 'Extra Bet',
         modeKey: mode,
         N,
         nSeeds: seeds.length,
@@ -332,9 +332,10 @@ function printReport(r: ModeReport): void {
 // Tests — multi-seed aggregation for stable RTP estimation
 // ══════════════════════════════════════════════════════════════════
 
-const N_MAIN_PER_SEED = 200_000;
-const N_BUY_PER_SEED  = 50_000;
-const N_EB_PER_SEED   = 200_000;
+const N_MAIN_PER_SEED    = 200_000;
+const N_BUY_PER_SEED     = 50_000;
+const N_EB_PER_SEED      = 200_000;
+const N_EB_BUY_PER_SEED  = 50_000;
 
 describe('MODE 1: Main Game RTP Report', () => {
     it(`Main Game 統計報表 (${SEEDS.length} seeds × ${(N_MAIN_PER_SEED/1000)}k = ${(SEEDS.length * N_MAIN_PER_SEED / 1_000_000).toFixed(1)}M spins)`, () => {
@@ -357,6 +358,15 @@ describe('MODE 2: Buy Free Game RTP Report', () => {
 describe('MODE 3: Extra Bet RTP Report', () => {
     it(`Extra Bet 統計報表 (${SEEDS.length} seeds × ${(N_EB_PER_SEED/1000)}k = ${(SEEDS.length * N_EB_PER_SEED / 1_000_000).toFixed(1)}M spins)`, () => {
         const r = simulateMultiSeed('extraBet', N_EB_PER_SEED, SEEDS);
+        printReport(r);
+        expect(r.rtp).toBeGreaterThan(0.95);
+        expect(r.rtp).toBeLessThan(1.00);
+    });
+});
+
+describe('MODE 4: Extra Bet ON + Buy Free Game RTP Report', () => {
+    it(`EB+BuyFG 統計報表 (${SEEDS.length} seeds × ${(N_EB_BUY_PER_SEED/1000)}k = ${(SEEDS.length * N_EB_BUY_PER_SEED / 1000).toFixed(0)}k sessions)`, () => {
+        const r = simulateMultiSeed('buyFG', N_EB_BUY_PER_SEED, SEEDS, true);
         printReport(r);
         expect(r.rtp).toBeGreaterThan(0.95);
         expect(r.rtp).toBeLessThan(1.00);

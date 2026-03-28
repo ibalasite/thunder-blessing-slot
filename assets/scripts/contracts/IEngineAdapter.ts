@@ -9,5 +9,5 @@ export interface IEngineAdapter {
     spin(req: SpinRequest): Promise<SpinResponse>;
 
     /** Atomic: 一次算完整個 spin 含 FG chain，UI 只需播放 */
-    fullSpin(mode: GameMode, totalBet: number): Promise<FullSpinOutcome>;
+    fullSpin(mode: GameMode, totalBet: number, extraBetOn?: boolean): Promise<FullSpinOutcome>;
 }

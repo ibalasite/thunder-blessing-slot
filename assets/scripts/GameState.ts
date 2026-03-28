@@ -55,5 +55,10 @@ export class GameState {
 }
 
 // 單例
+/**
+ * @deprecated Use GameSession (injected via IGameSession) instead.
+ * This global singleton will be removed in a future version.
+ * See GameBootstrap.ts for the DI wiring pattern.
+ */
 export const gs = new GameState();
 

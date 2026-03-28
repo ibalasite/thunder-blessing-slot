@@ -93,7 +93,7 @@ export class UIController extends Component implements IUIController {
         this._session = session;
         this._account = account;
         this._reelMgr = reelMgr;
-        this._rng = rng ?? (() => Math.random());
+        this._rng = rng ?? (() => { throw new Error('RNG not injected into UIController'); });
     }
 
     /** SceneBuilder 建立面板後呼叫，注入所有面板節點 / 元件 */
@@ -149,7 +149,9 @@ export class UIController extends Component implements IUIController {
     setStatus(msg: string, color = '#ffffff'): void {
         if (!this.lblStatus) return;
         this.lblStatus.string = msg;
-        this.lblStatus.color  = Color.fromHEX(new Color(), color);
+        // Validate hex color format before use
+        const safeColor = /^#[0-9a-fA-F]{6}$/.test(color ?? '') ? color! : '#ffffff';
+        this.lblStatus.color  = Color.fromHEX(new Color(), safeColor);
     }
 
     showWinPop(stepWin: number, roundWin: number): void {
@@ -264,9 +266,11 @@ export class UIController extends Component implements IUIController {
             result = this._predeterminedCoin;
             this._predeterminedCoin = undefined;
         } else {
-            const headsProb = this._coinIsFGContext
-                ? (COIN_TOSS_HEADS_PROB[this._session.fgMultIndex] ?? 0.40)
-                : this._coinEntryHeadsProb;
+            const idx = this._session.fgMultIndex;
+            if (idx < 0 || idx >= COIN_TOSS_HEADS_PROB.length) {
+                throw new RangeError(`fgMultIndex ${idx} out of bounds for COIN_TOSS_HEADS_PROB`);
+            }
+            const headsProb = this._coinIsFGContext ? COIN_TOSS_HEADS_PROB[idx] : this._coinEntryHeadsProb;
             result = this._rng() < headsProb;
         }
         const coinNode  = this.coinGfxNode;

@@ -13,7 +13,10 @@ export class LocalEngineAdapter implements IEngineAdapter {
 
     /** Legacy single-spin */
     async spin(req: SpinRequest): Promise<SpinResponse> {
-        const fgMult   = FG_MULTIPLIERS[req.fgMultIndex] ?? 1;
+        if (req.fgMultIndex < 0 || req.fgMultIndex >= FG_MULTIPLIERS.length) {
+            throw new RangeError(`Invalid fgMultIndex: ${req.fgMultIndex}, must be 0-${FG_MULTIPLIERS.length - 1}`);
+        }
+        const fgMult   = FG_MULTIPLIERS[req.fgMultIndex];
         const marks    = new Set<string>(req.marks);
 
         const result = this._engine.simulateSpin({
@@ -37,7 +40,7 @@ export class LocalEngineAdapter implements IEngineAdapter {
     }
 
     /** Atomic full-spin: 一次算完 base + FG chain */
-    async fullSpin(mode: GameMode, totalBet: number): Promise<FullSpinOutcome> {
-        return this._engine.computeFullSpin({ mode, totalBet });
+    async fullSpin(mode: GameMode, totalBet: number, extraBetOn?: boolean): Promise<FullSpinOutcome> {
+        return this._engine.computeFullSpin({ mode, totalBet, extraBetOn });
     }
 }

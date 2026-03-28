@@ -37,6 +37,7 @@ function makeSpinResponse(overrides: Partial<SpinResponse> = {}): SpinResponse {
 function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome {
     return {
         mode:            'main',
+        extraBetOn:      false,
         totalBet:        1,
         wagered:         1,
         modePayoutScale: 1,

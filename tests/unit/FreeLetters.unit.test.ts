@@ -40,6 +40,7 @@ function makeSpinResponse(overrides: Partial<SpinResponse> = {}): SpinResponse {
 function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome {
     return {
         mode:            'main',
+        extraBetOn:      false,
         totalBet:        1,
         wagered:         1,
         modePayoutScale: 1,
@@ -296,8 +297,8 @@ describe('Buy FG controller flow', () => {
             sess, makeAccount(200), eng, makeReels(), ui, instantWait);
         await ctrl.onBuyFreeGame();
 
-        // Should call fullSpin with 'buyFG'
-        expect(eng.fullSpin).toHaveBeenCalledWith('buyFG', expect.any(Number));
+        // Should call fullSpin with 'buyFG' (3rd arg is optional extraBetOn boolean)
+        expect(eng.fullSpin).toHaveBeenCalledWith('buyFG', expect.any(Number), expect.any(Boolean));
 
         // Should show FG bar (entered FG)
         expect(ui.showFGBar).toHaveBeenCalled();

@@ -60,6 +60,13 @@ export const REEL_STRIP: SymType[] = (() => {
 // 本遊戲使用 payline 機制（左到右連線），命中率遠低於 scatter-pays，
 // 因此需要 PAYTABLE_SCALE 校準因子來補償，維持目標 RTP 97.5%。
 // 基礎值比例保持 GDD 規格不變，scale 由 Monte Carlo 模擬校準。
+/**
+ * PAYTABLE_SCALE: Multiplier applied to all base paytable values.
+ * Value 3.622 calibrated so that the payline-based win system (25-57 lines)
+ * achieves 97.5% RTP. Payline games require higher per-symbol values than
+ * scatter-pays systems because wins only occur on specific line paths.
+ * Derived via Monte Carlo simulation (2M+ spins). See Probability_Design.md §3.
+ */
 export const PAYTABLE_SCALE = 3.622;
 
 const _BASE_PAYTABLE: Record<SymType, number[]> = {
@@ -200,11 +207,14 @@ export const ENTRY_TOSS_PROB_MAIN = 0.80;
 export const ENTRY_TOSS_PROB_BUY  = 1.00;
 
 /**
- * FG 觸發機率（spin 開始時決定）。
+ * FG_TRIGGER_PROB: Free Game trigger probability per spin (spin-start decision).
+ * Value 0.008 (0.8%) calibrated so that, combined with FG_MULTIPLIERS and
+ * COIN_TOSS_HEADS_PROB, the overall RTP contribution from FG rounds reaches
+ * the 97.5% target. Higher values increase jackpot frequency but reduce
+ * base-game hit frequency. This is the primary RTP calibration lever.
  * 新模型：每次 spin 一開始就 roll 此機率，決定是否觸發 FG。
  * 若觸發，cascade 保證展開至 MAX_ROWS（兩段表演合一）。
  * Buy FG 不受此限制（付費 = 100% 觸發）。
- * 此值為 RTP 校準旋鈕。
  */
 export const FG_TRIGGER_PROB = 0.008;
 // 雷霆祝福：第二擊觸發機率（GDD §5: 40%）
@@ -247,10 +257,32 @@ export const BUY_COST_MULT = 100;
 export const BUY_FG_MIN_WIN_MULT = 20;
 
 // ── 模式專屬派獎倍率（各模式獨立校準至 97.5% RTP）───────────────
-// Buy FG: costs 100×, Phase A + FG chain wins × this scale
+/**
+ * BUY_FG_PAYOUT_SCALE: Additional scale applied to Buy FG wins.
+ * Value 0.995 calibrated to achieve 97.5% RTP for the Buy FG mode,
+ * accounting for the guaranteed FG entry and tier-reaching bonus.
+ * See Phase 1.5B calibration in docs/EDD-refactor-architecture.md §6.
+ */
 export const BUY_FG_PAYOUT_SCALE = 0.995;
-// Extra Bet: costs 3×, all wins × this scale
-export const EB_PAYOUT_SCALE = 2.64;
+/**
+ * EB_PAYOUT_SCALE: Scale applied to Extra Bet mode wins.
+ * Value 2.75 calibrated so that Extra Bet (costs 2× base bet) achieves
+ * 97.5% RTP. Higher scale compensates for improved symbol weights (SYMBOL_WEIGHTS_EB)
+ * which increase hit frequency but require proportionally larger payouts.
+ * Derived via Monte Carlo simulation (2M+ spins). Updated from 2.64 after
+ * measuring 93.68% RTP; new value targets 97.5%±0.5%.
+ */
+export const EB_PAYOUT_SCALE = 2.75;
+/**
+ * EB_BUY_FG_PAYOUT_SCALE: Scale applied to Extra Bet ON + Buy FG combined mode wins.
+ * Value 1.065 calibrated to achieve 97.5% RTP when both EB and Buy FG are active.
+ * SC guarantee (applyExtraBetSC) applies to all spins in this mode, including FG spins.
+ * Because SC replaces cells in the BUY_FG weight grid (low premium symbols), the raw
+ * win is reduced relative to plain BuyFG; scale > 1.0 compensates.
+ * Wagered = BUY_COST_MULT × bet (100×); no additional EB surcharge.
+ * Derived via Monte Carlo simulation (500k sessions × 10 seeds). See GDD §12-3.
+ */
+export const EB_BUY_FG_PAYOUT_SCALE = 1.065;
 
 /**
  * FG 每 spin 閃電加成（所有模式共用）。

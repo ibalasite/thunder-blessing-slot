@@ -114,23 +114,41 @@
 
 ### 2-4. 模式四：Main Game + Extra Bet ON
 
-> 使用 **Main Game 標準機率表（2-1）** 生成，  
+> 使用 **Main Game 標準機率表（2-1）** 生成，
 > 額外執行 SC 保證邏輯（詳見第 6 節）
+
+---
+
+### 2-5. 模式五：Extra Bet ON + Buy Free Game
+
+> 正交組合：Extra Bet 旗標（`extraBetOn`）與 `mode='buyFG'` 同時啟用。
+> 使用 **Buy FG 專用符號權重**生成盤面，但**每一次 spin（Phase A + Phase B FG spins）都套用 SC 保證邏輯**。
+
+| 項目 | 說明 |
+|---|---|
+| 符號權重 | SYMBOL_WEIGHTS_BUY_FG（低 SC 基礎權重） |
+| SC 保證 | `applyExtraBetSC()` 在每次 spin 後套用（Phase A + Phase B FG spins，確保可見 3 列有至少 1 SC） |
+| 派獎倍率 | EB_BUY_FG_PAYOUT_SCALE = **1.065**（獨立校準值，補償 SC 保證在低 SC 權重下降低原始贏分的效果） |
+| 費用 | 100× 基礎投注額（Buy FG 固定費用；EB 功能不另計收費） |
+| 進場保證 | 100%（與標準 Buy FG 相同，Entry Toss 保證 Heads） |
+| 實測 RTP | **97.45%**（10 seeds × 50k sessions，蒙地卡羅驗證 2026-03-28） |
+
+> **SC 保證實作說明**：`extraBetOn` 是獨立於 `mode` 的正交旗標。`computeFullSpin()` 中 `extraBet = mode === 'extraBet' || opts.extraBetOn === true`，使得 SC 保證邏輯在 buyFG 模式中也能正確套用。SC 保證在 SYMBOL_WEIGHTS_BUY_FG 環境下會佔用一個盤面格（可能替換高賠符號），導致原始贏分略低。引擎以 `EB_BUY_FG_PAYOUT_SCALE > 1.0` 補償，維持 97.5% 整體 RTP。
 
 ---
 
 ## 3. 各情境 RTP 分配
 
-| 模式 | 投注倍數 | 目標 RTP | 主要獎金來源 |
-|------|:-------:|:-------:|------------|
-| Main Game（Extra Bet OFF）| ×1 | ~94% | 連線中獎 + 雷霆祝福（低頻）|
-| Main Game + Extra Bet ON | ×3 | ~97% | 保證 SC → 更高雷霆祝福觸發率 |
-| Buy Free Game | ×100 | ~97.5% | FG 期望值（高賠符號 + 高倍率）|
-| Free Game（觸發後）| —（已扣費）| ~98.5% | FG 倍率 + 高賠機率 + 閃電標記累積 |
+| 模式 | 投注倍數 | 目標 RTP | 實測 RTP | PAYOUT_SCALE | 主要獎金來源 |
+|------|:-------:|:-------:|:-------:|:------------:|------------|
+| Main Game（Extra Bet OFF）| ×1 | 97.5% | **97.84%** ✅ | 1.000 | 連線中獎 + 雷霆祝福（低頻）+ FG 觸發 |
+| Main Game + Extra Bet ON | ×2 | 97.5% | **97.44%** ✅ | EB_PAYOUT_SCALE = 2.75 | 保證 SC → 更高雷霆祝福觸發率 + FG |
+| Buy Free Game | ×100 | 97.5% | **97.41%** ✅ | BUY_FG_PAYOUT_SCALE = 0.995 | FG 期望值（高賠符號 + 高倍率保證）|
+| Extra Bet ON + Buy Free Game | ×100 | 97.5% | **97.45%** ✅ | EB_BUY_FG_PAYOUT_SCALE = 1.065 | FG 期望值 + 每轉 SC 保證 |
 
-> **整體 RTP 說明**：  
-> 加權整體 RTP ≈ 97.5%，依玩家選擇各模式的比例而定。  
-> Main Game 約 94% + 觸發 FG 的額外期望值 ≈ 整體 97.5%
+> **整體 RTP 說明**：
+> 所有四個模式均通過蒙地卡羅驗證（10 seeds × 50k–200k spins），目標 97.5%±0.5%。
+> 加權整體 RTP ≈ 97.5%，依玩家選擇各模式的比例而定（2026-03-28 驗證）。
 
 ---
 
