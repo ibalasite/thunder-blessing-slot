@@ -1,7 +1,8 @@
 {
   "name": "thunder-blessing-slot",
   "version": "1.0.0",
-  "description": "Thunder Blessing Slot Game",
+  "description": "Thunder Blessing Slot — mono-repo root (Cocos game + Next.js API)",
+  "private": true,
   "main": "main.js",
   "scripts": {
     "test": "jest",
@@ -9,10 +10,16 @@
     "test:integration": "jest --testPathPatterns=integration",
     "test:e2e": "jest --testPathPatterns=e2e",
     "test:coverage": "jest --coverage",
-    "deploy": "gh-pages --dotfiles --dist build/web-desktop"
+    "deploy": "gh-pages --dotfiles --dist build/web-desktop",
+    "web": "pnpm --filter @thunder/web dev",
+    "web:build": "pnpm --filter @thunder/web build",
+    "web:test": "pnpm --filter @thunder/web test",
+    "worker:dev": "pnpm --filter @thunder/worker dev"
   },
   "engines": {
-    "cocos-creator": "3.8.0"
+    "cocos-creator": "3.8.0",
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
   },
   "creator": {
     "version": "3.8.7",

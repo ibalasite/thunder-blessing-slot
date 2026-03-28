@@ -13,55 +13,34 @@
 ## 專案結構
 
 ```
-thunder-blessing-slot/
-├── assets/
-│   ├── scenes/
-│   │   └── Main.scene          ← 遊戲主場景
-│   └── scripts/
-│       ├── GameConfig.ts       ← 所有遊戲常數（賠率、符號、尺寸）
-│       ├── GameState.ts        ← 遊戲狀態管理
-│       ├── WinChecker.ts       ← 中獎判斷邏輯
-│       ├── ReelManager.ts      ← 滾輪視覺 + 動畫
-│       ├── UIController.ts     ← UI 元素管理
-│       └── GameBootstrap.ts    ← 主控制器（遊戲主流程）
-├── project.json
-├── tsconfig.json
-├── GDD_Thunder_Blessing_Slot.md   ← 完整遊戲設計文件
-├── SETUP_GUIDE.md                 ← 詳細開發環境設定指南
-└── GEMINI_IMAGE_PROMPTS.md        ← 遊戲美術 AI Prompts
+thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
+├── assets/scripts/                  ← Cocos 遊戲邏輯（SlotEngine、GameConfig 等）
+├── tests/                           ← 遊戲引擎測試（Jest）
+├── apps/
+│   ├── web/                         ← Next.js API Server（Phase 2A）
+│   │   ├── src/
+│   │   │   ├── app/api/v1/         ← Route Handlers（auth/wallet/game）
+│   │   │   ├── interfaces/         ← DI 介面（IAuthProvider、IWalletRepo 等）
+│   │   │   ├── adapters/           ← Supabase / Redis 實作
+│   │   │   ├── rng/                ← CryptoRNGProvider / SeededRNGProvider
+│   │   │   ├── services/           ← BetRangeService 等
+│   │   │   ├── shared/             ← AppError / errorHandler / withAuth
+│   │   │   └── container.ts        ← Composition Root（DI 接線）
+│   │   └── tests/unit/             ← 100% coverage unit tests
+│   └── worker/                     ← 每日 RTP 報表 / spin_logs 歸檔
+├── infra/k8s/                       ← Kubernetes 設定（base + overlays/dev）
+├── supabase/
+│   ├── config.toml                  ← Supabase local config
+│   ├── migrations/                  ← 版本化 SQL（9 張資料表）
+│   └── seed.sql                     ← 開發用測試資料
+├── .github/workflows/
+│   ├── ci.yml                       ← 每次 Push 執行測試
+│   ├── db-migrate.yml               ← migration 觸發
+│   └── deploy-demo.yml              ← Render 部署
+├── pnpm-workspace.yaml
+├── package.json
+└── docs/EDD-refactor-architecture.md  ← 完整架構設計文件 (v6.0)
 ```
-
----
-
-## 環境需求
-
-- [Cocos Dashboard](https://www.cocos.com/creator)（免費）
-- Cocos Creator **3.8.x**
-
----
-
-## 安裝 & 執行
-
-### 1. 安裝 Cocos Creator
-
-1. 前往 https://www.cocos.com/creator 下載 **Cocos Dashboard**
-2. 安裝並開啟 Dashboard
-3. 左側點選「安裝」頁籤 → 選擇 **Cocos Creator 3.8.x** → 安裝（約 1-2 GB）
-
-### 2. 開啟專案
-
-1. 在 Cocos Dashboard 左側點選「Projects」
-2. 點選「Add」或「Open Other」
-3. 瀏覽並選擇此資料夾：`C:\Projects\thunder-blessing-slot`
-4. 等待初始化完成（首次約 1-3 分鐘）
-
-### 3. 執行遊戲
-
-1. 在 Assets 面板中雙擊 `assets/scenes/Main.scene` 載入場景
-2. 點選頂部工具列的 **▶ Play** 按鈕
-3. 遊戲會在 Cocos Creator 內建預覽視窗中啟動
-
-> 詳細步驟請參考 [SETUP_GUIDE.md](SETUP_GUIDE.md)
 
 ---
 
@@ -74,13 +53,282 @@ thunder-blessing-slot/
 | 基本連線數 | 25 條（最大 57 條） |
 | 最大獎金 | 30,000 × 總投注額 |
 
-### 核心機制
+---
 
-- **Cascade（連鎖消除）**：中獎符號消除後，上方符號下落，滾輪逐步擴展至 6 列
-- **Thunder Blessing Scatter**：閃電標記出現時，Scatter 可將特定符號全部替換成同一種
-- **Coin Toss（硬幣翻轉）**：進入免費遊戲前，翻轉硬幣決定遊戲次數（8 / 12 / 20 次）及倍率
-- **Free Game（免費遊戲）**：Scatter 觸發，可累積再次觸發
-- **Extra Bet**：額外投注提升 Scatter 出現機率
-- **Buy Feature**：直接購買免費遊戲（25× 或 100× 總投注額）
+## 開發環境建置
 
-> 完整詳細規則請參考 [GDD_Thunder_Blessing_Slot.md](GDD_Thunder_Blessing_Slot.md)
+### 系統需求
+
+| | Mac | Windows 11 |
+|--|-----|------------|
+| Node.js | 22 LTS | 22 LTS |
+| pnpm | 10+ | 10+ |
+| Cocos Creator | 3.8.x | 3.8.x |
+| Supabase CLI | 2.x | 2.x |
+| Rancher Desktop | 1.x（可選）| 1.x（可選）|
+
+---
+
+## Mac 本地開發建置步驟
+
+### 1. 安裝必要工具
+
+```bash
+# 安裝 Node.js 22 (使用 nvm)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+nvm install 22
+nvm use 22
+
+# 安裝 pnpm
+npm install -g pnpm
+
+# 安裝 Supabase CLI
+brew install supabase/tap/supabase
+
+# 安裝 Cocos Dashboard
+# 前往 https://www.cocos.com/creator 下載 Mac 版
+# 安裝後在 Dashboard 安裝 Cocos Creator 3.8.x
+```
+
+### 2. Clone & 安裝依賴
+
+```bash
+git clone https://github.com/<owner>/thunder-blessing-slot.git
+cd thunder-blessing-slot
+
+# 安裝 workspace 依賴（root + apps/web + apps/worker）
+pnpm install
+```
+
+### 3. 設定環境變數
+
+```bash
+# 複製 web 環境變數範本
+cp apps/web/.env.example apps/web/.env.local
+```
+
+編輯 `apps/web/.env.local`：
+
+```env
+NODE_ENV=development
+SUPABASE_URL=http://localhost:54321
+SUPABASE_SERVICE_ROLE_KEY=<取自 supabase start 輸出>
+JWT_SECRET=dev-local-jwt-secret-min-32-chars-ok
+```
+
+### 4. 啟動 Supabase 本地服務
+
+```bash
+# 啟動 Supabase（PostgreSQL + Auth + Studio）
+supabase start
+
+# 輸出範例：
+#   API URL: http://localhost:54321
+#   DB URL: postgresql://postgres:postgres@localhost:54322/postgres
+#   Studio URL: http://localhost:54323
+#   Service Role Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# 執行 migrations
+supabase db push
+
+# （可選）植入測試資料
+supabase db reset --db-url postgresql://postgres:postgres@localhost:54322/postgres
+```
+
+### 5. 啟動 Next.js 開發伺服器
+
+```bash
+# 從 workspace root 啟動
+pnpm web
+
+# 或直接進入 apps/web
+cd apps/web && pnpm dev
+
+# API 在 http://localhost:3001
+# 測試 health: curl http://localhost:3001/api/v1/health
+```
+
+### 6. 執行測試
+
+```bash
+# 遊戲引擎測試（根目錄）
+pnpm test                              # 全部（888 tests）
+pnpm test:unit                         # 單元測試
+pnpm test:integration                  # 整合測試
+
+# API Server 測試（apps/web，100% coverage）
+pnpm web:test                          # 全部 + coverage
+cd apps/web && pnpm test:unit          # unit only
+```
+
+### 7. 開啟 Cocos Creator 遊戲
+
+```bash
+# 在 Cocos Dashboard 開啟根目錄作為專案
+# 選擇 Cocos Creator 3.8.x
+# 雙擊 assets/scenes/Main.scene → 點 Play ▶
+```
+
+---
+
+## Windows 11 本地開發建置步驟
+
+### 1. 安裝必要工具
+
+**方法一：使用 PowerShell（管理員）**
+
+```powershell
+# 安裝 winget（如尚未安裝）
+# 通常 Windows 11 已內建 winget
+
+# 安裝 Node.js 22
+winget install OpenJS.NodeJS.LTS
+
+# 或使用 nvm-windows
+winget install CoreyButler.NVMforWindows
+# 重開 PowerShell 後：
+nvm install 22
+nvm use 22
+
+# 安裝 pnpm
+npm install -g pnpm
+
+# 安裝 Scoop（用於安裝 Supabase CLI）
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+
+# 安裝 Supabase CLI
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+
+# 安裝 Git
+winget install Git.Git
+```
+
+**方法二：手動下載安裝**
+
+| 工具 | 下載網址 |
+|------|---------|
+| Node.js 22 LTS | https://nodejs.org/en/download |
+| Git | https://git-scm.com/download/win |
+| Supabase CLI | https://github.com/supabase/cli/releases（`.exe`）|
+| Cocos Dashboard | https://www.cocos.com/creator |
+
+### 2. Clone & 安裝依賴
+
+```powershell
+# 在 PowerShell 中執行
+git clone https://github.com/<owner>/thunder-blessing-slot.git
+cd thunder-blessing-slot
+
+# 安裝 workspace 依賴
+pnpm install
+```
+
+### 3. 設定環境變數
+
+```powershell
+# 複製範本
+Copy-Item apps\web\.env.example apps\web\.env.local
+```
+
+用記事本或 VS Code 編輯 `apps\web\.env.local`：
+
+```env
+NODE_ENV=development
+SUPABASE_URL=http://localhost:54321
+SUPABASE_SERVICE_ROLE_KEY=<取自 supabase start 輸出>
+JWT_SECRET=dev-local-jwt-secret-min-32-chars-ok
+```
+
+### 4. 啟動 Supabase 本地服務
+
+> **前提**：Windows 11 需安裝 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+> 開啟 Docker Desktop → Settings → Use WSL 2 → Apply
+
+```powershell
+# 啟動 Supabase
+supabase start
+
+# 執行 migrations
+supabase db push
+```
+
+### 5. 啟動 Next.js 開發伺服器
+
+```powershell
+# 從 workspace root 啟動（PowerShell）
+pnpm web
+
+# API 在 http://localhost:3001
+# 測試：在瀏覽器開啟 http://localhost:3001/api/v1/health
+```
+
+### 6. 執行測試
+
+```powershell
+# 遊戲引擎測試
+pnpm test
+
+# API Server 測試
+pnpm web:test
+```
+
+### 7. 開啟 Cocos Creator 遊戲
+
+1. 安裝並開啟 Cocos Dashboard
+2. 左側點選「安裝」→ 安裝 **Cocos Creator 3.8.x**
+3. 左側點選「Projects」→「Add」→ 選擇專案根目錄
+4. 等待初始化（首次約 2-3 分鐘）
+5. 雙擊 `assets/scenes/Main.scene` → 點 **▶ Play**
+
+---
+
+## 常見問題
+
+### pnpm install 出現 lockfile 錯誤
+
+```bash
+pnpm install --no-frozen-lockfile
+```
+
+### Supabase 啟動失敗（Docker 未啟動）
+
+```bash
+# Mac
+open -a Docker
+
+# Windows: 手動開啟 Docker Desktop 應用程式
+```
+
+### JWT_SECRET 長度不足
+
+`JWT_SECRET` 必須至少 32 個字元，否則 `env.ts` Zod 驗證會失敗並輸出錯誤訊息。
+
+### apps/web 找不到 next
+
+```bash
+cd apps/web && pnpm install
+```
+
+---
+
+## CI/CD
+
+| 觸發 | 動作 |
+|------|------|
+| 每次 Push | 遊戲引擎測試 + API unit tests（100% coverage）|
+| main branch | 執行全部測試 → Deploy to Render |
+| `supabase/migrations/` 變更 | 觸發 DB migration |
+
+---
+
+## 架構文件
+
+完整 Phase 2A 架構設計請參閱 [docs/EDD-refactor-architecture.md](docs/EDD-refactor-architecture.md)（v6.1）。
+
+---
+
+*RTP 目標：97.5% ± 0.5%（4 種模式均已驗證）*
+*測試數量：888 tests（遊戲引擎）+ 138 tests（API unit，100% coverage）= 1,026 tests*
+*Phase 2A：13/16 步驟完成（2026-03-28）*

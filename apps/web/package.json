@@ -1,0 +1,36 @@
+{
+  "name": "@thunder/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "test": "jest --coverage",
+    "test:unit": "jest --testPathPatterns=tests/unit --coverage",
+    "test:integration": "jest --testPathPatterns=tests/integration",
+    "test:e2e": "jest --testPathPatterns=tests/e2e",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "decimal.js": "^10.5.0",
+    "jose": "^5.10.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.0"
+  }
+}

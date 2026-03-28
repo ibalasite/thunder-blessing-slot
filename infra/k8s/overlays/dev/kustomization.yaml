@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+# Dev overlay: single replica, local image, debug logging
+patches:
+  - target:
+      kind: Deployment
+      name: thunder-web
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: thunder-web:dev
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: NODE_ENV
+          value: development
+
+secretGenerator:
+  - name: thunder-secrets
+    literals:
+      - SUPABASE_URL=http://localhost:54321
+      - SUPABASE_SERVICE_ROLE_KEY=your-local-service-role-key
+      - JWT_SECRET=dev-jwt-secret-min-32-chars-long-here
+    options:
+      disableNameSuffixHash: true
