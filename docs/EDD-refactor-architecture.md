@@ -24,7 +24,8 @@
 10. [測試策略與覆蓋現況](#10-測試策略與覆蓋現況)
 11. [CI/CD 整合](#11-cicd-整合)
 12. [決策記錄](#12-決策記錄)
-13. [不在本次範圍](#13-不在本次範圍)
+13. [微服務架構設計與 Redis 加速層（Phase 3 設計）](#13-微服務架構設計與-redis-加速層phase-3-設計)
+14. [不在本次範圍](#14-不在本次範圍)
 
 ---
 
@@ -3454,7 +3455,325 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 
 ---
 
-## 13. 不在本次範圍
+## 13. 微服務架構設計與 Redis 加速層（Phase 3 設計）
+
+> **設計原則**：遊戲專注機率核心，中間層標準化，外部服務（錢包、會員）可抽換。
+> Redis 作為加速層，降低主流程延遲；非關鍵路徑（spin log）非同步處理，不阻塞主流程。
+
+---
+
+### 13-A. 微服務邊界
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        API Gateway                           │
+│              （路由 + Rate Limit + JWT 驗證）                 │
+└──────────┬──────────────┬──────────────┬─────────────────────┘
+           ↓              ↓              ↓
+  ┌────────────────┐  ┌──────────┐  ┌──────────────────┐
+  │  Game Service  │  │  Wallet  │  │  Member / Auth   │
+  │  （本專案）     │  │  Service │  │  Service         │
+  │                │  │          │  │                  │
+  │  ┌──────────┐  │  │ Redis L1 │  │  JWT / Session   │
+  │  │ Game     │  │  │ + DB L2  │  │  + DB            │
+  │  │ Runner   │  │  └──────────┘  └──────────────────┘
+  │  └────┬─────┘  │
+  │       ↓        │
+  │  ┌──────────┐  │
+  │  │Probability│  │
+  │  │  Core    │  │
+  │  │(SlotEngine)│ │
+  │  └──────────┘  │
+  └────────────────┘
+```
+
+**各服務職責與邊界：**
+
+| 服務 | 職責 | 資料庫 | 說明 |
+|------|------|--------|------|
+| **Game Service**（本專案）| 機率計算、spin 流程編排 | 無獨立 DB（使用 spin_logs）| 核心，不持有金額狀態 |
+| **Wallet Service** | 餘額管理、交易記錄 | wallets / transactions（獨立 schema）| 可替換為第三方錢包 API |
+| **Member / Auth Service** | 帳號、JWT、session | users / sessions（獨立 schema）| 可替換為 OAuth / SSO |
+| **Spin Log Service** | 稽核 log、RTP 報表 | spin_logs（獨立 schema）| 非同步消費，不阻塞主流程 |
+
+> 各服務各自擁有獨立 DB schema（或獨立 DB），不互相直連。Game Service 只透過標準介面（IWalletService、IAuthProvider）與其他服務溝通。
+
+---
+
+### 13-B. 標準化中間層（Game Runner）
+
+Game Runner 是遊戲無關的 spin 編排層，換遊戲時只需替換：
+- `IProbabilityCore`（SlotEngine → 其他遊戲引擎）
+- UI（Cocos → 其他前端）
+
+中間層程式碼不修改。
+
+```typescript
+// ── 核心介面（Game Service 內部，不依賴任何外部服務實作）──────
+
+interface IProbabilityCore {
+  spin(req: SpinRequest): Promise<SpinOutcome>;
+  // 換遊戲 → 換這個實作，介面不變
+}
+
+interface IWalletService {
+  getBalance(userId: string): Promise<number>;
+  debit(userId: string, amount: number, txId: string): Promise<number>;  // 回傳新餘額
+  credit(userId: string, amount: number, txId: string): Promise<number>; // 回傳新餘額
+  // 換錢包服務商 → 換這個實作，介面不變
+}
+
+interface ISpinLogger {
+  logAsync(data: SpinLogData): void; // fire-and-forget，不等結果
+}
+
+// ── Game Runner：遊戲無關的 spin 編排 ────────────────────────
+
+class GameRunner {
+  constructor(
+    private readonly wallet:      IWalletService,
+    private readonly probability: IProbabilityCore,
+    private readonly logger:      ISpinLogger,
+  ) {}
+
+  async executeSpin(userId: string, req: SpinRequest): Promise<SpinResult> {
+    const txId = generateTxId(); // UUID，冪等保護
+
+    // ── 主流程（同步，需即時回應）────────────────────────────
+    const balanceAfterBet = await this.wallet.debit(userId, req.bet, txId);
+    const outcome         = await this.probability.spin(req);
+    const finalBalance    = await this.wallet.credit(userId, outcome.totalWin, txId);
+
+    // ── 非主流程（非同步，fire-and-forget）───────────────────
+    this.logger.logAsync({ userId, txId, req, outcome,
+                           bet: req.bet, win: outcome.totalWin });
+
+    return { outcome, balance: finalBalance };
+  }
+}
+```
+
+**換遊戲只需：**
+
+```typescript
+// Thunder Blessing Slot
+const runner = new GameRunner(wallet, new SlotEngine(rng), logger);
+
+// 未來換成另一款遊戲（例如 BlackJack）
+const runner = new GameRunner(wallet, new BlackJackEngine(rng), logger);
+// Game Runner 完全不變
+```
+
+---
+
+### 13-C. Spin 主流程（優化版）
+
+```
+Client POST /api/v1/game/spin
+  │
+  ├─ [1] JWT 驗證（Redis Session cache，~0.1ms）
+  │
+  ├─ [2] Bet 驗證（BetRangeService，memory cache）
+  │
+  ├─ [3] Wallet Debit（Redis DECRBY atomic，~0.1ms）
+  │        └── [fallback] Redis miss → DB read-through + DECRBY
+  │
+  ├─ [4] Probability Core（SlotEngine，~1ms，純 CPU）
+  │
+  ├─ [5] Wallet Credit（Redis INCRBY atomic，~0.1ms）
+  │
+  ├─ [6] 回傳 SpinResult（total ~2-5ms）
+  │
+  └─ [7] Spin Log（非同步，不等待）
+           └── XADD spin_log_stream → Stream Consumer → PostgreSQL
+```
+
+**主流程延遲目標：**
+
+| 路徑 | 延遲 | 說明 |
+|------|------|------|
+| Redis 命中（正常）| ~2-5ms | 錢包讀寫全走 Redis |
+| Redis miss（冷啟動）| ~15-30ms | 從 DB load 進 Redis |
+| Redis 不可用（降級）| ~20-50ms | 直接走 DB，功能不中斷 |
+
+---
+
+### 13-D. Redis 加速層設計
+
+#### D-1. 錢包餘額（Redis-First Write-Behind）
+
+```
+┌─────────────┐   DECRBY/INCRBY (atomic)   ┌────────────────┐
+│ Game Runner │ ─────────────────────────→ │ Redis          │
+│             │ ←──── new balance ───────── │ wallet:{uid}   │
+└─────────────┘                            │ (integer cents)│
+                                           └───────┬────────┘
+                                                   │ XADD wallet_tx_stream
+                                                   ↓
+                                           ┌────────────────┐
+                                           │ Stream Consumer│
+                                           │ (async worker) │
+                                           └───────┬────────┘
+                                                   │ bulk INSERT
+                                                   ↓
+                                               PostgreSQL
+                                           (wallets + transactions)
+```
+
+```typescript
+// Redis key 設計
+// wallet:{userId}            → 整數（分，避免浮點）例：10000 = $100.00
+// wallet_tx_stream           → Redis Stream，記錄待寫入 DB 的交易
+
+class RedisWalletService implements IWalletService {
+  async debit(userId: string, amount: number, txId: string): Promise<number> {
+    const cents = Math.round(amount * 100);
+    const key   = `wallet:${userId}`;
+
+    // 確保 key 存在（Redis miss → read-through from DB）
+    await this.ensureLoaded(userId);
+
+    // 原子扣款（負值 = 餘額不足，需 rollback）
+    const newCents = await this.redis.decrby(key, cents);
+    if (newCents < 0) {
+      await this.redis.incrby(key, cents); // 回滾
+      throw new AppError('INSUFFICIENT_BALANCE', 402);
+    }
+
+    // 非同步寫入 DB
+    await this.redis.xadd('wallet_tx_stream', '*',
+      'userId', userId, 'txId', txId,
+      'type', 'debit', 'cents', cents, 'ts', Date.now()
+    );
+
+    return newCents / 100;
+  }
+
+  async credit(userId: string, amount: number, txId: string): Promise<number> {
+    const cents    = Math.round(amount * 100);
+    const newCents = await this.redis.incrby(`wallet:${userId}`, cents);
+
+    await this.redis.xadd('wallet_tx_stream', '*',
+      'userId', userId, 'txId', txId,
+      'type', 'credit', 'cents', cents, 'ts', Date.now()
+    );
+
+    return newCents / 100;
+  }
+
+  private async ensureLoaded(userId: string): Promise<void> {
+    const key    = `wallet:${userId}`;
+    const exists = await this.redis.exists(key);
+    if (!exists) {
+      const wallet = await this.walletRepo.getByUserId(userId); // DB fallback
+      await this.redis.set(key, Math.round(wallet.balance * 100), 'EX', 3600);
+    }
+  }
+}
+```
+
+#### D-2. Spin Log 非同步寫入（Redis Stream）
+
+```typescript
+class RedisSpinLogger implements ISpinLogger {
+  logAsync(data: SpinLogData): void {
+    // fire-and-forget，主流程不等待
+    this.redis.xadd('spin_log_stream', '*',
+      'payload', JSON.stringify(data)
+    ).catch(err => {
+      // Redis 不可用時，直接同步寫 DB（降級）
+      this.spinLogRepo.save(data).catch(console.error);
+    });
+  }
+}
+
+// ── Stream Consumer（獨立 worker process）──────────────────
+// 每 100ms 或累積 50 筆，bulk INSERT 進 PostgreSQL
+async function spinLogConsumer(redis: Redis, repo: ISpinLogRepository) {
+  while (true) {
+    const entries = await redis.xreadgroup(
+      'GROUP', 'spin_log_consumers', 'worker-1',
+      'COUNT', 50, 'BLOCK', 100, 'STREAMS', 'spin_log_stream', '>'
+    );
+    if (entries?.length) {
+      const logs = entries.map(e => JSON.parse(e.fields.payload));
+      await repo.bulkSave(logs);          // 批量 INSERT，降低 DB 壓力
+      await redis.xack('spin_log_stream', 'spin_log_consumers', ...entries.map(e => e.id));
+    }
+  }
+}
+```
+
+---
+
+### 13-E. 失效模式與緩解措施
+
+| 失效情境 | 影響 | 緩解方式 |
+|---------|------|---------|
+| Redis 完全不可用 | 降級走 DB，延遲升高至 20-50ms | `IWalletService` fallback 自動切換到 `DbWalletService` |
+| Redis 在 debit 後、Stream 寫入前崩潰 | 餘額已扣但 DB 未記錄交易 | Redis AOF 持久化 + 啟動時 reconcile job（比對 Redis balance vs DB sum）|
+| Stream Consumer 掛掉 | spin_log 延遲寫入，不丟失 | XREADGROUP + XACK 保證 at-least-once；重啟後從上次 ack 繼續 |
+| 錢包 Redis 與 DB 數值分歧 | 顯示餘額不一致 | 每小時 reconcile job：`SELECT SUM(transactions)` vs `wallet:${uid}` |
+| 同一 txId 重複提交（client retry）| 重複扣款 | txId 寫入 Redis Set（`SET tx:{txId} 1 NX EX 3600`）；存在則 idempotent 回傳原結果 |
+
+---
+
+### 13-F. 錢包服務可抽換設計
+
+現行（Phase 2）：`SupabaseWalletService`（直連 DB）
+
+升級 Redis 加速：`RedisWalletService`（Redis-first + write-behind）
+
+替換第三方錢包：`ExternalWalletService`（HTTP call to 第三方 API）
+
+```typescript
+// container.ts — 只改這一行，Game Runner 完全不知道
+const walletService: IWalletService =
+  env.WALLET_PROVIDER === 'redis'    ? new RedisWalletService(redis, walletRepo) :
+  env.WALLET_PROVIDER === 'external' ? new ExternalWalletService(env.WALLET_API_URL) :
+                                       new SupabaseWalletService(walletRepo);      // 預設
+```
+
+---
+
+### 13-G. 整體流程延遲估算
+
+```
+正常（Redis 命中）：
+  JWT 驗證      ~0.1ms  (Redis session cache)
+  Bet 驗證      ~0ms    (memory)
+  Wallet debit  ~0.1ms  (Redis DECRBY)
+  SlotEngine    ~1ms    (純 CPU)
+  Wallet credit ~0.1ms  (Redis INCRBY)
+  序列化回傳    ~0.5ms
+  ─────────────────────
+  主流程合計    ~2ms    ✅
+
+  非同步（不計入主流程）：
+  Spin log      ~5ms    (Redis XADD，非阻塞)
+  DB wallet sync ~10ms  (Stream Consumer，批量)
+  DB log sync   ~20ms   (Stream Consumer，批量)
+
+Redis 不可用（降級）：
+  主流程合計    ~20-50ms（DB 直連）✅ 功能正常，延遲升高
+```
+
+---
+
+### 13-H. 現有問題與後續改進建議
+
+| 問題 | 嚴重度 | 建議改進 |
+|------|:------:|---------|
+| Phase 2 Wallet 直連 DB，每 spin 2 次 DB write | 🟠 P1 | Phase 3 實作 RedisWalletService |
+| spin_log 同步寫入，阻塞主流程 | 🟠 P1 | Phase 3 實作 RedisSpinLogger + Stream Consumer |
+| SpinUseCase 同時負責 wallet + log + spin，職責混雜 | 🟠 P1 | 抽出 GameRunner class，依賴注入三個 Interface |
+| txId 無冪等保護，client retry 可能重複扣款 | 🔴 P0 | 上線前加 Redis SET NX 冪等 check |
+| Redis 無 AOF，重啟可能丟失未同步的錢包異動 | 🔴 P0 | 啟用 Redis AOF（`appendonly yes`）或改用 Redis Cluster |
+| Wallet 與 Game 在同一個 K8s Deployment，無法獨立 scale | 🟡 P2 | Phase 3 拆為獨立 microservice，各自 HPA |
+
+---
+
+## 14. 不在本次範圍
 
 - WebSocket 即時推播（多人榜單）
 - Admin 後台（預計 Phase 3，Vue）
@@ -3466,8 +3785,8 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 
 ---
 
-*文件版本：v7.1 | 更新日期：2026-03-28*
-*整合來源：EDD v6.1 + Clean Architecture 規範 + Fastify 重構決策（2026-03-29）*
+*文件版本：v8.0 | 更新日期：2026-03-29*
+*整合來源：EDD v7.1 + 微服務設計 + Redis 加速層設計（2026-03-29）*
 *參考：GDD_Thunder_Blessing_Slot.md | Probability_Design.md*
 *Security Review：18 項安全強化（S-01~S-18），詳見 §9-O*
-*Phase 2A 進度：16/16 ✅ 全部完成（2A-11 integration tests、2A-13 Cocos remote adapters、2A-14 E2E API tests）*
+*Phase 2A 進度：15/15 ✅ 全部完成 | Phase 3 微服務設計：§13 已規劃*
