@@ -8,3 +8,13 @@ node_modules/
 test-results.json
 tests/visual-e2e/screenshots/
 tests/visual-e2e/tests/
+
+# Cocos Creator auto-generated .meta for compiled/generated files
+assets/scripts/dist.meta
+assets/scripts/dist/*.meta
+assets/scripts/dist/**/*.meta
+assets/scripts/services/Remote*.ts.meta
+
+# Supabase local temp directories
+supabase/.branches/
+supabase/.temp/
