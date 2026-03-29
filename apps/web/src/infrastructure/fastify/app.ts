@@ -41,8 +41,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
     crossOriginEmbedderPolicy: false,
   });
+  // ALLOWED_ORIGIN supports: single URL, comma-separated URLs, or '*' (allow any — dev only)
+  const rawOrigin = process.env.ALLOWED_ORIGIN ?? 'http://localhost:3000';
+  const corsOrigin: boolean | string | string[] =
+    rawOrigin === '*' ? true : rawOrigin.includes(',') ? rawOrigin.split(',').map(s => s.trim()) : rawOrigin;
   await app.register(cors, {
-    origin: process.env.ALLOWED_ORIGIN ?? 'http://localhost:3000',
+    origin: corsOrigin,
     credentials: true,
   });
 

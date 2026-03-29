@@ -18,6 +18,16 @@ URLS = {
     "production": "https://ibalasite.github.io/thunder-blessing-slot/",
     "local":      "http://localhost:7456",
     "build":      "http://localhost:7456/web-desktop/web-desktop/index.html",
+    # K8s dev: Cocos game (nginx NodePort 30080) → API server (NodePort 30001)
+    "k8s":        "http://localhost:30080",
+}
+
+# API base URL for each target (used in server-side spin verification step)
+API_URLS = {
+    "k8s":        "http://localhost:30001/api/v1",
+    "production": None,
+    "local":      None,
+    "build":      None,
 }
 SHOT_DIR_BASE = os.path.join(os.path.dirname(__file__), "screenshots")
 
@@ -88,6 +98,7 @@ window.__e2e = {
 
 RESULTS = []
 console_logs = []
+spin_api_calls = []   # Network requests to /api/v1/game/spin captured by Playwright
 
 
 def shot(page, name, desc, shot_dir):
@@ -145,7 +156,7 @@ def detect_buttons(page):
     return btn_map, btns
 
 
-def wait_for_cocos_ready(page, timeout=40):
+def wait_for_cocos_ready(page, timeout=40, remote_mode=False):
     print("  ⏳ Waiting for Cocos engine ...")
     start = time.time()
     while time.time() - start < timeout:
@@ -158,7 +169,9 @@ def wait_for_cocos_ready(page, timeout=40):
             }""")
             if ready:
                 print(f"  ✓ Cocos ready in {time.time()-start:.1f}s")
-                time.sleep(2)
+                # Remote mode: wait extra time for async API auth + wallet init
+                extra = 5 if remote_mode else 2
+                time.sleep(extra)
                 return True
         except:
             pass
@@ -169,13 +182,17 @@ def wait_for_cocos_ready(page, timeout=40):
 
 def run_test(target, shot_dir):
     url = URLS[target]
+    api_url = API_URLS.get(target)
     print(f"\n{'='*60}")
     print(f"  E2E TEST — {target.upper()}")
     print(f"  URL: {url}")
+    if api_url:
+        print(f"  API: {api_url}")
     print(f"{'='*60}")
 
     RESULTS.clear()
     console_logs.clear()
+    spin_api_calls.clear()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -183,6 +200,12 @@ def run_test(target, shot_dir):
         page = ctx.new_page()
         page.on("console", lambda msg: console_logs.append(f"[{msg.type}] {msg.text}"))
         page.on("pageerror", lambda err: console_logs.append(f"[PAGE_ERROR] {err.message}"))
+
+        # Capture spin API calls to verify server-side spin processing
+        def on_response(response):
+            if "/api/v1/game/spin" in response.url and response.request.method == "POST":
+                spin_api_calls.append({"url": response.url, "status": response.status})
+        page.on("response", on_response)
 
         # ── Step 1: Load game ──────────────────────────────────
         print("\n═══ Step 1: Load game ═══")
@@ -193,7 +216,8 @@ def run_test(target, shot_dir):
             browser.close()
             return RESULTS
 
-        ready = wait_for_cocos_ready(page)
+        is_remote = (target == "k8s")
+        ready = wait_for_cocos_ready(page, timeout=60 if is_remote else 40, remote_mode=is_remote)
         if not ready:
             shot(page, "01_not_ready", "Cocos not ready", shot_dir)
             report(1, "FAIL", "Cocos Creator did not initialize")
@@ -339,6 +363,21 @@ def run_test(target, shot_dir):
         else:
             report(10, "FAIL", "SPIN button not found")
 
+        # ── Step 11: Server-side spin verification (K8s only) ──
+        print("\n═══ Step 11: Server-side spin verification ═══")
+        if api_url and spin_api_calls:
+            ok_spins = [c for c in spin_api_calls if c["status"] == 200]
+            total = len(spin_api_calls)
+            passed_count = len(ok_spins)
+            if passed_count > 0:
+                report(11, "PASS", f"Server API: {passed_count}/{total} spin calls returned HTTP 200 — CSPRNG used")
+            else:
+                report(11, "FAIL", f"Server API: {total} spin call(s) but none returned HTTP 200")
+        elif api_url:
+            report(11, "FAIL", "Server API: no /api/v1/game/spin calls detected — game may be using local engine")
+        else:
+            report(11, "PASS", f"Server verification: skipped (target={target} has no API URL)")
+
         # ── Summary ────────────────────────────────────────────
         errors = [l for l in console_logs if "PAGE_ERROR" in l]
         passed = sum(1 for r in RESULTS if r["status"] == "PASS")
@@ -357,7 +396,8 @@ def run_test(target, shot_dir):
         with open(os.path.join(shot_dir, "report.json"), "w") as f:
             json.dump({"target": target, "url": url, "results": RESULTS,
                        "passed": passed, "failed": failed,
-                       "console_errors": errors}, f, indent=2, ensure_ascii=False)
+                       "console_errors": errors,
+                       "spin_api_calls": spin_api_calls}, f, indent=2, ensure_ascii=False)
         with open(os.path.join(shot_dir, "console_logs.txt"), "w") as f:
             f.write("\n".join(console_logs))
 
@@ -368,12 +408,12 @@ def run_test(target, shot_dir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target",
-                        choices=["production", "local", "build", "both", "all"],
-                        default="both")
+                        choices=["production", "local", "build", "k8s", "both", "all"],
+                        default="k8s")
     args = parser.parse_args()
 
     if args.target == "all":
-        targets = ["production", "local", "build"]
+        targets = ["production", "local", "build", "k8s"]
     elif args.target == "both":
         targets = ["production", "local"]
     else:

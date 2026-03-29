@@ -24,67 +24,32 @@ const { ccclass } = _decorator;
 export class GameBootstrap extends Component {
 
     start() {
-        view.setDesignResolutionSize(CANVAS_W, CANVAS_H, ResolutionPolicy.SHOW_ALL);
-
-        // ── RNG（CSPRNG — 全域唯一，注入所有模組）────────
-        const rng = createCSPRNG();
-
-        // ── Model ──────────────────────────────────────────
-        const session = new GameSession();
-        const wallet  = new LocalWalletService();
-        const adapter = new LocalEngineAdapter(createEngine(rng));
-
-        // IAccountService fallback（SceneBuilder/UIController still use it for display）
-        const account = new LocalAccountService();
-
-        let flow!: GameFlowController;
-
-        // ── View（Cocos Components built by SceneBuilder）──
-        const { reelMgr, uiCtrl } = buildScene(this.node, session, account, {
-            onSpinClick:      () => flow.doSpin(),
-            onBuyFreeGame:    () => flow.onBuyFreeGame(),
-            onExtraBetToggle: () => uiCtrl.pressExtraBet(),
-            onTurboToggle:    () => uiCtrl.pressTurbo(),
-            changeBet:        (d) => uiCtrl.pressBetChange(d),
-            onAutoSpinClick:  () => flow.onAutoSpinClick(),
-            onAutoSpinSelect: (n) => flow.startAutoSpin(n),
-            onCoinTap:        () => uiCtrl.onCoinTap(),
-            onBuyCancel:      () => uiCtrl.onBuyCancel(),
-            onBuyStart:       () => uiCtrl.onBuyStart(),
-            onCollect:        () => uiCtrl.onCollect(),
-        }, rng);
-
-        // ── Controller（注入 wallet DI）─────────────────────
-        flow = new GameFlowController(
-            session, account, adapter, reelMgr, uiCtrl,
-            undefined,  // _wait (default)
-            wallet,     // IWalletService
-        );
-
-        uiCtrl.updateExtraBetUI();
-        uiCtrl.updateTurboUI();
-        uiCtrl.setDisplayBalance(wallet.getBalance());
-        uiCtrl.refresh();
+        // ── Remote mode: call K8s server API for all spin logic ──────────────
+        // Config priority: window.__THUNDER_CONFIG > URL params > defaults
+        this.startRemote().catch((err: unknown) => {
+            console.error('[GameBootstrap] Remote API init failed:', err);
+        });
     }
 
     /**
-     * startRemote() — Phase 2 server mode entry point.
+     * startRemote() — Server mode: all spins go through the K8s Fastify API.
      *
-     * To switch the game to server mode:
-     *   1. Change `start()` to call `this.startRemote().catch(console.error)`.
-     *   2. Ensure `apps/web` Fastify API is running: `cd apps/web && pnpm dev`
-     *   3. Set the correct REMOTE_API_URL, REMOTE_EMAIL, REMOTE_PASSWORD below.
+     * Config is read (in priority order) from:
+     *   1. window.__THUNDER_CONFIG   (injected by nginx or test harness)
+     *   2. URL query params          (?apiUrl=...&email=...&password=...)
+     *   3. Built-in K8s dev defaults (http://localhost:30001, game-demo@thunder.local)
      *
-     * WARNING: Do NOT call this method directly from start() in production without
-     * first ensuring the API server is running. Cocos start() is synchronous; this
-     * method is async and must be awaited via a fire-and-forget wrapper.
-     *
-     * ─── Configuration ──────────────────────────────────────────────────────────
+     * On first run, loginOrRegister() auto-registers the demo account then logs in.
      */
     async startRemote(): Promise<void> {
-        const REMOTE_API_URL  = 'http://localhost:3000';
-        const REMOTE_EMAIL    = 'demo@example.com';
-        const REMOTE_PASSWORD = 'demo1234';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cfg: Record<string, string> = (typeof window !== 'undefined' && (window as any).__THUNDER_CONFIG) ?? {};
+        const urlParams = typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search) : new URLSearchParams();
+
+        const REMOTE_API_URL  = cfg['apiUrl']   ?? urlParams.get('apiUrl')   ?? 'http://localhost:30001';
+        const REMOTE_EMAIL    = cfg['email']    ?? urlParams.get('email')    ?? 'game-demo@thunder.local';
+        const REMOTE_PASSWORD = cfg['password'] ?? urlParams.get('password') ?? 'GameDemo1!';
 
         view.setDesignResolutionSize(CANVAS_W, CANVAS_H, ResolutionPolicy.SHOW_ALL);
 
@@ -92,8 +57,13 @@ export class GameBootstrap extends Component {
 
         // ── Remote Model (Phase 2) ──────────────────────────────────────────────
         const client        = new RemoteApiClient(REMOTE_API_URL);
-        await client.login(REMOTE_EMAIL, REMOTE_PASSWORD);
+        await client.loginOrRegister(REMOTE_EMAIL, REMOTE_PASSWORD);
         await client.fetchWallet();
+        // Auto-deposit on first run (balance = 0)
+        if (client.balance === 0) {
+            await client.deposit('1000');
+            await client.fetchWallet();
+        }
         await client.fetchBetRange();
 
         const remoteWallet  = new RemoteWalletService(client);

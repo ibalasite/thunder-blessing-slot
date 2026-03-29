@@ -59,6 +59,29 @@ export class RemoteApiClient {
     return res.json() as Promise<T>;
   }
 
+  async register(email: string, password: string): Promise<void> {
+    // 201 = created, 409 = already exists (idempotent)
+    const res = await fetch(`${this._baseUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok && res.status !== 409) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(`Register failed (${res.status}): ${(err as { message?: string }).message ?? res.statusText}`);
+    }
+  }
+
+  /** Tries login first; if 401/404, registers the account then logs in. */
+  async loginOrRegister(email: string, password: string): Promise<void> {
+    try {
+      await this.login(email, password);
+    } catch {
+      await this.register(email, password);
+      await this.login(email, password);
+    }
+  }
+
   async login(email: string, password: string): Promise<void> {
     const result = await this._post<{ accessToken: string }>('/api/v1/auth/login', { email, password });
     this._token = result.accessToken;
@@ -73,6 +96,10 @@ export class RemoteApiClient {
   async fetchBetRange(currency: string = 'USD'): Promise<void> {
     const result = await this._get<{ baseUnit: string }>(`/api/v1/game/bet-range?currency=${currency}`);
     this._baseUnit = parseFloat(result.baseUnit);
+  }
+
+  async deposit(amount: string): Promise<void> {
+    await this._post<{ balance: number }>('/api/v1/wallet/deposit', { amount });
   }
 
   async spin(params: {
