@@ -11,7 +11,7 @@ bases:
 images:
   - name: thunder-web
     newName: localhost:30500/thunder-web
-    newTag: 229f661
+    newTag: 7f3de29
 
 patches:
   - target:

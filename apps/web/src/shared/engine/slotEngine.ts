@@ -28,5 +28,6 @@ export interface ISlotEngine {
 export function createSlotEngine(rng: { random(): number; randomInt(max: number): number }): ISlotEngine {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { SlotEngine } = require('../../../../../assets/scripts/SlotEngine');
-  return new SlotEngine(rng);
+  // SlotEngine constructor expects a plain () => number function, not an object
+  return new SlotEngine(() => rng.random());
 }
