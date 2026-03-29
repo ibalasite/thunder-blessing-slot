@@ -97,6 +97,47 @@ describe('POST /api/v1/auth/refresh', () => {
   });
 });
 
+describe('POST /api/v1/auth/login — cookie secure flag', () => {
+  it('sets secure=true on cookie when NODE_ENV=production', async () => {
+    // Rebuild app with production env for the secure-cookie branch
+    await app.close();
+    container._reset();
+    const savedEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    app = await buildTestApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: 'test@example.com', password: 'password' },
+    });
+    expect(res.statusCode).toBe(200);
+    const setCookie = res.headers['set-cookie'] as string;
+    expect(setCookie).toContain('Secure');
+    process.env.NODE_ENV = savedEnv;
+  });
+});
+
+describe('POST /api/v1/auth — null body branch', () => {
+  it('register parses null body as empty object (ZodError)', async () => {
+    // Send request without Content-Type so Fastify sets body to null
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+    });
+    // ZodError — missing required fields
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('login parses null body as empty object (ZodError)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('POST /api/v1/auth/logout', () => {
   it('returns 200 on logout', async () => {
     const res = await app.inject({

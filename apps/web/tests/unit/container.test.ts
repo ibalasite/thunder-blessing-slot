@@ -51,6 +51,20 @@ describe('container._override() + _reset()', () => {
     expect(container.rng).toBeInstanceOf(CryptoRNGProvider);
   });
 
+  it('container.cache uses IoRedisAdapter when REDIS_URL is set', () => {
+    container._reset();
+    process.env.REDIS_URL = 'redis://localhost:6379';
+    // Mock ioredis to avoid real connection
+    jest.mock('ioredis', () => jest.fn().mockImplementation(() => ({
+      on: jest.fn().mockReturnThis(),
+      get: jest.fn(), set: jest.fn(), del: jest.fn(),
+    })));
+    const { IoRedisAdapter } = require('../../src/adapters/cache/IoRedisAdapter');
+    expect(container.cache).toBeInstanceOf(IoRedisAdapter);
+    delete process.env.REDIS_URL;
+    container._reset();
+  });
+
   it('container.cache uses UpstashCacheAdapter when UPSTASH env vars set', () => {
     container._reset();
     process.env.UPSTASH_REDIS_REST_URL = 'https://redis.upstash.io';

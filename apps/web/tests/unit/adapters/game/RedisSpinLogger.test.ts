@@ -30,6 +30,26 @@ describe('RedisSpinLogger', () => {
     );
   });
 
+  it('includes clientSeed when provided (not null)', async () => {
+    const cache = createMockCache({ xadd: jest.fn().mockResolvedValue('1-0') });
+    const logger = new RedisSpinLogger(cache);
+    logger.logAsync({ ...TEST_SPIN_LOG, clientSeed: 'my-seed' });
+    await Promise.resolve();
+    await Promise.resolve();
+    const callData = (cache.xadd as jest.Mock).mock.calls[0][1];
+    expect(callData['clientSeed']).toBe('my-seed');
+  });
+
+  it('serializes null gridSnapshot as JSON null', async () => {
+    const cache = createMockCache({ xadd: jest.fn().mockResolvedValue('1-0') });
+    const logger = new RedisSpinLogger(cache);
+    logger.logAsync({ ...TEST_SPIN_LOG, gridSnapshot: null });
+    await Promise.resolve();
+    await Promise.resolve();
+    const callData = (cache.xadd as jest.Mock).mock.calls[0][1];
+    expect(callData['gridSnapshot']).toBe('null');
+  });
+
   it('swallows xadd errors and does not throw', async () => {
     const cache = createMockCache({ xadd: jest.fn().mockRejectedValue(new Error('redis down')) });
     const logger = new RedisSpinLogger(cache);

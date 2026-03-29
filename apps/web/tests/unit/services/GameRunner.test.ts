@@ -21,6 +21,7 @@ jest.mock('../../../src/domain/entities/WalletEntity', () => ({
   WalletEntity: {
     fromRow: jest.fn(() => ({
       id: 'wallet-1',
+      balance: '100.00',
       assertCanDebit: jest.fn(),
     })),
   },
@@ -97,6 +98,16 @@ describe('GameRunner', () => {
     const wallet = createMockWalletRepo({ getByUserId: jest.fn().mockResolvedValue(null) });
     const runner = makeRunner({ wallet });
     await expect(runner.run(baseInput)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('returns locally computed balance without second DB read', async () => {
+    const wallet = createMockWalletRepo();
+    const runner = makeRunner({ wallet });
+    const result = await runner.run(baseInput);
+    // balance = 100.00 - 0.01 (bet) + 0.05 (win at betLevel×winLevel=1×5)
+    expect(result.balance).toBe('100.04');
+    // Only one getByUserId call (pre-check); no second call for balance
+    expect(wallet.getByUserId).toHaveBeenCalledTimes(1);
   });
 
   it('releases lock even when debit throws', async () => {

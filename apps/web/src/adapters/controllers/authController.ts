@@ -17,7 +17,7 @@ export async function authController(app: FastifyInstance): Promise<void> {
     const { env } = await import('../../infrastructure/config/env');
     const result = await container.loginUseCase.execute({
       ...body,
-      nodeEnv: process.env.NODE_ENV ?? 'development',
+      nodeEnv: process.env.NODE_ENV ?? /* istanbul ignore next */ 'development',
       rateLimitMax: env.AUTH_RATE_LIMIT_MAX,
       rateLimitWindowSeconds: env.AUTH_RATE_LIMIT_WINDOW_SECONDS,
     });

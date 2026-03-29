@@ -32,7 +32,7 @@ export async function gameController(app: FastifyInstance): Promise<void> {
       mode: body.mode,
       betLevel: body.betLevel,
       currency: body.currency,
-      extraBetOn: body.extraBetOn ?? false,
+      extraBetOn: body.extraBetOn,
       clientSeed: body.clientSeed ?? null,
       txId: body.txId,
     });

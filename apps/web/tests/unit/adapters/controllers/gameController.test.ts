@@ -41,6 +41,15 @@ describe('GET /api/v1/game/bet-range', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('returns 400 when currency query param is omitted', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/game/bet-range',
+      headers: authHeader(),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'GET',
@@ -91,6 +100,21 @@ describe('POST /api/v1/game/spin', () => {
       payload: { mode: 'main', betLevel: 1, currency: 'USD' },
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('accepts spin with explicit clientSeed and txId (optional fields coverage)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/game/spin',
+      headers: authHeader(),
+      payload: {
+        mode: 'main', betLevel: 1, currency: 'USD',
+        extraBetOn: true,
+        clientSeed: 'my-client-seed',
+        txId: '550e8400-e29b-41d4-a716-446655440000',
+      },
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('passes x-session-id header to use case', async () => {

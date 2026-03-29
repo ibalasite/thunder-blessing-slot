@@ -113,4 +113,18 @@ describe('RedisWalletService', () => {
       expect(fallback.getTransactions).toHaveBeenCalledWith('wallet-1', 10, 0);
     });
   });
+
+  describe('createWallet', () => {
+    it('delegates to fallback and warms cache', async () => {
+      const set = jest.fn().mockResolvedValue(undefined);
+      const cache = createMockCache({ set });
+      const fallback = createMockWalletRepo();
+      const svc = new RedisWalletService(cache, fallback);
+      const result = await svc.createWallet('user-1', 'USD');
+      expect(fallback.createWallet).toHaveBeenCalledWith('user-1', 'USD');
+      expect(result.id).toBe(TEST_WALLET.id);
+      // Cache should be warmed with balance and meta keys
+      expect(set).toHaveBeenCalledTimes(2);
+    });
+  });
 });

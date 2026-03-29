@@ -68,6 +68,39 @@ describe('POST /api/v1/wallet/deposit', () => {
   });
 });
 
+describe('POST /api/v1/wallet/deposit — NODE_ENV branch', () => {
+  it('passes nodeEnv from process.env to use case (development)', async () => {
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/wallet/deposit',
+      headers: authHeader(),
+      payload: { amount: '10', provider: 'stripe' },
+    });
+    expect(res.statusCode).toBe(200);
+    process.env.NODE_ENV = saved;
+  });
+
+  it('deposit body parsed as empty object when no body sent (ZodError)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/wallet/deposit',
+      headers: authHeader(),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('withdraw body parsed as empty object when no body sent (ZodError)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/wallet/withdraw',
+      headers: authHeader(),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('POST /api/v1/wallet/withdraw', () => {
   it('withdraws and returns result', async () => {
     const res = await app.inject({

@@ -1,14 +1,7 @@
 import { BetRangeService } from '../../../src/services/BetRangeService';
-import { NullCacheAdapter } from '../../../src/adapters/cache/NullCacheAdapter';
 
 describe('BetRangeService', () => {
-  let cache: NullCacheAdapter;
-  let service: BetRangeService;
-
-  beforeEach(() => {
-    cache = new NullCacheAdapter();
-    service = new BetRangeService(cache);
-  });
+  const service = new BetRangeService();
 
   it('returns USD bet range', async () => {
     const range = await service.getBetRange('USD');
@@ -22,17 +15,6 @@ describe('BetRangeService', () => {
     const range = await service.getBetRange('TWD');
     expect(range.currency).toBe('TWD');
     expect(range.baseUnit).toBe('1');
-  });
-
-  it('caches result on second call', async () => {
-    const getSpy = jest.spyOn(cache, 'get');
-    await service.getBetRange('USD');
-    await service.getBetRange('USD');
-    // Second call should hit cache
-    expect(getSpy).toHaveBeenCalledTimes(2);
-    const setSpy = jest.spyOn(cache, 'set');
-    await service.getBetRange('USD'); // cache hit, no set
-    expect(setSpy).not.toHaveBeenCalled();
   });
 
   it('throws for unsupported currency', async () => {

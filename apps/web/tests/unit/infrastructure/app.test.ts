@@ -76,6 +76,30 @@ describe('requireAuth preHandler', () => {
   });
 });
 
+describe('buildApp() — CORS origins', () => {
+  it('accepts comma-separated ALLOWED_ORIGIN as array', async () => {
+    const savedOrigin = process.env.ALLOWED_ORIGIN;
+    process.env.ALLOWED_ORIGIN = 'http://a.example.com,http://b.example.com';
+    const corsApp = await buildApp();
+    await corsApp.ready();
+    const res = await corsApp.inject({ method: 'GET', url: '/api/v1/health' });
+    expect(res.statusCode).toBe(200);
+    await corsApp.close();
+    process.env.ALLOWED_ORIGIN = savedOrigin;
+  });
+
+  it('allows all origins when ALLOWED_ORIGIN is *', async () => {
+    const savedOrigin = process.env.ALLOWED_ORIGIN;
+    process.env.ALLOWED_ORIGIN = '*';
+    const corsApp = await buildApp();
+    await corsApp.ready();
+    const res = await corsApp.inject({ method: 'GET', url: '/api/v1/health' });
+    expect(res.statusCode).toBe(200);
+    await corsApp.close();
+    process.env.ALLOWED_ORIGIN = savedOrigin;
+  });
+});
+
 describe('requireAdminIp preHandler', () => {
   it('passes when ADMIN_ALLOWED_IPS not set', async () => {
     const orig = process.env.ADMIN_ALLOWED_IPS;

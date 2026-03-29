@@ -119,7 +119,7 @@ export const container = {
     if (!_probabilityProvider) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { BetRangeService } = require('./services/BetRangeService');
-      _probabilityProvider = new BetRangeService(container.cache);
+      _probabilityProvider = new BetRangeService();
     }
     return _probabilityProvider!;
   },

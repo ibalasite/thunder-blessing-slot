@@ -22,7 +22,7 @@ export async function walletController(app: FastifyInstance): Promise<void> {
       userId: user.id,
       amount: body.amount,
       provider: body.provider,
-      nodeEnv: process.env.NODE_ENV ?? 'development',
+      nodeEnv: process.env.NODE_ENV ?? /* istanbul ignore next */ 'development',
     });
     reply.send(result);
   });

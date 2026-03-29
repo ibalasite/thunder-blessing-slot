@@ -138,4 +138,36 @@ describe('SpinUseCase', () => {
     const result = await useCase.execute({ ...baseInput, mode: 'buyFG' });
     expect(result.playerBet).toBe('1'); // betLevel 1 * 100 * 0.01
   });
+
+  describe('txId idempotency (2A-18)', () => {
+    it('returns cached result when txId was previously seen', async () => {
+      const cachedResult = { spinId: 'cached-spin', outcome: {}, playerBet: '0.01', playerWin: '0.05', currency: 'USD', balance: '99' };
+      const useCase = makeUseCase({
+        cache: { get: jest.fn().mockResolvedValue(JSON.stringify(cachedResult)) } as any,
+      });
+      const result = await useCase.execute({ ...baseInput, txId: '550e8400-e29b-41d4-a716-446655440000' });
+      expect(result.spinId).toBe('cached-spin');
+    });
+
+    it('stores result in cache after successful spin when txId provided', async () => {
+      const set = jest.fn().mockResolvedValue(undefined);
+      const useCase = makeUseCase({
+        cache: { get: jest.fn().mockResolvedValue(null), set } as any,
+      });
+      await useCase.execute({ ...baseInput, txId: '550e8400-e29b-41d4-a716-446655440001' });
+      const txCacheCalls = (set as jest.Mock).mock.calls.filter(([key]) =>
+        key.startsWith('spin:tx:'),
+      );
+      expect(txCacheCalls.length).toBeGreaterThan(0);
+      expect(txCacheCalls[0][2]).toBe(3600); // 1h TTL
+    });
+
+    it('proceeds normally when txId provided but not in cache (cache miss)', async () => {
+      const useCase = makeUseCase({
+        cache: { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) } as any,
+      });
+      const result = await useCase.execute({ ...baseInput, txId: '550e8400-e29b-41d4-a716-446655440002' });
+      expect(typeof result.spinId).toBe('string');
+    });
+  });
 });

@@ -78,9 +78,11 @@ export class GameRunner {
         await this.walletRepo.credit(wallet.id, finalSpin.playerWinAmount.toFixed(), 'win');
       }
 
-      // Get updated balance
-      const updatedRow = await this.walletRepo.getByUserId(userId);
-      const balance = updatedRow?.balance ?? '0';
+      // Compute updated balance locally — avoids a second DB round-trip
+      const balance = new Decimal(wallet.balance)
+        .minus(preSpin.playerBetAmount)
+        .plus(finalSpin.playerWinAmount)
+        .toFixed();
 
       // Generate spinId and log async (fire-and-forget)
       const spinId = crypto.randomUUID();

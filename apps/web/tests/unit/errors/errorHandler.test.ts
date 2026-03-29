@@ -64,6 +64,15 @@ describe('toHttpError()', () => {
     Object.defineProperty(process.env, 'NODE_ENV', { value: 'test', writable: true });
   });
 
+  it('uses fallback message when ZodError has empty errors array', () => {
+    // Construct a ZodError manually with empty issues to hit the ?? branch
+    const zodErr = new ZodError([]);
+    const result = toHttpError(zodErr);
+    expect(result.statusCode).toBe(400);
+    expect(result.body.error).toBe('VALIDATION_ERROR');
+    expect(result.body.message).toBe('Validation error');
+  });
+
   it('logs the error to console', () => {
     toHttpError(new Error('test log'));
     expect(console.error).toHaveBeenCalled();
