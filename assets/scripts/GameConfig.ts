@@ -266,13 +266,12 @@ export const BUY_FG_MIN_WIN_MULT = 20;
 export const BUY_FG_PAYOUT_SCALE = 0.995;
 /**
  * EB_PAYOUT_SCALE: Scale applied to Extra Bet mode wins.
- * Value 2.75 calibrated so that Extra Bet (costs 2× base bet) achieves
- * 97.5% RTP. Higher scale compensates for improved symbol weights (SYMBOL_WEIGHTS_EB)
- * which increase hit frequency but require proportionally larger payouts.
- * Derived via Monte Carlo simulation (2M+ spins). Updated from 2.64 after
- * measuring 93.68% RTP; new value targets 97.5%±0.5%.
+ * Value 3.07 calibrated so that Extra Bet (costs 3× base bet via EXTRA_BET_MULT)
+ * achieves 97.5% RTP. Scale = prior_scale × (target_rtp / measured_rtp) = 2.75 × (0.975/0.873).
+ * Re-calibrated after FG flow re-architecture (commit 2015428) changed FG trigger model
+ * from cascade-SC to pre-spin random roll, reducing extraBet raw win rate.
  */
-export const EB_PAYOUT_SCALE = 2.75;
+export const EB_PAYOUT_SCALE = 3.07;
 /**
  * EB_BUY_FG_PAYOUT_SCALE: Scale applied to Extra Bet ON + Buy FG combined mode wins.
  * Value 1.065 calibrated to achieve 97.5% RTP when both EB and Buy FG are active.

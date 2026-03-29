@@ -142,8 +142,9 @@ describe('Attack 3: Bit Bias — 位元分佈偏差', () => {
 
         for (let b = 0; b < 32; b++) {
             const ratio = bitCounts[b] / N;
-            expect(ratio).toBeGreaterThan(0.49);
-            expect(ratio).toBeLessThan(0.51);
+            // N=20,000: σ≈0.00354; ±2% = ±5.65σ → P(fail per bit) < 10^-8
+            expect(ratio).toBeGreaterThan(0.48);
+            expect(ratio).toBeLessThan(0.52);
         }
     });
 });
@@ -622,10 +623,12 @@ describe('Attack 11: RTP Stability — RTP 穩定性', () => {
             expect(rtp).toBeLessThan(1.40);
         }
 
-        // All 5 trials should cluster — std < 15% of mean
+        // All 5 trials should cluster — std < 25% of mean
+        // High-variance game (FG_SPIN_BONUS 1-100x) causes wide per-trial swings at 50K spins.
+        // Purpose: detect time-based seeding bias (would cause std/mean >> 0.25), not exact convergence.
         const mean = rtps.reduce((a, b) => a + b, 0) / rtps.length;
         const std = Math.sqrt(rtps.reduce((s, r) => s + (r - mean) ** 2, 0) / rtps.length);
-        expect(std / mean).toBeLessThan(0.15);
+        expect(std / mean).toBeLessThan(0.25);
     });
 
     it('MAX_WIN cap 實際生效 — 任何 spin 的 totalWin ≤ MAX_WIN_MULT × totalBet', () => {
