@@ -39,7 +39,7 @@
 | Phase 1.5B | Buy FG 配獎優化（20× 保底、Tier 分佈）| ✅ 完成 | 549 | 2026-03-25 |
 | Phase 1.5C | CSPRNG 安全強化（消除所有 Math.random）| ✅ 完成 | 549+ | 2026-03-25 |
 | Code Review | P0~P3 全部 20 項修復（CR-01 ~ CR-20）| ✅ 完成 | 862 | 2026-03-27 |
-| Phase 2 | Client-Server 架構（1,000 人同時在線）| 📋 規劃中 | — | — |
+| Phase 2 | Client-Server 架構（Fastify + K8s + Supabase）| ✅ 完成 | 10（K8s E2E）+ 11（RPA）| 2026-03-29 |
 
 ### 1-2. 關鍵指標現況
 
@@ -1813,14 +1813,16 @@ repo-root/
 │   │   ├── build/web-desktop/      # Cocos 編譯產出（版控，CI 直接 deploy）
 │   │   ├── tests/                  # 現有 Jest tests
 │   │   └── package.json
-│   ├── web/                        # Next.js App（API Routes + 靜態前端）
+│   ├── web/                        # Fastify API Server（Clean Architecture）
 │   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   ├── api/v1/
-│   │   │   │   │   ├── auth/       # register/route.ts, login/route.ts, refresh/route.ts, logout/route.ts
-│   │   │   │   │   ├── wallet/     # route.ts, deposit/route.ts, withdraw/route.ts, transactions/route.ts
-│   │   │   │   │   └── game/       # spin/route.ts, bet-range/route.ts, [spinId]/replay/route.ts
-│   │   │   │   └── layout.tsx      # minimal（API only）
+│   │   │   ├── infrastructure/
+│   │   │   │   └── fastify/
+│   │   │   │       ├── app.ts      # Fastify instance + plugin registration
+│   │   │   │       ├── server.ts   # HTTP server entrypoint
+│   │   │   │       └── routes/
+│   │   │   │           ├── auth/   # register, login, refresh, logout
+│   │   │   │           ├── wallet/ # GET/POST wallet, deposit, withdraw, transactions
+│   │   │   │           └── game/   # spin, bet-range, replay
 │   │   │   ├── container.ts        # ← Composition Root（唯一接線位置）
 │   │   │   ├── config/env.ts       # zod ENV 驗證
 │   │   │   ├── services/           # AuthService / WalletService / SpinService / BetRangeService
@@ -1841,8 +1843,7 @@ repo-root/
 │   │   │   ├── integration/        # Supabase local 真實 DB（NullCacheAdapter）
 │   │   │   ├── e2e/                # 完整 HTTP 流（supertest / fetch）
 │   │   │   └── load/               # k6 腳本
-│   │   ├── jest.config.ts          # @next/jest，coverage threshold 100%
-│   │   ├── next.config.ts
+│   │   ├── jest.config.ts          # ts-jest，coverage threshold 100%
 │   │   ├── Dockerfile
 │   │   └── package.json
 │   └── worker/
@@ -1924,9 +1925,9 @@ Render Web Service（apps/api）
 | 2A-10 | Fastify Controllers（auth / wallet / game）+ Domain Entities + Use Cases 層 + `requireAuth` / `requireAdminIp` preHandler（unit test 100%）| 3 天 | ✅ |
 | 2A-11 | Integration tests（Supabase local 真實 DB + NullCacheAdapter）| 1.5 天 | ✅ |
 | 2A-12 | K8s overlays/dev 設定（ingress-nginx，local Rancher Desktop）| 0.5 天 | ✅ |
-| 2A-13 | Cocos RemoteApiClient + RemoteEngineAdapter + RemoteWalletService 串接 | 1 天 | ✅ |
-| 2A-14 | E2E tests（Fastify inject，full HTTP flow，engine mocked）| 1.5 天 | ✅ |
-| 2A-15 | Security hardening S-01~S-18（P0 全部完成，P1/P2 同步完成）| 1 天 | ✅ |
+| 2A-13 | Cocos RemoteApiClient + RemoteEngineAdapter + RemoteWalletService 串接；GameBootstrap.startRemote() | 1 天 | ✅ |
+| 2A-14 | E2E tests：K8s API E2E（10 tests）+ RPA Visual E2E（11 steps，Playwright）| 1.5 天 | ✅ |
+| 2A-15 | Security hardening S-01~S-18（P0 全部完成，P1/P2 同步完成）；nginx no-cache for index.html | 1 天 | ✅ |
 | 2A-16 | README（Windows 11 + Mac 建置步驟）+ GitHub Actions CI/CD workflows | 0.5 天 | ✅ |
 | **2A 合計** | | **17 天** | **16/16 ✅** |
 
@@ -2498,7 +2499,7 @@ export class SeededRNGProvider implements IRNGProvider { /* 現有實作 */ }
 
 #### Production 階段（AWS EC2，目標 1,000 人 × 200ms）
 
-**App Server（Next.js，horizontal scaling）**
+**App Server（Fastify，horizontal scaling）**
 
 | 場景 | 機型 | 數量 | 費用/月 | 處理能力 |
 |------|------|:----:|------:|---------|
@@ -2528,7 +2529,7 @@ export class SeededRNGProvider implements IRNGProvider { /* 現有實作 */ }
 
 ```
 ALB                              $25/月
-  ├── Next.js c5.large × 3       $230/月
+  ├── Fastify c5.large × 3       $230/月
   │     └── PgBouncer t3.micro   $10/月
   ├── db.r5.large PostgreSQL     $220/月
   └── ElastiCache cache.r6g.large $120/月
@@ -2557,37 +2558,35 @@ try {
 // 不含 Supabase URL、table 名稱、PostgreSQL error code
 ```
 
-**前端 ENV（Next.js `apps/web/.env.local`）**：
+**Server ENV（`apps/web/.env.local`）**：
 ```bash
-# 允許（API Server 內部使用）
+# 允許（API Server 內部使用，不暴露至 Client）
 SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...    # 絕對不能 NEXT_PUBLIC_ 前綴
-
-# 不存在（Client 無需知道）
-# NEXT_PUBLIC_SUPABASE_URL=...  ← 禁止
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=...  ← 禁止
+SUPABASE_SERVICE_ROLE_KEY=...    # 僅 Server-side，Client 完全不可見
+JWT_SECRET=...                   # 至少 32 字元
+ALLOWED_ORIGIN=*                 # CORS 白名單（production 改為明確 origin）
 ```
 
-### 9-N-4. Next.js Route Handler 100% 測試覆蓋
+### 9-N-4. Fastify Controller 100% 測試覆蓋
 
 ```typescript
 // ─── 薄 Controller 模式（易達 100%）────────────────────────
-// src/app/api/v1/game/spin/route.ts
-export async function POST(request: NextRequest) {
-    const session = await withAuth(request);     // 抽離的 auth HOF
-    const body    = SpinRequestSchema.parse(await request.json());
-    const result  = await spinService.spin(session.userId, body);
-    return NextResponse.json(result, { status: 200 });
+// src/adapters/controllers/gameController.ts
+export function registerGameRoutes(app: FastifyInstance, container: Container) {
+    app.post('/api/v1/game/spin', { preHandler: [requireAuth] }, async (req, reply) => {
+        const body   = SpinRequestSchema.parse(req.body);
+        const result = await container.spinUseCase.execute(req.user.userId, body);
+        return reply.status(200).send(result);
+    });
 }
 
-// ─── 單元測試（mock service，100% branch coverage）──────────
-// tests/unit/app/api/v1/game/spin.test.ts
-import { POST } from '@/app/api/v1/game/spin/route';
+// ─── 單元測試（mock use case，100% branch coverage）──────────
+// tests/unit/adapters/controllers/gameController.test.ts
+import { buildApp } from '@/infrastructure/fastify/app';
 
-jest.mock('@/container', () => ({ spinService: { spin: jest.fn() } }));
-jest.mock('@/shared/middleware/withAuth', () => ({
-    withAuth: jest.fn().mockResolvedValue({ userId: 'user-1' }),
-}));
+describe('POST /api/v1/game/spin', () => {
+    const mockSpinUseCase = { execute: jest.fn() };
+    let app: FastifyInstance;
 
 describe('POST /api/v1/game/spin', () => {
     it('200 valid spin', async () => { ... });
@@ -2857,42 +2856,29 @@ LIMIT 100;
 
 #### S-04：HTTP 安全 Headers
 
-Next.js `next.config.ts` 加全域安全 headers：
+@fastify/helmet 自動注入全域安全 headers：
 
 ```typescript
-// apps/web/next.config.ts
-const securityHeaders = [
-    { key: 'X-DNS-Prefetch-Control',    value: 'on' },
-    { key: 'X-Frame-Options',           value: 'DENY' },
-    { key: 'X-Content-Type-Options',    value: 'nosniff' },
-    { key: 'Referrer-Policy',           value: 'strict-origin-when-cross-origin' },
-    { key: 'Permissions-Policy',        value: 'camera=(), microphone=(), geolocation=(), payment=()' },
-    {
-        key: 'Strict-Transport-Security',
-        value: 'max-age=63072000; includeSubDomains; preload',
-        // 僅 HTTPS，Render 已強制 HTTPS
-    },
-    {
-        key: 'Content-Security-Policy',
-        value: [
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",   // Cocos 需要
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob:",
-            "connect-src 'self'",
-            "font-src 'self' data:",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "frame-ancestors 'none'",
-        ].join('; '),
-    },
-];
+// apps/web/src/infrastructure/fastify/app.ts
+import helmet from '@fastify/helmet';
 
-const nextConfig = {
-    async headers() {
-        return [{ source: '/(.*)', headers: securityHeaders }];
+await app.register(helmet, {
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc:      ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Cocos 需要
+            styleSrc:       ["'self'", "'unsafe-inline'"],
+            imgSrc:         ["'self'", 'data:', 'blob:'],
+            connectSrc:     ["'self'"],
+            fontSrc:        ["'self'", 'data:'],
+            objectSrc:      ["'none'"],
+            baseUri:        ["'self'"],
+            frameAncestors: ["'none'"],
+        },
     },
-};
+    hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
+    frameguard: { action: 'deny' },
+});
 ```
 
 #### S-05：error_logs.stack 生產環境過濾
@@ -3218,8 +3204,8 @@ WORKDIR /app
 FROM base AS production
 # 切換為非 root 用戶
 RUN addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 nextjs
-USER nextjs
+ && adduser  --system --uid 1001 fastify
+USER fastify
 
 EXPOSE 3000
 CMD ["node", "dist/app.js"]
@@ -3455,7 +3441,7 @@ Phase 2 採 3 workflow 設計（詳見 §9-K-4）：
 | RNG Provider | IRNGProvider DI（container.ts 注入）| Production CSPRNG / Test Seeded，零程式碼差異 |
 | API 版本 | URL `/v1/` + Header `Accept-Version`（URL 優先）| URL 為主要隔離，Header 提供靈活覆蓋 |
 | Admin 後台 | Phase 2 無；未來 Vue | 開發資源集中在遊戲核心 |
-| 前端 Hosting | Fastify/Next.js static serve（同 origin）| 無 CORS；Cookie SameSite=Strict 有效；單一 Render service |
+| 前端 Hosting | nginx（Cocos static）+ Fastify API（同 K8s cluster）| 開發：各自獨立 Pod（NodePort）；Production：Render 同 origin serve |
 | Supabase 隱藏 | Client 不感知；SDK 限 API server；回傳 DTO | 資安：避免 DB 連線資訊洩漏 |
 | 測試覆蓋率 | Server unit test 100% coverage | TDD；每個 Route Handler / Service / Adapter 完整覆蓋 |
 | Mock Provider 封鎖 | production 環境拒絕 `provider=mock`（S-01）| Gaming compliance：禁止無限注資 |
