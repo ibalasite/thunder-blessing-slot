@@ -10,6 +10,8 @@
     "test:integration": "jest --testPathPatterns=integration",
     "test:e2e": "jest --testPathPatterns=e2e",
     "test:coverage": "jest --coverage",
+    "test:rpa": "playwright test",
+    "test:rpa:ui": "playwright test --ui",
     "deploy": "gh-pages --dotfiles --dist build/web-desktop",
     "web": "pnpm --filter @thunder/web dev",
     "web:build": "pnpm --filter @thunder/web build",
@@ -27,6 +29,7 @@
   },
   "uuid": "1c530a7b-fff7-4a76-ac4b-51192b1d058c",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/jest": "^30.0.0",
     "gh-pages": "^6.3.0",
     "jest": "^30.3.0",

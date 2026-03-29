@@ -97,6 +97,7 @@ export class GameBootstrap extends Component {
                     })
                     .catch((err: unknown) => {
                         console.error('[Deposit] failed:', err);
+                        uiCtrl.setStatus('儲值失敗，請重試', '#ff4444');
                         uiCtrl.hideDepositPanel();
                     });
             },

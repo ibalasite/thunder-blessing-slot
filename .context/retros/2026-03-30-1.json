@@ -1,0 +1,51 @@
+{
+  "date": "2026-03-30",
+  "window": "7d",
+  "metrics": {
+    "commits": 37,
+    "contributors": 2,
+    "prs_merged": 0,
+    "insertions": 39921,
+    "deletions": 7337,
+    "net_loc": 32584,
+    "test_loc": 10572,
+    "test_ratio": 0.265,
+    "active_days": 6,
+    "sessions": 18,
+    "deep_sessions": 1,
+    "avg_session_minutes": 15,
+    "loc_per_session_hour": 8900,
+    "feat_pct": 0.378,
+    "fix_pct": 0.243,
+    "docs_pct": 0.216,
+    "chore_pct": 0.081,
+    "peak_hour": 21,
+    "ai_assisted_commits": 21,
+    "ai_assisted_pct": 0.568
+  },
+  "authors": {
+    "ibalasite": {
+      "commits": 36,
+      "insertions": 31811,
+      "deletions": 7189,
+      "test_ratio": 0.332,
+      "top_area": "assets/scripts/"
+    },
+    "Evans Tseng": {
+      "commits": 1,
+      "insertions": 8110,
+      "deletions": 148,
+      "test_ratio": 0.10,
+      "top_area": "assets/"
+    }
+  },
+  "version_range": ["unknown", "unknown"],
+  "streak_days": 3,
+  "tweetable": "Week of Mar 23: 37 commits (2 contributors), 39.9k LOC, 26.5% tests, 57% AI-assisted | Streak: 3d",
+  "test_health": {
+    "total_test_files": 67,
+    "tests_added_this_period": 67,
+    "regression_test_commits": 0,
+    "test_files_changed": 68
+  }
+}

@@ -465,7 +465,7 @@ function buildDepositPanel(root: Node, cbs: SceneBuildCallbacks): {
         const by  = 62 - row * (btnH + gapY);
         const btn = makeButton(panel, label, btnW, btnH, bx, by, '#0e2a60', '#00cfff');
         btn.on(Button.EventType.CLICK, () => {
-            p.active = false;
+            // Keep panel visible — let onDeposit callback close it after API confirms
             cbs.onDeposit(amount);
         });
     });
