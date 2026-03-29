@@ -167,7 +167,7 @@ describe('K8s Spin: server computes outcome via CSPRNG', () => {
         const { ok, body } = await fetchJSON(`${K8S_API}/game/spin`, {
             method: 'POST',
             headers: { ...authHeaders(accessToken), 'x-session-id': 'e2e-test-session' },
-            body: JSON.stringify({ mode: 'main', betLevel: 1, currency: 'USD' }),
+            body: JSON.stringify({ mode: 'main', betLevel: 25, currency: 'USD' }),
         });
         expect(ok).toBe(true);
 
@@ -228,12 +228,12 @@ describe('K8s Spin: server computes outcome via CSPRNG', () => {
         const spin1 = await fetchJSON(`${K8S_API}/game/spin`, {
             method: 'POST',
             headers: { ...authHeaders(accessToken), 'x-session-id': 'e2e-test-session' },
-            body: JSON.stringify({ mode: 'main', betLevel: 1, currency: 'USD' }),
+            body: JSON.stringify({ mode: 'main', betLevel: 25, currency: 'USD' }),
         });
         const spin2 = await fetchJSON(`${K8S_API}/game/spin`, {
             method: 'POST',
             headers: { ...authHeaders(accessToken), 'x-session-id': 'e2e-test-session' },
-            body: JSON.stringify({ mode: 'main', betLevel: 1, currency: 'USD' }),
+            body: JSON.stringify({ mode: 'main', betLevel: 25, currency: 'USD' }),
         });
 
         expect(spin1.ok).toBe(true);
@@ -266,7 +266,7 @@ describe('K8s Wallet integrity: DB tracks every spin', () => {
             const { ok, body } = await fetchJSON(`${K8S_API}/game/spin`, {
                 method: 'POST',
                 headers: { ...authHeaders(accessToken), 'x-session-id': `e2e-integrity-${i}` },
-                body: JSON.stringify({ mode: 'main', betLevel: 1, currency: 'USD' }),
+                body: JSON.stringify({ mode: 'main', betLevel: 25, currency: 'USD' }),
             });
             expect(ok).toBe(true);
             const spin = body as { playerBet: string; playerWin: string };
