@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-build-${IMAGE_TAG}
+  namespace: thunder-dev
+  labels:
+    app: kaniko-build
+    build-tag: "${IMAGE_TAG}"
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.23.2
+          args:
+            - "--context=dir:///workspace"
+            - "--dockerfile=/workspace/apps/web/Dockerfile"
+            - "--destination=${REGISTRY_SVC}/thunder-web:${IMAGE_TAG}"
+            - "--destination=${REGISTRY_SVC}/thunder-web:latest"
+            - "--insecure"
+            - "--skip-tls-verify"
+            - "--cache=true"
+            - "--cache-repo=${REGISTRY_SVC}/thunder-web-cache"
+            - "--compressed-caching=false"
+            - "--snapshot-mode=redo"
+          volumeMounts:
+            - name: build-context
+              mountPath: /workspace
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+      volumes:
+        - name: build-context
+          persistentVolumeClaim:
+            claimName: kaniko-context

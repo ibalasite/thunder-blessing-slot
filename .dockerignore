@@ -1,0 +1,16 @@
+node_modules/
+**/node_modules/
+.git/
+.github/
+build/
+dist/
+**/dist/
+coverage/
+**/coverage/
+*.log
+.DS_Store
+infra/
+supabase/
+tests/
+docs/
+profiles/

@@ -1,37 +1,26 @@
-# Thunder Blessing Slot — Next.js API Server
-# EDD §9-K Dockerfile (S-18: non-root user)
+# Thunder Blessing Slot — Fastify API Server
+# S-18: non-root user
 
-FROM node:22-alpine AS deps
-WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy package files
-COPY package.json pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-
-# Install only production dependencies for web
-RUN pnpm install --filter @thunder/web --prod --frozen-lockfile
-
-# ───────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
 
 RUN npm install -g pnpm
 
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
 
-# Install all dependencies (including dev for build)
+# Install ALL deps (dev + prod) for TypeScript build
 RUN pnpm install --filter @thunder/web --frozen-lockfile
 
-# Copy source
-COPY apps/web ./apps/web
+COPY apps/web/src ./apps/web/src
+COPY apps/web/tsconfig.json ./apps/web/
 
-# Build Next.js
 WORKDIR /app/apps/web
 RUN pnpm build
+
+# Re-install PROD ONLY, hoisted flat into /app/node_modules (no symlinks)
+WORKDIR /app
+RUN CI=true pnpm install --filter @thunder/web --prod --frozen-lockfile --shamefully-hoist
 
 # ───────────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -39,18 +28,17 @@ WORKDIR /app
 
 # S-18: Run as non-root
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 fastify
 
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Copy built artifacts
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./.next/static
-COPY --from=builder /app/apps/web/public ./public
+# Flat node_modules from builder (no pnpm symlink issues)
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/dist ./dist
 
-USER nextjs
+USER fastify
 
 EXPOSE 3001
 
-CMD ["node", "server.js"]
+CMD ["node", "dist/infrastructure/fastify/server.js"]

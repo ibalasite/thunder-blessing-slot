@@ -1,0 +1,89 @@
+# Supabase minimal dev values — runs only what thunder-blessing-slot needs:
+# PostgreSQL + GoTrue (auth) + PostgREST + Kong (gateway)
+# All other services disabled to save resources.
+
+secret:
+  jwt:
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+    serviceKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q"
+    secret: "dev-super-secret-jwt-token-min-32-chars-long"
+
+  db:
+    password: "devpostgrespassword"
+    database: "postgres"
+
+  analytics:
+    apiKey: "dev-logflare-api-key"
+
+  smtp:
+    username: ""
+    password: ""
+
+  dashboard:
+    username: "supabase"
+    password: "supabase"
+
+  s3:
+    keyId: ""
+    accessKey: ""
+
+# ── Disable everything we don't need ──────────────────
+deployment:
+  analytics:
+    enabled: false
+  vector:
+    enabled: false
+  functions:
+    enabled: false
+  imgproxy:
+    enabled: false
+  realtime:
+    enabled: false
+  storage:
+    enabled: false
+  studio:
+    enabled: false
+  minio:
+    enabled: false
+
+  # Keep these ↓
+  db:
+    enabled: true
+    replicaCount: 1
+  auth:
+    enabled: true
+    replicaCount: 1
+  rest:
+    enabled: true
+    replicaCount: 1
+  meta:
+    enabled: true
+    replicaCount: 1
+  kong:
+    enabled: true
+    replicaCount: 1
+
+# ── Persistence: use small PVC for dev ────────────────
+persistence:
+  db:
+    enabled: true
+    storageClassName: "local-path"
+    size: 2Gi
+
+# ── Expose Kong as NodePort so we can reach it ────────
+service:
+  kong:
+    type: NodePort
+    port: 8000
+    nodePort: 30000
+
+# ── GoTrue / Auth settings ────────────────────────────
+environment:
+  auth:
+    GOTRUE_SITE_URL: "http://localhost:3001"
+    GOTRUE_URI_ALLOW_LIST: "*"
+    GOTRUE_DISABLE_SIGNUP: "false"
+    GOTRUE_JWT_EXPIRY: "3600"
+    GOTRUE_SMTP_ADMIN_EMAIL: "admin@thunder.local"
+    GOTRUE_MAILER_AUTOCONFIRM: "true"
+    GOTRUE_LOG_LEVEL: "DEBUG"
