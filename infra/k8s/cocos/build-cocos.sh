@@ -14,6 +14,31 @@ IMAGE_TAG="${1:-cocos-$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/nul
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[cocos-build]${NC} $*"; }
 
+# ── Step 0: Cocos CLI build + patch portrait resolution ───────────────────────
+cocos_build() {
+  log "[0/3] Building Cocos web-desktop..."
+  COCOS_CLI="/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/MacOS/CocosCreator"
+  if [ ! -f "$COCOS_CLI" ]; then
+    log "Cocos Creator not found at $COCOS_CLI — skipping build (using existing build/ output)"
+    return 0
+  fi
+  "$COCOS_CLI" \
+    --project "$PROJECT_ROOT" \
+    --build "platform=web-desktop;debug=false;outputPath=./build" \
+    2>&1 | grep -E "(error|Error|complete|failed)" | tail -5
+
+  # Patch index.html: CLI defaults to 1280x960 (landscape), patch to 720x1280 (portrait)
+  local HTML="$PROJECT_ROOT/build/web-desktop/index.html"
+  sed -i '' \
+    -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
+    -e 's/width="1280" height="960"/width="720" height="1280"/g' \
+    -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
+    "$HTML"
+  log "Patched index.html → 720×1280 portrait"
+}
+
+cocos_build
+
 # ── Step 1: Upload build context ──────────────────────────────────────────────
 log "[1/3] Uploading Cocos build context to PVC..."
 
