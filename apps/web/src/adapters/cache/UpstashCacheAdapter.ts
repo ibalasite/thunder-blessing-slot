@@ -55,6 +55,40 @@ export class UpstashCacheAdapter implements ICacheAdapter {
     return count;
   }
 
+  async incrby(key: string, delta: number): Promise<number> {
+    return this._cmd<number>(['INCRBY', key, delta]);
+  }
+
+  async decrby(key: string, delta: number): Promise<number> {
+    return this._cmd<number>(['DECRBY', key, delta]);
+  }
+
+  async xadd(stream: string, data: Record<string, string>): Promise<string> {
+    // XADD stream * field1 val1 field2 val2 ...
+    const args: unknown[] = ['XADD', stream, '*'];
+    for (const [k, v] of Object.entries(data)) {
+      args.push(k, v);
+    }
+    return this._cmd<string>(args);
+  }
+
+  async xread(stream: string, fromId: string, count = 100): Promise<Array<{ id: string; data: Record<string, string> }>> {
+    // XREAD COUNT n STREAMS stream fromId
+    const raw = await this._cmd<Array<[string, Array<[string, string[]]>]> | null>([
+      'XREAD', 'COUNT', count, 'STREAMS', stream, fromId,
+    ]);
+    if (!raw) return [];
+    // Upstash returns [[streamName, [[id, [k1,v1,k2,v2,...]], ...]]]
+    const entries = raw[0]?.[1] ?? [];
+    return entries.map(([id, fields]) => {
+      const data: Record<string, string> = {};
+      for (let i = 0; i < fields.length; i += 2) {
+        data[fields[i]] = fields[i + 1];
+      }
+      return { id, data };
+    });
+  }
+
   async acquireLock(key: string, ttlSeconds: number): Promise<boolean> {
     // SET NX EX — atomic
     const result = await this._cmd<string | null>(['SET', key, '1', 'NX', 'EX', ttlSeconds]);

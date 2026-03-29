@@ -1,14 +1,13 @@
-import Decimal from 'decimal.js';
-import crypto from 'crypto';
 import type { IWalletRepository } from '../../domain/interfaces/IWalletRepository';
 import type { ISpinLogRepository } from '../../domain/interfaces/ISpinLogRepository';
 import type { IProbabilityProvider } from '../../domain/interfaces/IProbabilityProvider';
 import type { ICacheAdapter } from '../../domain/interfaces/ICacheAdapter';
 import type { IRNGProvider } from '../../domain/interfaces/IRNGProvider';
-import { WalletEntity } from '../../domain/entities/WalletEntity';
-import { SpinEntity } from '../../domain/entities/SpinEntity';
-import { AppError } from '../../shared/errors/AppError';
 import type { Currency } from '../../domain/interfaces/IWalletRepository';
+import { GameRunner } from '../../services/GameRunner';
+import { SlotEngineProbabilityCore } from '../../adapters/game/SlotEngineProbabilityCore';
+import { SupabaseSpinLogger } from '../../adapters/game/SupabaseSpinLogger';
+import { AppError } from '../../shared/errors/AppError';
 
 export type SpinMode = 'main' | 'extraBet' | 'buyFG';
 
@@ -20,6 +19,8 @@ export interface SpinInput {
   currency: Currency;
   extraBetOn: boolean;
   clientSeed: string | null;
+  /** Optional client-generated UUID for idempotency (2A-18). */
+  txId?: string;
 }
 
 export interface SpinOutput {
@@ -31,6 +32,17 @@ export interface SpinOutput {
   balance: string;
 }
 
+/**
+ * SpinUseCase — thin orchestration layer above GameRunner.
+ *
+ * Responsibilities:
+ *   - txId idempotency (2A-18): return cached result on duplicate txId
+ *   - Bet-level validation against IProbabilityProvider
+ *   - Delegate spin execution to GameRunner
+ *
+ * Constructor signature is intentionally kept stable so container
+ * and existing tests require no changes.
+ */
 export class SpinUseCase {
   constructor(
     private walletRepo: IWalletRepository,
@@ -41,7 +53,15 @@ export class SpinUseCase {
   ) {}
 
   async execute(input: SpinInput): Promise<SpinOutput> {
-    const { userId, sessionId, mode, betLevel, currency, extraBetOn, clientSeed } = input;
+    const { userId, sessionId, mode, betLevel, currency, extraBetOn, clientSeed, txId } = input;
+
+    // 2A-18: txId idempotency — return cached result if same txId seen before
+    if (txId) {
+      const cached = await this.cache.get(`spin:tx:${txId}`);
+      if (cached) {
+        return JSON.parse(cached) as SpinOutput;
+      }
+    }
 
     // Validate betLevel against allowed range
     const range = await this.probabilityProvider.getBetRange(currency);
@@ -52,72 +72,27 @@ export class SpinUseCase {
       throw AppError.validation(`betLevel ${betLevel} is not in allowed levels`);
     }
 
-    // Get wallet and check balance
-    const row = await this.walletRepo.getByUserId(userId);
-    if (!row) throw AppError.notFound('Wallet');
-    const wallet = WalletEntity.fromRow(row);
+    // Build GameRunner with pluggable adapters (2A-17)
+    const probabilityCore = new SlotEngineProbabilityCore(this.rng);
+    const spinLogger = new SupabaseSpinLogger(this.spinLogRepo);
+    const runner = new GameRunner(probabilityCore, this.walletRepo, spinLogger, this.cache);
 
-    const baseUnit = new Decimal(range.baseUnit);
-    const spin = SpinEntity.create(mode, betLevel, baseUnit, 0);
-    wallet.assertCanDebit(spin.playerBetAmount);
+    const result = await runner.run({
+      userId,
+      sessionId,
+      mode,
+      betLevel,
+      currency,
+      extraBetOn,
+      clientSeed,
+      baseUnit: range.baseUnit,
+    });
 
-    // Acquire spin lock (prevent double-submit)
-    const lockKey = `spin:lock:${userId}`;
-    const acquired = await this.cache.acquireLock(lockKey, 10);
-    if (!acquired) throw AppError.validation('A spin is already in progress');
-
-    try {
-      // Debit bet
-      await this.walletRepo.debit(wallet.id, spin.playerBetAmount.toFixed(), 'bet');
-
-      // Run engine
-      this.rng.resetSpinBytes();
-      const { createSlotEngine } = await import('../../shared/engine/slotEngine');
-      const engine = createSlotEngine(this.rng);
-      const outcome = engine.computeFullSpin({ mode, totalBet: betLevel, extraBetOn });
-
-      const winLevel = outcome.totalWin as number;
-      const finalSpin = SpinEntity.create(mode, betLevel, baseUnit, winLevel);
-
-      // Credit win
-      if (winLevel > 0) {
-        await this.walletRepo.credit(wallet.id, finalSpin.playerWinAmount.toFixed(), 'win');
-      }
-
-      // Log spin
-      const serverSeed = crypto.randomBytes(32).toString('hex');
-      const spinBytes = this.rng.getSpinBytes();
-      const spinLog = await this.spinLogRepo.create({
-        userId,
-        sessionId,
-        mode,
-        currency,
-        betLevel,
-        winLevel,
-        baseUnit: range.baseUnit,
-        playerBet: finalSpin.playerBetAmount.toFixed(),
-        playerWin: finalSpin.playerWinAmount.toFixed(),
-        gridSnapshot: (outcome as { baseSpins?: { grid?: unknown }[] }).baseSpins?.[0]?.grid ?? null,
-        rngBytes: Buffer.concat(spinBytes),
-        rngByteCount: spinBytes.reduce((a, b) => a + b.length, 0),
-        serverSeed,
-        clientSeed,
-      });
-
-      // Get updated balance
-      const updatedRow = await this.walletRepo.getByUserId(userId);
-      const balance = updatedRow?.balance /* istanbul ignore next */ ?? '0';
-
-      return {
-        spinId: spinLog.id,
-        outcome,
-        playerBet: finalSpin.playerBetAmount.toFixed(),
-        playerWin: finalSpin.playerWinAmount.toFixed(),
-        currency,
-        balance,
-      };
-    } finally {
-      await this.cache.releaseLock(lockKey);
+    // Cache result keyed by txId for idempotency (1 hour TTL)
+    if (txId) {
+      await this.cache.set(`spin:tx:${txId}`, JSON.stringify(result), 3600);
     }
+
+    return result;
   }
 }

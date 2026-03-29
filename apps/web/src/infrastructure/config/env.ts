@@ -13,9 +13,17 @@ const envSchema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().default(900),     // 15 min
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().default(604800), // 7 days
 
+  // Native Redis (ioredis, for K8s in-cluster Redis, 2A-21)
+  // Takes priority over Upstash when both are set.
+  REDIS_URL: z.string().optional(),
+
   // Upstash Redis (optional — NullCacheAdapter if absent)
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+  // Wallet provider (2A-22): 'supabase' | 'redis'
+  // 'redis' requires REDIS_URL or UPSTASH_REDIS_REST_URL
+  WALLET_PROVIDER: z.enum(['supabase', 'redis']).default('supabase'),
 
   // Rate limiting
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(5),

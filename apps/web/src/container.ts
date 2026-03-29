@@ -33,6 +33,12 @@ let _rng: IRNGProvider | null = null;
 let _probabilityProvider: IProbabilityProvider | null = null;
 
 function buildCache(): ICacheAdapter {
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { IoRedisAdapter } = require('./adapters/cache/IoRedisAdapter');
+    return new IoRedisAdapter(redisUrl);
+  }
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (url && token) {
@@ -41,6 +47,23 @@ function buildCache(): ICacheAdapter {
     return new UpstashCacheAdapter(url, token);
   }
   return new NullCacheAdapter();
+}
+
+function buildWalletRepo(cache: ICacheAdapter): IWalletRepository {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SupabaseWalletRepository } = require('./adapters/repositories/SupabaseWalletRepository');
+  const supabaseRepo = new SupabaseWalletRepository(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  if (process.env.WALLET_PROVIDER === 'redis') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { RedisWalletService } = require('./adapters/game/RedisWalletService');
+    return new RedisWalletService(cache, supabaseRepo);
+  }
+
+  return supabaseRepo;
 }
 
 /**
@@ -64,12 +87,7 @@ export const container = {
   get walletRepository(): IWalletRepository {
     /* istanbul ignore next */
     if (!_walletRepo) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { SupabaseWalletRepository } = require('./adapters/repositories/SupabaseWalletRepository');
-      _walletRepo = new SupabaseWalletRepository(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      );
+      _walletRepo = buildWalletRepo(this.cache);
     }
     return _walletRepo!;
   },

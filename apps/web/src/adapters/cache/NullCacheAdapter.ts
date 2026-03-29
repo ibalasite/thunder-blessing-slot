@@ -6,6 +6,8 @@ import type { ICacheAdapter } from '../../domain/interfaces/ICacheAdapter';
  */
 export class NullCacheAdapter implements ICacheAdapter {
   private _store = new Map<string, { value: string; expiresAt?: number }>();
+  private _streams = new Map<string, Array<{ id: string; data: Record<string, string> }>>();
+  private _streamSeq = 0;
 
   async get(key: string): Promise<string | null> {
     const entry = this._store.get(key);
@@ -33,6 +35,36 @@ export class NullCacheAdapter implements ICacheAdapter {
     const next = (current ? parseInt(current, 10) : 0) + 1;
     await this.set(key, String(next), ttlSeconds);
     return next;
+  }
+
+  async incrby(key: string, delta: number): Promise<number> {
+    const current = await this.get(key);
+    const next = (current ? parseInt(current, 10) : 0) + delta;
+    await this.set(key, String(next));
+    return next;
+  }
+
+  async decrby(key: string, delta: number): Promise<number> {
+    const current = await this.get(key);
+    const next = (current ? parseInt(current, 10) : 0) - delta;
+    await this.set(key, String(next));
+    return next;
+  }
+
+  async xadd(stream: string, data: Record<string, string>): Promise<string> {
+    const id = `${Date.now()}-${++this._streamSeq}`;
+    const entries = this._streams.get(stream) ?? [];
+    entries.push({ id, data });
+    this._streams.set(stream, entries);
+    return id;
+  }
+
+  async xread(stream: string, fromId: string, count = 100): Promise<Array<{ id: string; data: Record<string, string> }>> {
+    const entries = this._streams.get(stream) ?? [];
+    const filtered = fromId === '0'
+      ? entries
+      : entries.filter((e) => e.id > fromId);
+    return filtered.slice(0, count);
   }
 
   async acquireLock(key: string, ttlSeconds: number): Promise<boolean> {

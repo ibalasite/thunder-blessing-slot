@@ -9,6 +9,8 @@ import type { ISpinLogRepository, SpinLog } from '../../../src/domain/interfaces
 import type { ICacheAdapter } from '../../../src/domain/interfaces/ICacheAdapter';
 import type { IProbabilityProvider, BetRange } from '../../../src/domain/interfaces/IProbabilityProvider';
 import type { IRNGProvider } from '../../../src/domain/interfaces/IRNGProvider';
+import type { IProbabilityCore } from '../../../src/domain/interfaces/IProbabilityCore';
+import type { ISpinLogger } from '../../../src/domain/interfaces/ISpinLogger';
 
 export const TEST_USER = { id: 'user-1', email: 'test@example.com', createdAt: new Date('2026-01-01') };
 export const TEST_WALLET: Wallet = {
@@ -84,6 +86,10 @@ export function createMockCache(overrides: Partial<ICacheAdapter> = {}): ICacheA
     set: jest.fn().mockResolvedValue(undefined),
     del: jest.fn().mockResolvedValue(undefined),
     incr: jest.fn().mockResolvedValue(1),
+    incrby: jest.fn().mockResolvedValue(1),
+    decrby: jest.fn().mockResolvedValue(0),
+    xadd: jest.fn().mockResolvedValue('1-0'),
+    xread: jest.fn().mockResolvedValue([]),
     acquireLock: jest.fn().mockResolvedValue(true),
     releaseLock: jest.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -105,6 +111,22 @@ export function createMockRng(overrides: Partial<IRNGProvider> = {}): IRNGProvid
     randomInt: jest.fn().mockReturnValue(3),
     getSpinBytes: jest.fn().mockReturnValue(MOCK_BYTES),
     resetSpinBytes: jest.fn(),
+    ...overrides,
+  };
+}
+
+export function createMockProbabilityCore(overrides: Partial<IProbabilityCore> = {}): IProbabilityCore {
+  return {
+    computeSpin: jest.fn().mockReturnValue({ totalWin: 5 }),
+    getSpinBytes: jest.fn().mockReturnValue(MOCK_BYTES),
+    resetSpinBytes: jest.fn(),
+    ...overrides,
+  };
+}
+
+export function createMockSpinLogger(overrides: Partial<ISpinLogger> = {}): ISpinLogger {
+  return {
+    logAsync: jest.fn(),
     ...overrides,
   };
 }

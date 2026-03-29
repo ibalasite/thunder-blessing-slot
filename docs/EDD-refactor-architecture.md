@@ -1930,13 +1930,13 @@ Render Web Service（apps/web）
 | 2A-14 | E2E tests：K8s API E2E（10 tests）+ RPA Visual E2E（11 steps，Playwright）| 1.5 天 | ✅ |
 | 2A-15 | Security hardening S-01~S-18（P0 全部完成，P1/P2 同步完成）；nginx no-cache for index.html | 1 天 | ✅ |
 | 2A-16 | README（Windows 11 + Mac 建置步驟）+ GitHub Actions CI/CD workflows | 0.5 天 | ✅ |
-| 2A-17 | 抽出 `GameRunner` class：`IProbabilityCore` + `IWalletService` + `ISpinLogger` 三介面解耦 `SpinUseCase` | 1 天 | ⬜ |
-| 2A-18 | txId 冪等保護（Redis `SET NX`）：防止 client retry 重複扣款（P0 安全，§13-E）| 0.5 天 | ⬜ |
-| 2A-19 | `RedisWalletService`：`DECRBY`/`INCRBY` atomic + `wallet_tx_stream` write-behind（§13-D-1）| 2 天 | ⬜ |
-| 2A-20 | `RedisSpinLogger`：`XADD spin_log_stream` fire-and-forget + Stream Consumer bulk INSERT（§13-D-2）| 1.5 天 | ⬜ |
-| 2A-21 | Redis AOF 啟用（`appendonly yes`）+ 每小時 reconcile job（Redis balance vs DB sum）| 0.5 天 | ⬜ |
-| 2A-22 | `WALLET_PROVIDER` ENV 切換驗證（Supabase / Redis / External）+ integration tests | 1 天 | ⬜ |
-| **2A 合計** | | **24 天** | **16/22（⬜ 17-22 待實作）** |
+| 2A-17 | 抽出 `GameRunner` class：`IProbabilityCore` + `IWalletService` + `ISpinLogger` 三介面解耦 `SpinUseCase` | 1 天 | ✅ |
+| 2A-18 | txId 冪等保護（Redis `SET NX`）：防止 client retry 重複扣款（P0 安全，§13-E）| 0.5 天 | ✅ |
+| 2A-19 | `RedisWalletService`：`DECRBY`/`INCRBY` atomic + `wallet_tx_stream` write-behind（§13-D-1）| 2 天 | ✅ |
+| 2A-20 | `RedisSpinLogger`：`XADD spin_log_stream` fire-and-forget + `SpinLogStreamConsumer` bulk INSERT（§13-D-2）| 1.5 天 | ✅ |
+| 2A-21 | Redis AOF 啟用（`appendonly yes`）+ 每小時 reconcile CronJob（Redis balance vs DB sum）| 0.5 天 | ✅ |
+| 2A-22 | `WALLET_PROVIDER` ENV 切換（supabase / redis）+ unit tests for all new services | 1 天 | ✅ |
+| **2A 合計** | | **24 天** | **22/22 ✅** |
 
 ### Phase 2B：Production 部署
 

@@ -11,6 +11,8 @@ const SpinSchema = z.object({
   currency: z.enum(['USD', 'TWD']),
   extraBetOn: z.boolean().optional().default(false),
   clientSeed: z.string().max(64).optional(),
+  /** Optional client UUID for idempotency (2A-18). Same txId returns cached result. */
+  txId: z.string().uuid().optional(),
 });
 
 export async function gameController(app: FastifyInstance): Promise<void> {
@@ -32,6 +34,7 @@ export async function gameController(app: FastifyInstance): Promise<void> {
       currency: body.currency,
       extraBetOn: body.extraBetOn ?? false,
       clientSeed: body.clientSeed ?? null,
+      txId: body.txId,
     });
     reply.send(result);
   });

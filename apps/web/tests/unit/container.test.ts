@@ -21,7 +21,9 @@ describe('container._override() + _reset()', () => {
   it('_reset() clears overrides (cache rebuilds via buildCache)', () => {
     const customCache: ICacheAdapter = {
       get: jest.fn(), set: jest.fn(), del: jest.fn(),
-      incr: jest.fn(), acquireLock: jest.fn(), releaseLock: jest.fn(),
+      incr: jest.fn(), incrby: jest.fn(), decrby: jest.fn(),
+      xadd: jest.fn(), xread: jest.fn(),
+      acquireLock: jest.fn(), releaseLock: jest.fn(),
     };
     container._override({ cache: customCache });
     container._reset();

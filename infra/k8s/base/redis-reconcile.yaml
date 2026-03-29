@@ -1,0 +1,46 @@
+---
+# Wallet reconcile CronJob (2A-21)
+# Runs every hour; compares Redis wallet balances against DB sum of transactions.
+# Logs discrepancies — does NOT auto-correct (alerts team for investigation).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wallet-reconcile
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: reconcile
+              image: thunder-web:latest
+              command:
+                - node
+                - -e
+                - |
+                  const { reconcileWallets } = require('./dist/scripts/reconcileWallets');
+                  reconcileWallets().then(r => {
+                    console.log('[reconcile] completed', JSON.stringify(r));
+                    process.exit(r.discrepancies > 0 ? 1 : 0);
+                  }).catch(e => { console.error(e); process.exit(2); });
+              env:
+                - name: NODE_ENV
+                  value: "production"
+              envFrom:
+                - secretRef:
+                    name: thunder-secrets
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"
