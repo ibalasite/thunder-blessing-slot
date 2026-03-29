@@ -10,39 +10,6 @@
 
 ---
 
-## 專案結構
-
-```
-thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
-├── assets/scripts/                  ← Cocos 遊戲邏輯（SlotEngine、GameConfig 等）
-├── tests/                           ← 遊戲引擎測試（Jest）
-├── apps/
-│   ├── web/                         ← Fastify API Server（Clean Architecture）
-│   │   ├── src/
-│   │   │   ├── infrastructure/fastify/ ← app.ts / server.ts / routes/
-│   │   │   ├── domain/             ← Entities（SpinEntity、WalletEntity）
-│   │   │   ├── usecases/           ← SpinUseCase、LoginUseCase 等
-│   │   │   ├── adapters/           ← Supabase / Redis 實作
-│   │   │   ├── services/           ← BetRangeService 等
-│   │   │   └── container.ts        ← Composition Root（DI 接線）
-│   │   └── tests/unit/             ← 100% coverage unit tests
-│   └── worker/                     ← 每日 RTP 報表 / spin_logs 歸檔
-├── infra/k8s/                       ← Kubernetes 設定（base + overlays/dev）
-├── supabase/
-│   ├── config.toml                  ← Supabase local config
-│   ├── migrations/                  ← 版本化 SQL（9 張資料表）
-│   └── seed.sql                     ← 開發用測試資料
-├── .github/workflows/
-│   ├── ci.yml                       ← 每次 Push 執行測試
-│   ├── db-migrate.yml               ← migration 觸發
-│   └── deploy-demo.yml              ← Render 部署
-├── pnpm-workspace.yaml
-├── package.json
-└── docs/EDD-refactor-architecture.md  ← 完整架構設計文件 (v6.0)
-```
-
----
-
 ## 遊戲規則概述
 
 | 項目 | 內容 |
@@ -54,401 +21,361 @@ thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
 
 ---
 
-## 開發環境建置
+## 專案結構
 
-有兩種執行模式：
-
-| 模式 | 說明 | 適用 |
-|------|------|------|
-| **Local Dev**（Supabase + Fastify）| Supabase local + `pnpm dev` 啟動 API | 開發、改 code |
-| **K8s Dev**（Rancher Desktop）| 完整 K8s stack，模擬 production | 整合測試、端對端驗證 |
-
-### 系統需求
-
-| | Mac | Windows 11 |
-|--|-----|------------|
-| Node.js | 20+ LTS | 20+ LTS |
-| pnpm | 9+ | 9+ |
-| Cocos Creator | 3.8.x | 3.8.x |
-| Docker Desktop | 必須（Supabase / K8s）| 必須（Supabase）|
-| Supabase CLI | 2.x | 2.x |
-| Rancher Desktop | K8s 模式必須（含 k3s + kubectl）| ⚠️ K8s 模式需 WSL2（有限支援）|
-| Python 3 + Playwright | RPA 視覺 E2E 測試 | RPA 視覺 E2E 測試 |
+```
+thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
+├── assets/scripts/                  ← Cocos 遊戲邏輯（SlotEngine、GameConfig 等）
+├── build/web-desktop/               ← Cocos 編譯產出（靜態檔，部署至 K8s nginx pod）
+├── tests/                           ← 遊戲引擎測試（Jest）
+├── apps/
+│   ├── web/                         ← Fastify API Server（Clean Architecture）
+│   │   ├── src/
+│   │   │   ├── infrastructure/fastify/ ← app.ts / server.ts / routes/
+│   │   │   ├── domain/             ← Entities（SpinEntity、WalletEntity）
+│   │   │   ├── usecases/           ← SpinUseCase、LoginUseCase 等
+│   │   │   ├── adapters/           ← Supabase / Redis 實作
+│   │   │   ├── services/           ← BetRangeService 等
+│   │   │   └── container.ts        ← Composition Root（DI 接線）
+│   │   └── tests/                  ← unit（100% coverage）/ integration / e2e
+│   └── worker/                     ← 每日 RTP 報表 / spin_logs 歸檔
+├── infra/k8s/
+│   ├── base/                        ← Deployment / Service / Ingress
+│   ├── overlays/dev/                ← kustomize patch（local ENV、NodePort）
+│   ├── build.sh                     ← Fastify API 一鍵 build + deploy
+│   └── cocos/
+│       ├── build-cocos.sh           ← Cocos 一鍵 build + deploy
+│       ├── Dockerfile               ← nginx static server
+│       └── nginx.conf
+├── supabase/
+│   ├── config.toml
+│   ├── migrations/                  ← 版本化 SQL
+│   └── seed.sql
+├── tests/
+│   ├── e2e/k8s-server.e2e.test.ts  ← K8s API E2E（10 tests）
+│   ├── visual-e2e/e2e_slot_test.py ← RPA 視覺 E2E（11 steps，Playwright）
+│   ├── integration/                 ← RTP 模擬、SlotEngine 整合
+│   ├── unit/                        ← SlotEngine、GameFlow、BuyFG 等
+│   └── security/                    ← CSPRNG 攻擊防禦
+├── pnpm-workspace.yaml
+├── package.json
+└── docs/EDD-refactor-architecture.md  ← 完整架構設計文件
+```
 
 ---
 
-## 啟動步驟（Local Dev 模式）
+## 開發模式說明
 
-> 適用：改 code、跑單元測試。不需要 K8s。
+| 模式 | 說明 | 適用場景 |
+|------|------|---------|
+| **Local Dev** | Fastify `pnpm dev` + Supabase in K8s | 修改 API 邏輯、跑 unit / integration tests |
+| **K8s Dev** | 完整 K8s stack（Fastify + Cocos + Supabase 全在 K8s）| 端對端驗證、RPA 測試、模擬 production |
+
+兩種模式都使用 **Rancher Desktop**（k3s）作為 K8s 與容器執行環境，Mac 和 Windows 操作一致。
+
+---
+
+## 一、環境安裝
 
 ### Mac
 
-**Prerequisites：**
-- Node.js 20+ LTS、pnpm 9+
-- Docker Desktop（Supabase local 需要）
-- Supabase CLI：`brew install supabase/tap/supabase`
-
 ```bash
-# 1. 安裝依賴
-pnpm install
+# 1. Node.js 20+（使用 nvm）
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.zshrc   # 或 ~/.bashrc
+nvm install 20 && nvm use 20
 
-# 2. 建立環境變數檔
-cp apps/web/.env.example apps/web/.env.local
-# 編輯 apps/web/.env.local — JWT_SECRET 至少 32 字元
+# 2. pnpm
+npm install -g pnpm
 
-# 3. 啟動 Supabase（需要 Docker Desktop）
-supabase start
-# 輸出中複製 service_role key → 填入 .env.local 的 SUPABASE_SERVICE_ROLE_KEY
+# 3. Supabase CLI
+brew install supabase/tap/supabase
 
-# 4. 執行 DB migrations
-supabase db push
+# 4. Rancher Desktop（K8s + 容器執行環境）
+#    下載：https://rancherdesktop.io → 安裝 .dmg
+#    安裝後：Rancher Desktop → Preferences → Kubernetes → 勾選 Enable Kubernetes → Apply
+#    等待 K8s 啟動（約 1-2 分鐘）
+#    確認：kubectl cluster-info
 
-# 5. 啟動 Fastify API server
-cd apps/web && pnpm dev
-# API 在 http://localhost:3000
+# 5. Python + Playwright（RPA 視覺 E2E 測試用）
+pip3 install playwright && playwright install chromium
 
-# 6. 驗證
-curl http://localhost:3000/api/v1/health
-# {"status":"ok"}
-
-# 7. 停止 Supabase
-supabase stop
+# 6. Cocos Creator（遊戲開發用，非必要）
+#    下載 Cocos Dashboard：https://www.cocos.com/creator（Mac 版）
+#    安裝後：Dashboard → 安裝 → Cocos Creator 3.8.x
 ```
 
 ### Windows 11
 
-**Prerequisites：**
-- Node.js 20+ LTS（`winget install OpenJS.NodeJS.LTS`）
-- pnpm：`npm install -g pnpm`
-- Docker Desktop + 啟用 WSL2（Settings → Use WSL 2 backend）
-- Supabase CLI：
-  ```powershell
-  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-  irm get.scoop.sh | iex
-  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-  scoop install supabase
-  ```
-
 ```powershell
-# 1. 安裝依賴
-pnpm install
+# 以下指令在 PowerShell（管理員）執行
 
-# 2. 建立環境變數檔
-Copy-Item apps\web\.env.example apps\web\.env.local
-# 用 VS Code 編輯 apps\web\.env.local — JWT_SECRET 至少 32 字元
+# 1. Git
+winget install Git.Git
 
-# 3. 啟動 Supabase（需要 Docker Desktop 已啟動）
-supabase start
-# 複製 service_role key → 填入 .env.local 的 SUPABASE_SERVICE_ROLE_KEY
+# 2. Node.js 20+
+winget install OpenJS.NodeJS.LTS
+# 重開 PowerShell 後確認：node -v
 
-# 4. 執行 DB migrations
-supabase db push
-
-# 5. 啟動 Fastify API server
-Set-Location apps\web
-pnpm dev
-# API 在 http://localhost:3000
-
-# 6. 驗證
-Invoke-RestMethod http://localhost:3000/api/v1/health
-
-# 7. 停止 Supabase
-supabase stop
-```
-
----
-
-## 啟動步驟（K8s Dev 模式）
-
-> 適用：完整 stack 驗證、端對端測試。遊戲在 `http://localhost:30080`，API 在 `http://localhost:30001`。
-
-### Mac（Rancher Desktop）
-
-**Prerequisites：**
-- [Rancher Desktop](https://rancherdesktop.io/) — 安裝後確認 `kubectl` 可用
-- `kubectl`、`kustomize`（Rancher Desktop 內建）
-
-```bash
-# 1. 確認 K8s cluster 正常
-kubectl cluster-info
-
-# 2. 部署完整 stack（一次性，首次需 5-10 分鐘）
-./infra/k8s/build.sh
-
-# 3. 確認所有 pod 正常
-kubectl get pods -n thunder-dev
-# 應看到 thunder-web、thunder-cocos、supabase-* 全部 Running
-
-# 4. 開啟遊戲
-open http://localhost:30080
-
-# 5. 驗證 API
-curl http://localhost:30001/api/v1/health
-# {"status":"ok"}
-
-# 6. 跑 K8s E2E tests（需要 K8s stack 運行中）
-npx jest tests/e2e/k8s-server.e2e.test.ts --no-coverage
-
-# 7. 跑 RPA 視覺 E2E（需要 Python + Playwright）
-pip install playwright
-playwright install chromium
-python3 tests/visual-e2e/e2e_slot_test.py --target k8s
-```
-
-### Windows 11（K8s）
-
-> ⚠️ K8s dev 模式在 Windows 上需透過 WSL2，建議使用 Mac 執行 K8s 模式。
-> 若需在 Windows 開發，使用 Local Dev 模式（Supabase + pnpm dev）即可。
-
-若仍要在 Windows 使用 K8s：
-1. 安裝 [Rancher Desktop for Windows](https://rancherdesktop.io/)（需要 WSL2）
-2. 在 WSL2 terminal 執行與 Mac 相同的指令
-3. 確認 `kubectl cluster-info` 正常後執行 `./infra/k8s/build.sh`
-
----
-
-## Mac 完整開發環境建置步驟
-
-### 1. 安裝必要工具
-
-```bash
-# Node.js 20+（使用 nvm）
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-nvm install 20 && nvm use 20
-
-# pnpm
+# 3. pnpm
 npm install -g pnpm
 
-# Supabase CLI（Local Dev 模式）
-brew install supabase/tap/supabase
+# 4. Supabase CLI
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
 
-# Rancher Desktop（K8s 模式）
-# 前往 https://rancherdesktop.io 下載 Mac 版 .dmg
-# 安裝後：偏好設定 → Kubernetes → 啟用 → Apply
-# 確認：kubectl cluster-info
+# 5. Rancher Desktop（K8s + 容器執行環境）
+#    下載：https://rancherdesktop.io → 安裝 .exe
+#    安裝後：Rancher Desktop → Preferences → Kubernetes → 勾選 Enable Kubernetes → Apply
+#    等待 K8s 啟動（約 1-2 分鐘）
+#    確認（PowerShell）：kubectl cluster-info
 
-# Python + Playwright（RPA 視覺 E2E）
-pip3 install playwright && playwright install chromium
+# 6. Python + Playwright（RPA 視覺 E2E 測試用）
+winget install Python.Python.3
+pip install playwright
+playwright install chromium
 
-# Cocos Creator（遊戲開發）
-# 前往 https://www.cocos.com/creator 下載 Cocos Dashboard（Mac 版）
-# 安裝後在 Dashboard → 安裝 → Cocos Creator 3.8.x
+# 7. Cocos Creator（遊戲開發用，非必要）
+#    下載 Cocos Dashboard：https://www.cocos.com/creator（Windows 版）
+#    安裝後：Dashboard → 安裝 → Cocos Creator 3.8.x
 ```
 
-### 2. Clone & 安裝依賴
+---
+
+## 二、Clone & 安裝依賴
+
+Mac 和 Windows 操作相同：
 
 ```bash
-git clone https://github.com/<owner>/thunder-blessing-slot.git
+git clone https://github.com/ibalasite/thunder-blessing-slot.git
 cd thunder-blessing-slot
-
-# 安裝 workspace 依賴（root + apps/web + apps/worker）
 pnpm install
 ```
 
-### 3. 設定環境變數
+---
+
+## 三、Local Dev 模式啟動
+
+> Fastify API 跑在本機（`localhost:3000`），Supabase 跑在 K8s（`localhost:30005`）。
+> 適合修改 API 邏輯時快速迭代，不需要重新 build Docker image。
+
+### 前提：K8s 中已有 Supabase
+
+Supabase 是 K8s 的一部分，第一次需要先啟動 K8s stack（見「K8s Dev 模式」第 1-3 步）。
+
+### 設定環境變數
+
+複製範本並填入 K8s Supabase 的連線資訊：
 
 ```bash
-# 複製 web 環境變數範本
+# Mac
 cp apps/web/.env.example apps/web/.env.local
+
+# Windows（PowerShell）
+Copy-Item apps\web\.env.example apps\web\.env.local
 ```
 
 編輯 `apps/web/.env.local`：
 
 ```env
 NODE_ENV=development
-SUPABASE_URL=http://localhost:54321
-SUPABASE_SERVICE_ROLE_KEY=<取自 supabase start 輸出>
-JWT_SECRET=dev-local-jwt-secret-min-32-chars-ok
+SUPABASE_URL=http://localhost:30005
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.ywbHA4mc8iwfpziFbKDMxj6K9HsJ5x3Y_34-PA8vQm8
+JWT_SECRET=dev-jwt-secret-min-32-chars-long-here
+ALLOWED_ORIGIN=*
 ```
 
-### 4. 啟動 Supabase 本地服務
+### 啟動 Fastify API
 
 ```bash
-# 啟動 Supabase（PostgreSQL + Auth + Studio）
-supabase start
-
-# 輸出範例：
-#   API URL: http://localhost:54321
-#   DB URL: postgresql://postgres:postgres@localhost:54322/postgres
-#   Studio URL: http://localhost:54323
-#   Service Role Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-
-# 執行 migrations
-supabase db push
-
-# （可選）植入測試資料
-supabase db reset --db-url postgresql://postgres:postgres@localhost:54322/postgres
-```
-
-### 5. 啟動 Fastify API 開發伺服器
-
-```bash
-# 從 workspace root 啟動
-pnpm web
-
-# 或直接進入 apps/web
-cd apps/web && pnpm dev
-
-# API 在 http://localhost:3000
-# 測試 health: curl http://localhost:3000/api/v1/health
-```
-
-### 6. 執行測試
-
-```bash
-# 遊戲引擎測試（根目錄）
-pnpm test                                    # 全部（888 tests：unit + integration + security + e2e）
-
-# API Server 測試（apps/web）
+# Mac / Windows（PowerShell）
 cd apps/web
-pnpm test:coverage                           # unit tests（100% coverage）
-INTEGRATION=1 pnpm test:int                  # integration tests（需要 Supabase 運行中）
-E2E=1 pnpm test:e2e                         # full HTTP flow E2E
+pnpm dev
+# API 在 http://localhost:3000
 
-# K8s API E2E（需要 K8s stack 運行）
-npx jest tests/e2e/k8s-server.e2e.test.ts --no-coverage   # 10 tests
-
-# RPA 視覺 E2E（需要 K8s stack + Playwright）
-python3 tests/visual-e2e/e2e_slot_test.py --target k8s    # 11 steps
-```
-
-### 7. 開啟 Cocos Creator 遊戲
-
-```bash
-# 在 Cocos Dashboard 開啟根目錄作為專案
-# 選擇 Cocos Creator 3.8.x
-# 雙擊 assets/scenes/Main.scene → 點 Play ▶
+# 驗證
+# Mac：
+curl http://localhost:3000/api/v1/health
+# Windows（PowerShell）：
+Invoke-RestMethod http://localhost:3000/api/v1/health
+# 回應：{"status":"ok"}
 ```
 
 ---
 
-## Windows 11 完整開發環境建置步驟
+## 四、K8s Dev 模式啟動
 
-### 1. 安裝必要工具
+> 完整 stack 跑在 K8s（Rancher Desktop k3s）：
+> - 遊戲（Cocos nginx）：`http://localhost:30080`
+> - Fastify API：`http://localhost:30001`
+> - Supabase（Kong gateway）：`http://localhost:30005`
 
-**方法一：使用 PowerShell（管理員）**
+### 步驟 1：首次部署完整 stack
 
-```powershell
-# Git
-winget install Git.Git
-
-# Node.js 20+
-winget install OpenJS.NodeJS.LTS
-# 或 nvm-windows：
-winget install CoreyButler.NVMforWindows
-# 重開 PowerShell 後：nvm install 20 && nvm use 20
-
-# pnpm
-npm install -g pnpm
-
-# Scoop + Supabase CLI（Local Dev 模式）
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-irm get.scoop.sh | iex
-scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-scoop install supabase
-
-# Docker Desktop（Supabase 需要）
-winget install Docker.DockerDesktop
-# 安裝後：Docker Desktop → Settings → General → Use WSL 2 based engine → Apply
-
-# Python + Playwright（RPA 視覺 E2E）
-winget install Python.Python.3
-pip install playwright
-playwright install chromium
+```bash
+# Mac（Terminal）/ Windows（Git Bash 或 WSL）
+./infra/k8s/build.sh
+# 首次約 5-10 分鐘（下載 kaniko、建立 namespace、啟動 Supabase）
 ```
 
-**方法二：手動下載安裝**
+### 步驟 2：確認所有服務正常
 
-| 工具 | 下載 |
-|------|------|
-| Node.js 20+ LTS | https://nodejs.org/en/download |
-| Git | https://git-scm.com/download/win |
-| Supabase CLI | https://github.com/supabase/cli/releases（`.exe`）|
-| Docker Desktop | https://www.docker.com/products/docker-desktop |
-| Cocos Dashboard | https://www.cocos.com/creator |
-
-### 2. Clone & 安裝依賴
-
-```powershell
-# 在 PowerShell 中執行
-git clone https://github.com/<owner>/thunder-blessing-slot.git
-cd thunder-blessing-slot
-
-# 安裝 workspace 依賴
-pnpm install
+```bash
+kubectl get pods -n thunder-dev
+# 預期看到以下 pod 全部 Running：
+#   thunder-web-xxx         ← Fastify API
+#   thunder-cocos-xxx       ← Cocos nginx
+#   registry-xxx            ← in-cluster image registry（port 30500）
+#   supabase-supabase-db-0
+#   supabase-supabase-kong-xxx
+#   supabase-supabase-auth-xxx
+#   supabase-supabase-rest-xxx
+#   supabase-supabase-meta-xxx
 ```
 
-### 3. 設定環境變數
+### 步驟 3：開啟遊戲
 
-```powershell
-# 複製範本
-Copy-Item apps\web\.env.example apps\web\.env.local
+```
+http://localhost:30080
 ```
 
-用記事本或 VS Code 編輯 `apps\web\.env.local`：
+### 步驟 4：更新 Fastify API（有 code 異動時）
 
-```env
-NODE_ENV=development
-SUPABASE_URL=http://localhost:54321
-SUPABASE_SERVICE_ROLE_KEY=<取自 supabase start 輸出>
-JWT_SECRET=dev-local-jwt-secret-min-32-chars-ok
+修改 `apps/web/src/` 後重新 build 並 deploy：
+
+```bash
+# 取得目前 git commit SHA 作為 image tag
+IMAGE_TAG=$(git rev-parse --short HEAD)
+
+# Build + push 至 in-cluster registry + deploy
+./infra/k8s/build.sh $IMAGE_TAG
+
+# 確認 rollout 完成
+kubectl rollout status deployment/thunder-web -n thunder-dev
 ```
 
-### 4. 啟動 Supabase 本地服務
+### 步驟 5：更新 Cocos 遊戲（有 Cocos code 異動時）
 
-> **前提**：Windows 11 需安裝 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-> 開啟 Docker Desktop → Settings → Use WSL 2 → Apply
+修改 `assets/scripts/` 後，需重新 build Cocos 並 deploy：
 
-```powershell
-# 啟動 Supabase
-supabase start
+```bash
+# 方法一：使用自動化腳本（建議）
+# 腳本會自動呼叫 Cocos Creator CLI build，再透過 kaniko 打包進 K8s
+IMAGE_TAG="cocos-$(git rev-parse --short HEAD)"
+./infra/k8s/cocos/build-cocos.sh $IMAGE_TAG
 
-# 執行 migrations
-supabase db push
+# 確認 rollout 完成
+kubectl rollout status deployment/thunder-cocos -n thunder-dev
 ```
 
-### 5. 啟動 Fastify API 開發伺服器
+> **說明**：Cocos 遊戲打包流程：
+> 1. `build-cocos.sh` 呼叫 Cocos Creator CLI → 產出 `build/web-desktop/`
+> 2. 將 build output 上傳至 K8s PVC（build context）
+> 3. 在 K8s 內執行 kaniko job → build nginx image → push 至 in-cluster registry（`localhost:30500`）
+> 4. `kubectl set image` 更新 thunder-cocos deployment
 
-```powershell
-# 從 workspace root 啟動（PowerShell）
-pnpm web
+---
 
-# 或直接進入 apps/web
-Set-Location apps\web
-pnpm dev
+## 五、切換 API 目標（Local Fastify ↔ K8s API）
 
-# API 在 http://localhost:3000
-# 測試：在瀏覽器開啟 http://localhost:3000/api/v1/health
+Cocos 遊戲啟動時會讀取 API URL，優先順序：
+
+1. `window.__THUNDER_CONFIG.apiUrl`（由 nginx 或測試框架注入）
+2. URL query param：`?apiUrl=...`
+3. 預設值：`http://localhost:30001`（K8s API）
+
+### 連線到 K8s API（預設）
+
+直接開啟：
+
+```
+http://localhost:30080
 ```
 
-### 6. 執行測試
+### 連線到 Local Fastify（pnpm dev，port 3000）
+
+在 URL 加上 query param：
+
+```
+http://localhost:30080?apiUrl=http://localhost:3000
+```
+
+> 或在 Cocos Creator 開發預覽時（port 7456），同樣加上 `?apiUrl=http://localhost:3000`
+
+---
+
+## 六、執行測試
+
+以下指令 Mac / Windows 相同（Windows 在 PowerShell 或 Git Bash 執行）：
+
+```bash
+# ── 遊戲引擎測試（根目錄）─────────────────────────────────────
+pnpm test                          # 全部（888 tests：unit + integration + security）
+
+# ── Fastify API Server 測試（apps/web）───────────────────────
+cd apps/web
+pnpm test                          # unit tests（100% coverage）
+pnpm test:coverage                 # unit tests + coverage report
+INTEGRATION=1 pnpm test:int        # integration tests（需要 Supabase 在 K8s 運行）
+E2E=1 pnpm test:e2e               # full HTTP flow E2E
+
+# ── K8s 端對端測試（需要 K8s stack 運行中）────────────────────
+npx jest tests/e2e/k8s-server.e2e.test.ts --no-coverage   # 10 tests：health/auth/spin/replay
+
+# ── RPA 視覺 E2E（需要 K8s stack + Playwright）────────────────
+python3 tests/visual-e2e/e2e_slot_test.py --target k8s    # 11 steps：完整遊戲流程
+```
+
+Windows PowerShell 的環境變數寫法不同：
 
 ```powershell
-# 遊戲引擎測試
-pnpm test
-
-# API Server 測試（apps/web）
-Set-Location apps\web
-pnpm test:coverage
-
-# Integration tests（需要 Supabase 運行中）
+# Integration tests
 $env:INTEGRATION=1; pnpm test:int
 
-# E2E tests（需要 Supabase 運行中）
+# E2E tests
 $env:E2E=1; pnpm test:e2e
 ```
 
-### 7. 開啟 Cocos Creator 遊戲
-
-1. 安裝並開啟 Cocos Dashboard
-2. 左側點選「安裝」→ 安裝 **Cocos Creator 3.8.x**
-3. 左側點選「Projects」→「Add」→ 選擇專案根目錄
-4. 等待初始化（首次約 2-3 分鐘）
-5. 雙擊 `assets/scenes/Main.scene` → 點 **▶ Play**
-
 ---
 
-## 常見問題
+## 七、常見問題
+
+### kubectl: command not found
+
+Rancher Desktop 的 `kubectl` 路徑可能未加入 shell PATH。
+
+```bash
+# Mac：加入 ~/.zshrc 或 ~/.bash_profile
+export PATH="$PATH:$HOME/.rd/bin"
+source ~/.zshrc
+
+# Windows：Rancher Desktop 安裝時會提示加入 PATH，重開 PowerShell 即可
+```
+
+### Build 時 kaniko 失敗
+
+```bash
+# 查看 kaniko job log
+kubectl logs -n thunder-dev -l build-tag=<IMAGE_TAG> --tail=50
+
+# 清除失敗的 job 後重試
+kubectl delete job -n thunder-dev -l app=kaniko --ignore-not-found
+./infra/k8s/build.sh
+```
+
+### Pod 一直 ImagePullBackOff
+
+確認 image 已成功 push 至 in-cluster registry：
+
+```bash
+curl http://localhost:30500/v2/thunder-web/tags/list
+# 或
+curl http://localhost:30500/v2/thunder-cocos/tags/list
+```
+
+如果 tag 不存在，重新執行 build script。
 
 ### pnpm install 出現 lockfile 錯誤
 
@@ -456,30 +383,19 @@ $env:E2E=1; pnpm test:e2e
 pnpm install --no-frozen-lockfile
 ```
 
-### Docker not running → Supabase 啟動失敗
-
-```bash
-# Mac
-open -a Docker
-
-# Windows: 手動開啟 Docker Desktop 應用程式
-```
-
-### Port 54321 already in use
-
-```bash
-supabase stop
-supabase start
-```
-
 ### JWT_SECRET 長度不足
 
-`JWT_SECRET` 必須至少 32 個字元，否則 `env.ts` Zod 驗證會失敗並輸出錯誤訊息。
+`JWT_SECRET` 必須至少 32 個字元，否則 Zod 驗證失敗。
 
-### apps/web 缺少依賴
+### Port 衝突
 
 ```bash
-cd apps/web && pnpm install
+# 查看佔用 port 的 process（Mac）
+lsof -i :30001
+lsof -i :30080
+
+# Windows（PowerShell）
+netstat -ano | findstr :30001
 ```
 
 ---
@@ -496,10 +412,10 @@ cd apps/web && pnpm install
 
 ## 架構文件
 
-完整 Phase 2A 架構設計請參閱 [docs/EDD-refactor-architecture.md](docs/EDD-refactor-architecture.md)（v7.1）。
+完整設計請參閱 [docs/EDD-refactor-architecture.md](docs/EDD-refactor-architecture.md)。
 
 ---
 
 *RTP 目標：97.5% ± 0.5%（4 種模式均已驗證）*
 *測試數量：888 tests（遊戲引擎）+ 138 tests（API unit，100% coverage）+ 10 tests（K8s E2E）+ 11 steps（RPA Visual E2E）*
-*Phase 2A：15/15 步驟全部完成（2026-03-29）| Cocos → K8s Fastify API 全端整合驗證 ✅*
+*Phase 2：全部完成（2026-03-29）— Cocos ↔ K8s Fastify API 全端整合驗證 ✅*
