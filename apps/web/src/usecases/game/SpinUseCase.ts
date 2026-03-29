@@ -97,7 +97,7 @@ export class SpinUseCase {
         baseUnit: range.baseUnit,
         playerBet: finalSpin.playerBetAmount.toFixed(),
         playerWin: finalSpin.playerWinAmount.toFixed(),
-        gridSnapshot: outcome.grid,
+        gridSnapshot: (outcome as { baseSpins?: { grid?: unknown }[] }).baseSpins?.[0]?.grid ?? null,
         rngBytes: Buffer.concat(spinBytes),
         rngByteCount: spinBytes.reduce((a, b) => a + b.length, 0),
         serverSeed,

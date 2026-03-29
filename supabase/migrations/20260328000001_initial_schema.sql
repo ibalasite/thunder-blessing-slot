@@ -154,7 +154,7 @@ CREATE TABLE spin_logs (
     -- Currency & normalization (§9-M)
     currency        CHAR(3)         NOT NULL DEFAULT 'USD',
     bet_level       INTEGER         NOT NULL CHECK (bet_level > 0),
-    win_level       INTEGER         NOT NULL DEFAULT 0,
+    win_level       NUMERIC(18,4)   NOT NULL DEFAULT 0,
     base_unit       NUMERIC(18,8)   NOT NULL,
     player_bet      NUMERIC(18,4)   NOT NULL,
     player_win      NUMERIC(18,4)   NOT NULL DEFAULT 0,
