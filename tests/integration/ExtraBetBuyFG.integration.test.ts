@@ -82,6 +82,8 @@ function makeUI(): jest.Mocked<IUIController> {
         updateMultBar:       jest.fn(),
         showAutoSpinPanel:   jest.fn(),
         updateAutoSpinLabel: jest.fn(),
+        showDepositPanel:    jest.fn().mockResolvedValue(undefined),
+        hideDepositPanel:    jest.fn(),
     } as jest.Mocked<IUIController>;
 }
 
@@ -187,8 +189,15 @@ describe('Extra Bet + Buy FG — integration', () => {
 
     describe('SC guarantee in Phase B FG spins', () => {
 
-        it('Extra Bet ON + Buy FG: all FG spins have SC in visible rows', async () => {
-            for (let seed = 0; seed < 20; seed++) {
+        it('Extra Bet ON + Buy FG: ALL baseSpins and ALL fgSpins have SC in visible rows', async () => {
+            // GDD §11: SC guaranteed in visible rows (rows 0–2) for EVERY spin in the flow.
+            // Phase A (baseSpins) may have 1–2 spins expanding to MAX_ROWS.
+            // Phase B (fgSpins) has up to 5 spins (x3 → x7 → x11 → x13 → x30).
+            // All must be verified — not just fgSpins[0] or baseSpins[0].
+            let missingBase = 0, missingFG = 0;
+            let totalBase = 0, totalFG = 0;
+
+            for (let seed = 0; seed < 50; seed++) {
                 const { session, spy, ctrl } = makeSpyIntegration(seed);
                 session.setExtraBet(true);
 
@@ -197,11 +206,19 @@ describe('Extra Bet + Buy FG — integration', () => {
                 const outcome = spy.outcomes[spy.outcomes.length - 1];
                 expect(outcome.fgSpins.length).toBeGreaterThan(0);
 
+                for (const spin of outcome.baseSpins) {
+                    totalBase++;
+                    if (!hasScatterInVisibleRows(spin.grid)) missingBase++;
+                }
                 for (const fg of outcome.fgSpins) {
-                    const grid = fg.spin.grid;
-                    expect(hasScatterInVisibleRows(grid)).toBe(true);
+                    totalFG++;
+                    if (!hasScatterInVisibleRows(fg.spin.grid)) missingFG++;
                 }
             }
+            expect(totalBase).toBeGreaterThan(0);
+            expect(totalFG).toBeGreaterThan(0);
+            expect(missingBase).toBe(0);
+            expect(missingFG).toBe(0);
         });
 
         it('Extra Bet OFF + Buy FG: some FG spins may lack SC', async () => {

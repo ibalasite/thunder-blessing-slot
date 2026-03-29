@@ -39,7 +39,7 @@ function hasScatterInVisibleRows(grid: SymType[][]): boolean {
     return false;
 }
 
-const TRIALS = 200;
+const TRIALS = 500;
 
 describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
 
@@ -102,20 +102,23 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
             }
         });
 
-        it('Phase A baseSpins have SC in visible rows (extraBetOn=true + buyFG)', () => {
-            // With SC guarantee on, every initial grid for Phase A should have SC
-            // We check the FIRST spin grid since that's where SC guarantee is applied
+        it('Phase A baseSpins have SC in visible rows (extraBetOn=true + buyFG) — ALL spins checked', () => {
+            // With SC guarantee on, EVERY baseSpin (Phase A may produce 1–2 spins) must have SC.
+            // Previous version only checked baseSpins[0]; this verifies the full list.
             let missingCount = 0;
+            let totalBaseSpins = 0;
             for (let seed = 0; seed < TRIALS; seed++) {
                 const engine = new SlotEngine(mulberry32(seed));
                 const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1, extraBetOn: true });
-                // Check first base spin grid
-                const firstSpin = o.baseSpins[0];
-                if (!hasScatterInVisibleRows(firstSpin.grid)) {
-                    missingCount++;
+                for (const spin of o.baseSpins) {
+                    totalBaseSpins++;
+                    if (!hasScatterInVisibleRows(spin.grid)) {
+                        missingCount++;
+                    }
                 }
             }
-            // With SC guarantee, no spin should be missing SC in visible rows
+            // With SC guarantee, no baseSpin should be missing SC in visible rows
+            expect(totalBaseSpins).toBeGreaterThan(TRIALS); // confirms Phase A runs ≥1 spin per outcome
             expect(missingCount).toBe(0);
         });
 

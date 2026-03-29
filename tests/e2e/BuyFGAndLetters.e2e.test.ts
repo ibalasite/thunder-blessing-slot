@@ -73,6 +73,8 @@ function makeUI(): jest.Mocked<IUIController> & { letterCalls: LetterCall[] } {
         updateMultBar:       jest.fn(),
         showAutoSpinPanel:   jest.fn(),
         updateAutoSpinLabel: jest.fn(),
+        showDepositPanel:    jest.fn().mockResolvedValue(undefined),
+        hideDepositPanel:    jest.fn(),
     };
     return ui;
 }

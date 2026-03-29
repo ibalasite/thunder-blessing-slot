@@ -38,6 +38,8 @@ export interface UIPanelRefs {
     autoSpinPanel:    Node;
     autoSpinCountLbl: Label;
     extraBetInfoPanel: Node;
+    depositPanel:      Node;
+    depositBalanceLbl: Label;
 }
 
 @ccclass('UIController')
@@ -85,6 +87,9 @@ export class UIController extends Component implements IUIController {
     autoSpinPanel!:             Node;
     autoSpinCountLbl!:          Label;
     private extraBetInfoPanel?: Node;
+    private depositPanel!:      Node;
+    private _depositBalanceLbl!: Label;
+    private _depositResolve?:   () => void;
 
     private _rng!: RNGFunction;
 
@@ -116,6 +121,8 @@ export class UIController extends Component implements IUIController {
         this.autoSpinPanel    = refs.autoSpinPanel;
         this.autoSpinCountLbl = refs.autoSpinCountLbl;
         this.extraBetInfoPanel = refs.extraBetInfoPanel;
+        this.depositPanel      = refs.depositPanel;
+        this._depositBalanceLbl = refs.depositBalanceLbl;
     }
 
     onLoad() { /* labels populated by SceneBuilder */ }
@@ -411,6 +418,27 @@ export class UIController extends Component implements IUIController {
 
     showAutoSpinPanel(): void {
         if (this.autoSpinPanel) this.autoSpinPanel.active = true;
+    }
+
+    // ══════════════════════════════════════════════════════
+    // IUIController — 儲值面板
+    // ══════════════════════════════════════════════════════
+
+    showDepositPanel(): Promise<void> {
+        return new Promise<void>(resolve => {
+            this._depositResolve = resolve;
+            if (this._depositBalanceLbl) {
+                const bal = this._displayBalance ?? this._account.getBalance();
+                this._depositBalanceLbl.string = `餘額: ${bal.toFixed(2)}`;
+            }
+            this.depositPanel.active = true;
+        });
+    }
+
+    hideDepositPanel(): void {
+        if (this.depositPanel) this.depositPanel.active = false;
+        this._depositResolve?.();
+        this._depositResolve = undefined;
     }
 
     /** Extra Bet 說明彈窗 */

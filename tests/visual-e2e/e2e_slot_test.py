@@ -99,6 +99,8 @@ window.__e2e = {
 RESULTS = []
 console_logs = []
 spin_api_calls = []   # Network requests to /api/v1/game/spin captured by Playwright
+# Extended: also stores response body for SC guarantee verification
+spin_outcomes = []    # List of parsed outcome dicts from spin API responses
 
 
 def shot(page, name, desc, shot_dir):
@@ -193,6 +195,7 @@ def run_test(target, shot_dir):
     RESULTS.clear()
     console_logs.clear()
     spin_api_calls.clear()
+    spin_outcomes.clear()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -201,10 +204,16 @@ def run_test(target, shot_dir):
         page.on("console", lambda msg: console_logs.append(f"[{msg.type}] {msg.text}"))
         page.on("pageerror", lambda err: console_logs.append(f"[PAGE_ERROR] {err.message}"))
 
-        # Capture spin API calls to verify server-side spin processing
+        # Capture spin API calls + response bodies for outcome verification
         def on_response(response):
             if "/api/v1/game/spin" in response.url and response.request.method == "POST":
                 spin_api_calls.append({"url": response.url, "status": response.status})
+                if response.status == 200:
+                    try:
+                        body = response.json()
+                        spin_outcomes.append(body)
+                    except Exception:
+                        pass
         page.on("response", on_response)
 
         # ── Step 1: Load game ──────────────────────────────────
@@ -377,6 +386,145 @@ def run_test(target, shot_dir):
             report(11, "FAIL", "Server API: no /api/v1/game/spin calls detected — game may be using local engine")
         else:
             report(11, "PASS", f"Server verification: skipped (target={target} has no API URL)")
+
+        # ── Step 13: ExtraBet + BuyFG — SC guarantee (GDD §11) ─
+        # Verifies that every Phase-A baseSpin and every Phase-B FG spin (x3, x7,
+        # x11, x13, x30) contains at least one SC in visible rows (0-2).
+        # Strategy: re-detect buttons after previous steps, enable ExtraBet if available,
+        # trigger Buy FG, confirm, capture the API outcome body, and verify SC grid data.
+        # Visual screenshots are taken before/during/after FG to complement data checks.
+        print("\n═══ Step 13: ExtraBet + BuyFG SC guarantee (GDD §11) ═══")
+        btn_map13, _ = detect_buttons(page)
+        sc_step_ok = False
+        sc_detail = "ExtraBet or BUY button not found"
+
+        if "extra_bet" in btn_map13 and "buy" in btn_map13:
+            # Count spin outcomes before this step
+            outcomes_before = len(spin_outcomes)
+
+            # 13a. Enable Extra Bet
+            cc_click(page, btn_map13["extra_bet"])
+            time.sleep(1)
+            shot(page, "13a_extra_bet_on", "Extra Bet enabled", shot_dir)
+
+            # 13b. Click Buy FG → panel should open
+            cc_click(page, btn_map13["buy"])
+            time.sleep(2)
+            panel_open = cc_panel_open(page, "BuyFGPanel")
+            shot(page, "13b_buy_panel", "BuyFG panel", shot_dir)
+
+            if panel_open:
+                # 13c. Confirm: click START in the panel
+                btn_map13b, _ = detect_buttons(page)
+                if "start" in btn_map13b:
+                    cc_click(page, btn_map13b["start"])
+                else:
+                    # Fallback: find and click the start/confirm button by name
+                    page.evaluate("""() => {
+                        const canvas = cc.director.getScene().getChildByName('Canvas');
+                        const panel  = canvas && canvas.getChildByName('BuyFGPanel');
+                        if (!panel) return;
+                        ['btn_START','StartBtn','ConfirmBtn','btn_OK'].forEach(n => {
+                            const b = panel.getChildByName(n);
+                            if (b) b.emit('click', b);
+                        });
+                    }""")
+
+                shot(page, "13c_fg_started", "FG started", shot_dir)
+
+                # 13d. Wait for FG animation — 5 spins × ~3 s each + Phase A
+                print("  ⏳ Waiting for FG animation (≈20 s) …")
+                time.sleep(22)
+                shot(page, "13d_fg_complete", "FG complete", shot_dir)
+
+                # 13e. Verify via captured API outcome body
+                new_outcomes = spin_outcomes[outcomes_before:]
+                if new_outcomes:
+                    outcome = new_outcomes[-1].get("outcome", {})
+                    SYM_SC = "SC"
+                    base_spins  = outcome.get("baseSpins", [])
+                    fg_spins    = outcome.get("fgSpins", [])
+                    extra_bet   = outcome.get("extraBetOn", False)
+                    multipliers = [fg.get("multiplier") for fg in fg_spins]
+
+                    # Check every baseSpin
+                    base_missing = []
+                    for i, spin in enumerate(base_spins):
+                        grid = spin.get("grid", [])
+                        has_sc = any(
+                            grid[ri][r] == SYM_SC
+                            for ri in range(len(grid))
+                            for r in range(min(3, len(grid[ri])))
+                        )
+                        if not has_sc:
+                            base_missing.append(i)
+
+                    # Check every FG spin (x3, x7, x11, x13, x30)
+                    fg_missing = []
+                    for i, fg in enumerate(fg_spins):
+                        grid = fg.get("spin", {}).get("grid", [])
+                        has_sc = any(
+                            grid[ri][r] == SYM_SC
+                            for ri in range(len(grid))
+                            for r in range(min(3, len(grid[ri])))
+                        )
+                        mult = fg.get("multiplier", "?")
+                        if not has_sc:
+                            fg_missing.append(f"x{mult}")
+                        else:
+                            print(f"    ✓ FG x{mult}: SC present in visible rows")
+
+                    if base_missing:
+                        print(f"    ✗ baseSpins missing SC: {base_missing}")
+                    if fg_missing:
+                        print(f"    ✗ FG spins missing SC: {fg_missing}")
+
+                    all_ok = len(base_missing) == 0 and len(fg_missing) == 0
+                    sc_step_ok = all_ok and extra_bet
+                    sc_detail = (
+                        f"extraBetOn={extra_bet} | "
+                        f"Phase-A ({len(base_spins)} spins): {'✓' if not base_missing else f'✗ missing {base_missing}'} | "
+                        f"Phase-B FG x{multipliers}: {'✓ all SC' if not fg_missing else f'✗ missing {fg_missing}'}"
+                    )
+                else:
+                    sc_detail = "No spin API outcome captured (BuyFG may not have called server)"
+            else:
+                sc_detail = "BuyFGPanel did not open after clicking BUY"
+        else:
+            missing_btns = [k for k in ("extra_bet", "buy") if k not in btn_map13]
+            sc_detail = f"Required buttons not found: {missing_btns}"
+
+        report(13, "PASS" if sc_step_ok else "FAIL", f"ExtraBet+BuyFG SC guarantee — {sc_detail}")
+
+        # ── Step 14: Canvas adaptive sizing ───────────────────
+        print("\n═══ Step 14: Canvas adaptive sizing ═══")
+        dims = page.evaluate("""() => {
+            const d = document.getElementById('GameDiv');
+            if (!d) return { error: 'GameDiv not found' };
+            return {
+                vw: window.innerWidth,
+                vh: window.innerHeight,
+                dw: d.offsetWidth,
+                dh: d.offsetHeight,
+                dw_css: d.style.width,
+                dh_css: d.style.height,
+            };
+        }""")
+        if "error" in dims:
+            report(14, "FAIL", f"Canvas adaptive: {dims['error']}")
+        else:
+            fill = dims['dw'] / dims['vw'] if dims['vw'] > 0 else 0
+            aspect_ok = dims['dw'] > 0 and dims['dh'] > dims['dw']  # portrait: h > w
+            fill_ok   = fill >= 0.95   # canvas should fill ≥95% of viewport width
+            print(f"  viewport={dims['vw']}×{dims['vh']}  GameDiv={dims['dw']}×{dims['dh']}  "
+                  f"fill={fill:.2%}  portrait={aspect_ok}")
+            if fill_ok and aspect_ok:
+                report(14, "PASS",
+                       f"Canvas {dims['dw']}×{dims['dh']} fills {fill:.0%} of {dims['vw']}px viewport (portrait ✓)")
+            else:
+                report(14, "FAIL",
+                       f"Canvas {dims['dw']}×{dims['dh']} fills {fill:.0%} of {dims['vw']}px viewport "
+                       f"(fill_ok={fill_ok}, portrait={aspect_ok})")
 
         # ── Summary ────────────────────────────────────────────
         errors = [l for l in console_logs if "PAGE_ERROR" in l]

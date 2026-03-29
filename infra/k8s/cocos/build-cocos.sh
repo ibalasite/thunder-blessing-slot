@@ -20,21 +20,30 @@ cocos_build() {
   COCOS_CLI="/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/MacOS/CocosCreator"
   if [ ! -f "$COCOS_CLI" ]; then
     log "Cocos Creator not found at $COCOS_CLI — skipping build (using existing build/ output)"
-    return 0
+  else
+    local BUILD_LOG
+    BUILD_LOG="$(mktemp /tmp/cocos-build-XXXXXX.log)"
+    "$COCOS_CLI" \
+      --project "$PROJECT_ROOT" \
+      --build "platform=web-desktop;debug=false;outputPath=./build" \
+      >"$BUILD_LOG" 2>&1 || true
+    grep -E "(error|Error|complete|failed)" "$BUILD_LOG" | tail -5 || true
+    rm -f "$BUILD_LOG"
   fi
-  "$COCOS_CLI" \
-    --project "$PROJECT_ROOT" \
-    --build "platform=web-desktop;debug=false;outputPath=./build" \
-    2>&1 | grep -E "(error|Error|complete|failed)" | tail -5
 
   # Patch index.html: CLI defaults to 1280x960 (landscape), patch to 720x1280 (portrait)
+  # Always runs — even when Cocos CLI is absent — so the existing build/ stays portrait-correct.
   local HTML="$PROJECT_ROOT/build/web-desktop/index.html"
-  sed -i '' \
-    -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
-    -e 's/width="1280" height="960"/width="720" height="1280"/g' \
-    -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
-    "$HTML"
-  log "Patched index.html → 720×1280 portrait"
+  if [ -f "$HTML" ]; then
+    sed -i '' \
+      -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
+      -e 's/width="1280" height="960"/width="720" height="1280"/g' \
+      -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
+      "$HTML"
+    log "Patched index.html → 720×1280 portrait"
+  else
+    log "WARNING: $HTML not found — nothing to patch"
+  fi
 }
 
 cocos_build

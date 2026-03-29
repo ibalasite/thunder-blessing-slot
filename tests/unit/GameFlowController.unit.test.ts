@@ -139,6 +139,8 @@ function makeUI(): jest.Mocked<IUIController> {
         updateMultBar:      jest.fn(),
         showAutoSpinPanel:  jest.fn(),
         updateAutoSpinLabel: jest.fn(),
+        showDepositPanel:    jest.fn().mockResolvedValue(undefined),
+        hideDepositPanel:    jest.fn(),
     } as jest.Mocked<IUIController>;
 }
 
@@ -191,13 +193,13 @@ describe('GameFlowController', () => {
         expect(ctrl.busy).toBe(false);
     });
 
-    it('doSpin shows "餘額不足" if canAfford returns false', async () => {
+    it('doSpin shows deposit panel if canAfford returns false', async () => {
         const acc = makeAccount(0);
         const ui  = makeUI();
         const ctrl = new GameFlowController(
             makeSession(), acc, makeEngine(), makeReels(), ui, instantWait);
         await ctrl.doSpin();
-        expect(ui.setStatus).toHaveBeenCalledWith('餘額不足！', '#ff4444');
+        expect(ui.showDepositPanel).toHaveBeenCalledTimes(1);
     });
 
     it('doSpin calls reels.spinWithGrid with base spin grid', async () => {
@@ -306,7 +308,7 @@ describe('GameFlowController', () => {
         expect(eng.fullSpin).not.toHaveBeenCalled();
     });
 
-    it('onBuyFreeGame shows 餘額不足 when balance too low', async () => {
+    it('onBuyFreeGame shows deposit panel when balance too low', async () => {
         const ui  = makeUI();
         ui.showBuyPanel.mockResolvedValue(true);
         const eng = makeEngine({ mode: 'buyFG', wagered: 100 });
@@ -314,7 +316,7 @@ describe('GameFlowController', () => {
         const ctrl = new GameFlowController(
             makeSession(), acc, eng, makeReels(), ui, instantWait);
         await ctrl.onBuyFreeGame();
-        expect(ui.setStatus).toHaveBeenCalledWith('餘額不足！', '#ff4444');
+        expect(ui.showDepositPanel).toHaveBeenCalledTimes(1);
     });
 
     it('onBuyFreeGame debits wagered on confirm', async () => {

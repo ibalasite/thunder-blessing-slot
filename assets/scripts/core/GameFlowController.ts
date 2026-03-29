@@ -74,21 +74,25 @@ export class GameFlowController {
 
         const mode: GameMode = this._session.extraBetOn ? 'extraBet' : 'main';
         const baseBet = this._baseTotalBet;
-        logger.info('Spin started', { bet: baseBet, mode });
-        const outcome = await this._engine.fullSpin(mode, baseBet);
 
+        // Pre-flight balance check — must run BEFORE fullSpin() because in remote
+        // mode the engine calls the server which atomically deducts the wager.
         const w = this._wallet;
+        const expectedWager = this._session.totalBet;
         if (w) {
-            if (!w.canAfford(outcome.wagered)) {
-                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: outcome.wagered, balance: w.getBalance() });
-                this._ui.setStatus('餘額不足！', '#ff4444'); return;
+            if (!w.canAfford(expectedWager)) {
+                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: expectedWager, balance: w.getBalance() });
+                await this._ui.showDepositPanel(); return;
             }
         } else {
-            if (!this._account.canAfford(outcome.wagered)) {
-                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: outcome.wagered });
-                this._ui.setStatus('餘額不足！', '#ff4444'); return;
+            if (!this._account.canAfford(expectedWager)) {
+                logger.error('Spin failed', { error: 'InsufficientFunds', wagered: expectedWager });
+                await this._ui.showDepositPanel(); return;
             }
         }
+
+        logger.info('Spin started', { bet: baseBet, mode });
+        const outcome = await this._engine.fullSpin(mode, baseBet);
 
         this.busy = true;
         this._ui.enableSpin(false);
@@ -158,18 +162,22 @@ export class GameFlowController {
 
         const ebMult = this._session.extraBetOn ? EXTRA_BET_MULT : 1;
         const baseBet = parseFloat((this._session.betPerLine * LINES_BASE * ebMult).toFixed(4));
-        const outcome = await this._engine.fullSpin('buyFG', baseBet, this._session.extraBetOn);
+        const buyCost = parseFloat((baseBet * BUY_COST_MULT).toFixed(4));
 
+        // Pre-flight balance check — must run BEFORE fullSpin() because in remote
+        // mode the engine calls the server which atomically deducts the wager.
         const w = this._wallet;
         if (w) {
-            if (!w.canAfford(outcome.wagered)) {
-                this._ui.setStatus('餘額不足！', '#ff4444'); return;
+            if (!w.canAfford(buyCost)) {
+                await this._ui.showDepositPanel(); return;
             }
         } else {
-            if (!this._account.canAfford(outcome.wagered)) {
-                this._ui.setStatus('餘額不足！', '#ff4444'); return;
+            if (!this._account.canAfford(buyCost)) {
+                await this._ui.showDepositPanel(); return;
             }
         }
+
+        const outcome = await this._engine.fullSpin('buyFG', baseBet, this._session.extraBetOn);
 
         // ── 1. 扣款（立即）──────────────────────
         let tx: SpinTx | undefined;

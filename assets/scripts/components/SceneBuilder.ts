@@ -41,6 +41,12 @@ export interface SceneBuildCallbacks {
     onBuyStart():                void;
     /** Total Win 面板 — Collect */
     onCollect():                 void;
+    /** 開啟儲值面板（MenuBtn ≡ 點擊） */
+    onDepositClick():            void;
+    /** 儲值面板 — 點選金額按鈕 */
+    onDeposit(amount: string):   void;
+    /** 儲值面板 — 取消 */
+    onDepositCancel():           void;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -409,6 +415,69 @@ function buildTotalWinPanel(root: Node, cbs: SceneBuildCallbacks): {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 儲值面板
+// ────────────────────────────────────────────────────────────────────────────
+function buildDepositPanel(root: Node, cbs: SceneBuildCallbacks): {
+    node: Node; balanceLbl: Label;
+} {
+    const p = new Node('DepositPanel');
+    root.addChild(p);
+    p.setPosition(0, 0, 10);
+    p.addComponent(UITransform).setContentSize(CANVAS_W, CANVAS_H);
+    const dim = p.addComponent(Graphics);
+    dim.fillColor = new Color(0, 0, 0, 200);
+    dim.rect(-CANVAS_W/2, -CANVAS_H/2, CANVAS_W, CANVAS_H);
+    dim.fill();
+
+    const panel = new Node('panel');
+    p.addChild(panel);
+    panel.addComponent(UITransform).setContentSize(420, 380);
+    const pGfx = panel.addComponent(Graphics);
+    pGfx.fillColor = Color.fromHEX(new Color(), '#080e26');
+    pGfx.roundRect(-210, -190, 420, 380, 20);
+    pGfx.fill();
+    pGfx.strokeColor = Color.fromHEX(new Color(), '#cc9900');
+    pGfx.lineWidth = 3;
+    pGfx.roundRect(-210, -190, 420, 380, 20);
+    pGfx.stroke();
+    pGfx.strokeColor = Color.fromHEX(new Color(), '#3366cc');
+    pGfx.lineWidth = 1.5;
+    pGfx.roundRect(-206, -186, 412, 372, 18);
+    pGfx.stroke();
+
+    makeLabel(panel, '💎 儲值', 26, '#ffd700', 0, 158);
+
+    const balanceLbl = makeLabel(panel, '餘額: 0.00', 15, '#88ccff', 0, 118, 380);
+
+    // 2×2 preset amount grid
+    const amounts: [string, string][] = [
+        ['$10',  '10'],
+        ['$50',  '50'],
+        ['$100', '100'],
+        ['$500', '500'],
+    ];
+    const btnW = 160, btnH = 52, gapX = 16, gapY = 12;
+    const cols = 2;
+    const startX = -((cols - 1) * (btnW + gapX)) / 2;
+    amounts.forEach(([label, amount], i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const bx  = startX + col * (btnW + gapX);
+        const by  = 62 - row * (btnH + gapY);
+        const btn = makeButton(panel, label, btnW, btnH, bx, by, '#0e2a60', '#00cfff');
+        btn.on(Button.EventType.CLICK, () => {
+            p.active = false;
+            cbs.onDeposit(amount);
+        });
+    });
+
+    const cancelBtn = makeButton(panel, '✕ 取消', 200, 48, 0, -152, '#440011', '#ff6666');
+    cancelBtn.on(Button.EventType.CLICK, () => { p.active = false; cbs.onDepositCancel(); });
+
+    p.active = false;
+    return { node: p, balanceLbl };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Extra Bet 資訊彈窗
 // ────────────────────────────────────────────────────────────────────────────
 function buildExtraBetInfoPanel(root: Node): Node {
@@ -604,7 +673,7 @@ export function buildScene(
         autoSpinCountLbl.node.name = 'autoSpinCountOverlay';
     }
     findOrMakeButton(uiPanel, 'MenuBtn', '≡', 62, 62, 325, -44, '#14141e', '#8888aa')
-        .on(Button.EventType.CLICK, () => {});
+        .on(Button.EventType.CLICK, () => cbs.onDepositClick());
 
     // ── 覆蓋面板 ─────────────────────────────────────────
     const extraBetInfoPanel = buildExtraBetInfoPanel(root);
@@ -613,6 +682,7 @@ export function buildScene(
     const coinResult       = buildCoinPanel(root, cbs);
     const tbPanel          = buildTBPanel(root);
     const totalWinResult   = buildTotalWinPanel(root, cbs);
+    const depositResult    = buildDepositPanel(root, cbs);
 
     // ── Inject all panel refs into uiCtrl ───────────────
     uiCtrl.init(session, account, reelMgr, rng);
@@ -635,6 +705,8 @@ export function buildScene(
         autoSpinPanel:      autoSpinResult.node,
         autoSpinCountLbl,
         extraBetInfoPanel,
+        depositPanel:       depositResult.node,
+        depositBalanceLbl:  depositResult.balanceLbl,
     });
     uiCtrl.autoSpinCountLbl = autoSpinCountLbl;
 

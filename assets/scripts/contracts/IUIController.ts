@@ -52,4 +52,10 @@ export interface IUIController {
     showAutoSpinPanel(): void;
     /** 更新自動旋轉剩餘次數標籤（0 = 空字串, -1 = ∞） */
     updateAutoSpinLabel(count: number): void;
+
+    // ── Deposit ───────────────────────────────────────────────
+    /** 顯示儲值面板；resolve 時面板已關閉（儲值成功或取消） */
+    showDepositPanel(): Promise<void>;
+    /** 關閉儲值面板並 resolve 等待中的 promise */
+    hideDepositPanel(): void;
 }

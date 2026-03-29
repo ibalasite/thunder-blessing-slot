@@ -374,4 +374,4 @@ lsof -i :30080
 ---
 
 *RTP 目標：97.5% ± 0.5%（4 種模式均已驗證）*
-*測試：888 tests（遊戲引擎）+ 269 tests（API unit，100% coverage）+ K8s E2E + RPA Visual E2E（11 steps）*
+*測試：888 tests（遊戲引擎）+ 269 tests（API unit，100% coverage）+ K8s E2E + RPA Visual E2E（14 steps）*

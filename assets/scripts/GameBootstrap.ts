@@ -87,6 +87,20 @@ export class GameBootstrap extends Component {
             onBuyCancel:      () => uiCtrl.onBuyCancel(),
             onBuyStart:       () => uiCtrl.onBuyStart(),
             onCollect:        () => uiCtrl.onCollect(),
+            onDepositClick:   () => uiCtrl.showDepositPanel(),
+            onDeposit:        (amount) => {
+                client.deposit(amount)
+                    .then(() => client.fetchWallet())
+                    .then(() => {
+                        uiCtrl.setDisplayBalance(client.balance);
+                        uiCtrl.hideDepositPanel();
+                    })
+                    .catch((err: unknown) => {
+                        console.error('[Deposit] failed:', err);
+                        uiCtrl.hideDepositPanel();
+                    });
+            },
+            onDepositCancel:  () => uiCtrl.hideDepositPanel(),
         }, rng);
 
         // ── Controller (remote adapters injected) ────────────────────────────────

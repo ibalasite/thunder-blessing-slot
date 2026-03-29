@@ -95,6 +95,8 @@ function makeUI(): jest.Mocked<IUIController> & { record: FlowRecord } {
         updateMultBar:       jest.fn(),
         showAutoSpinPanel:   jest.fn(),
         updateAutoSpinLabel: jest.fn(),
+        showDepositPanel:    jest.fn().mockResolvedValue(undefined),
+        hideDepositPanel:    jest.fn(),
     };
     return ui;
 }
