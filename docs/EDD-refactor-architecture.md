@@ -1726,7 +1726,7 @@ interface ICacheAdapter {
 ### 9-H-4. Composition Root（容器接線）
 
 ```typescript
-// apps/api/src/container.ts  ← 唯一知道「用哪個 adapter」的地方
+// apps/web/src/container.ts  ← 唯一知道「用哪個 adapter」的地方
 
 const env = parseEnv(process.env);   // zod 驗證所有 ENV
 
@@ -1870,7 +1870,7 @@ repo-root/
 Fastify API Server 同時 serve Cocos 靜態檔，不需要 CORS / Cookie SameSite=None：
 
 ```typescript
-// apps/api/src/app.ts
+// apps/web/src/infrastructure/fastify/app.ts
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 
@@ -1894,7 +1894,7 @@ app.setNotFoundHandler((_req, reply) => {
 
 **Render 部署**：
 ```
-Render Web Service（apps/api）
+Render Web Service（apps/web）
   → serves /api/v1/* （Fastify routes）
   → serves /*       （Cocos build/web-desktop/）
 ```
@@ -2015,7 +2015,7 @@ jobs:
 
   docker-smoke:
     steps:
-      - docker build -t demo-api ./apps/api   # Dockerfile 建置驗證
+      - cd apps/web && pnpm build   # TypeScript 編譯驗證
 
   migration-dry-run:
     steps:
@@ -2094,12 +2094,12 @@ git push origin demo-2026-03-28.1
 前後端整合進同一個 Render Web Service（§9-H-7）：
 
 ```
-Render Web Service（apps/api）
-  build:  pnpm install && pnpm --filter api build
-  start:  node apps/api/dist/app.js
+Render Web Service（apps/web）
+  build:  pnpm install && pnpm --filter web build
+  start:  node apps/web/dist/infrastructure/fastify/server.js
   routes:
     /api/v1/* → Fastify handlers
-    /*        → apps/frontend/build/web-desktop/ （static）
+    /*        → build/web-desktop/ （Cocos static，@fastify/static serve）
 ```
 
 **deploy-demo.yml**（無 Cloudflare 步驟，一個 hook 搞定）：
@@ -2170,7 +2170,7 @@ RTP = Σ(totalWin_level × baseUnit) / Σ(betLevel × baseUnit)
 ### 9-M-3. 幣別定義（CurrencyConfig）
 
 ```typescript
-// apps/api/src/interfaces/ICurrencyConfig.ts
+// apps/web/src/domain/interfaces/ICurrencyConfig.ts
 
 export interface CurrencyConfig {
     code:        string;        // 'USD' | 'TWD' | 'EUR' | ...
@@ -2191,7 +2191,7 @@ const CURRENCY_CONFIGS: Record<string, CurrencyConfig> = {
 ### 9-M-4. BetRange 結構
 
 ```typescript
-// apps/api/src/interfaces/IBetRange.ts
+// apps/web/src/domain/interfaces/IBetRange.ts
 
 export interface BetRange {
     currency:     string;        // 'USD' | 'TWD'
@@ -2218,7 +2218,7 @@ export interface BetRange {
 ### 9-M-5. IProbabilityProvider 介面
 
 ```typescript
-// apps/api/src/interfaces/IProbabilityProvider.ts
+// apps/web/src/domain/interfaces/IProbabilityProvider.ts
 
 export interface IProbabilityProvider {
     /** 取得指定幣別的 BetRange（機率包唯一權威來源） */
@@ -2302,7 +2302,7 @@ class BetRangeService {
 ### 9-M-7. Spin API 幣別處理流程
 
 ```typescript
-// apps/api/src/modules/game/spin.service.ts
+// apps/web/src/usecases/game/SpinUseCase.ts
 
 async spin(userId: string, req: SpinRequest): Promise<SpinResponse> {
     const { currency, betLevel, mode, extraBetOn } = req;
@@ -2542,12 +2542,12 @@ ALB                              $25/月
 ```typescript
 // ❌ 禁止在 API Response 中洩漏 Supabase 資訊
 // 錯誤範例：直接回傳 Supabase error
-return NextResponse.json({ error: supabaseError.message });  // "relation "wallets" does not exist"
+return reply.status(500).send({ error: supabaseError.message });  // "relation "wallets" does not exist"
 
 // ✅ 正確：所有 DB 錯誤轉換為統一 AppError
 try {
     const wallet = await walletRepo.getByUserId(userId);
-    return NextResponse.json(toWalletDTO(wallet));
+    return reply.status(200).send(toWalletDTO(wallet));
 } catch (err) {
     // AppError 轉換層：DB 錯誤 → 標準錯誤碼
     throw new AppError('WALLET_NOT_FOUND', 404);
@@ -2671,10 +2671,10 @@ export default {
 
 | 步驟 | 說明 |
 |------|------|
-| 本地 build | 開發者用 Cocos Creator Editor 執行 build，產出 `apps/frontend/build/web-desktop/` |
-| commit 規則 | 功能確認後 commit build 產出（`git add apps/frontend/build/`）|
+| 本地 build | `./infra/k8s/cocos/build-cocos.sh` 呼叫 Cocos Creator CLI，產出 `build/web-desktop/` |
+| commit 規則 | 功能確認後 commit build 產出（`git add build/web-desktop/`）|
 | CI 職責 | `ci.yml` 只跑 TypeScript / Jest 測試，不重新 build Cocos |
-| E2E | `ci.yml` 啟動 `serve apps/frontend/build/web-desktop/` → Playwright 跑完整 UI E2E |
+| E2E | `ci.yml` 啟動 `serve build/web-desktop/` → Playwright 跑完整 UI E2E |
 | deploy | `deploy-demo.yml` 直接上傳 `build/web-desktop/` 到 Render Static Files（或由 API 靜態 serve）|
 | 一致性保證 | build 是確定性的（same source → same output）；source 在版控，build 由 source 產生 |
 
@@ -2682,7 +2682,7 @@ export default {
 ```yaml
 # ci.yml
 - name: Start game server
-  run: npx serve apps/frontend/build/web-desktop -p 8080 &
+  run: npx serve build/web-desktop -p 8080 &
 - name: Wait for server
   run: npx wait-on http://localhost:8080
 - name: Run E2E tests
@@ -2976,21 +2976,21 @@ WHERE id = (
 #### S-08：Spin Replay Ownership 驗證
 
 ```typescript
-// apps/web/src/app/api/v1/game/[spinId]/replay/route.ts
-export async function GET(request: NextRequest, { params }) {
-    const session = await withAuth(request);
-    const spinLog = await spinLogRepo.findById(params.spinId);
+// apps/web/src/adapters/controllers/gameController.ts（replay route）
+app.get('/api/v1/game/:spinId/replay', { preHandler: [requireAuth] }, async (req, reply) => {
+    const { spinId } = req.params as { spinId: string };
+    const spinLog = await spinLogRepo.findById(spinId);
 
     if (!spinLog) throw new AppError('SPIN_NOT_FOUND', 404);
 
     // Ownership check：player 只能看自己的 spin
-    if (session.role === 'player' && spinLog.userId !== session.userId) {
+    if (req.user.role === 'player' && spinLog.userId !== req.user.userId) {
         throw new AppError('FORBIDDEN', 403);
     }
-    // admin / auditor 可看任何 spin（role check 已在 withAuth 完成）
+    // admin / auditor 可看任何 spin（role check 已在 requireAuth 完成）
 
-    return NextResponse.json(spinLog.spinOutcome);
-}
+    return reply.status(200).send(spinLog.spinOutcome);
+});
 ```
 
 ---
@@ -3076,21 +3076,19 @@ ALTER TABLE wallets
 Phase 2 無正式 admin 介面，但 `/admin/*` API 仍需保護：
 
 ```typescript
-// apps/web/src/shared/middleware/withAdminAuth.ts
-export async function withAdminAuth(request: NextRequest): Promise<AdminSession> {
-    const session = await withAuth(request);        // 一般 JWT 驗證
+// apps/web/src/infrastructure/fastify/hooks/requireAdminAuth.ts
+export async function requireAdminAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+    await requireAuth(req, reply);                  // 一般 JWT 驗證
 
-    if (session.role !== 'admin' && session.role !== 'auditor') {
+    if (req.user.role !== 'admin' && req.user.role !== 'auditor') {
         throw new AppError('FORBIDDEN', 403);
     }
 
     // Phase 2：IP Allowlist（可設為 ENV 變數，Render 內網 IP 或開發者 IP）
     const allowedIPs = env.ADMIN_ALLOWED_IPS?.split(',') ?? [];
-    if (allowedIPs.length > 0 && !allowedIPs.includes(request.ip ?? '')) {
+    if (allowedIPs.length > 0 && !allowedIPs.includes(req.ip ?? '')) {
         throw new AppError('FORBIDDEN', 403, 'Admin access restricted by IP');
     }
-
-    return session as AdminSession;
 }
 ```
 
@@ -3153,10 +3151,10 @@ const DepositSchema = z.object({
 #### S-15：忘記密碼 — 防帳號枚舉
 
 ```typescript
-// POST /auth/password/forgot
+// POST /api/v1/auth/password/forgot
 // 無論 email 是否存在，永遠回傳 200 OK + 相同 message
-export async function POST(request: NextRequest) {
-    const { email } = ForgotPasswordSchema.parse(await request.json());
+app.post('/api/v1/auth/password/forgot', async (req, reply) => {
+    const { email } = ForgotPasswordSchema.parse(req.body);
 
     // 即使 user 不存在也不 throw，靜默處理
     const user = await userRepo.findByEmail(email);
@@ -3164,11 +3162,11 @@ export async function POST(request: NextRequest) {
         await authService.sendPasswordResetEmail(user.id, email);
     }
     // 不管 user 是否存在，回傳相同 response
-    return NextResponse.json({
+    return reply.status(200).send({
         message: 'If this email is registered, a reset link has been sent.'
     });
-    // ❌ 禁止: if (!user) return 404 EMAIL_NOT_FOUND
-}
+    // ❌ 禁止: if (!user) throw new AppError('EMAIL_NOT_FOUND', 404)
+});
 ```
 
 #### S-16：Leaderboard 隱私保護
