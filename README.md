@@ -278,7 +278,56 @@ kubectl rollout status deployment/thunder-cocos -n thunder-dev
 
 ---
 
-## 五、切換 API 目標（Local Fastify ↔ K8s API）
+## 五、K8s 管理（k9s）
+
+k9s 是 K8s 的 Terminal UI，可以即時查看 pod、log、event，不需要一直打 kubectl。
+
+### 安裝
+
+```bash
+# Mac
+brew install derailed/k9s/k9s
+
+# Windows（Scoop）
+scoop install k9s
+```
+
+### 啟動
+
+```bash
+# 進入 thunder-dev namespace
+k9s -n thunder-dev
+```
+
+### 常用操作
+
+| 按鍵 | 功能 |
+|------|------|
+| `:pod` | Pod 列表 |
+| `:deploy` | Deployment 列表 |
+| `:svc` | Service 列表 |
+| `:job` | Job 列表（kaniko build job）|
+| `l` | 看 Pod log |
+| `d` | Describe 資源 |
+| `ctrl+d` | 刪除資源 |
+| `/` | 搜尋過濾 |
+| `esc` | 返回上一層 |
+| `q` | 離開 |
+
+### 常見用途
+
+```bash
+# 啟動後直接進 pod log
+k9s -n thunder-dev
+# → 選 thunder-web pod → 按 l → 即時 log
+
+# 確認 kaniko build job 狀態
+# → 按 :job → 看 kaniko-build-xxx 的狀態
+```
+
+---
+
+## 七、切換 API 目標（Local Fastify ↔ K8s API）
 
 Cocos 遊戲啟動時會讀取 API URL，優先順序：
 
@@ -306,7 +355,7 @@ http://localhost:30080?apiUrl=http://localhost:3000
 
 ---
 
-## 六、執行測試
+## 八、執行測試
 
 以下指令 Mac / Windows 相同（Windows 在 PowerShell 或 Git Bash 執行）：
 
@@ -340,7 +389,7 @@ $env:E2E=1; pnpm test:e2e
 
 ---
 
-## 七、常見問題
+## 九、常見問題
 
 ### kubectl: command not found
 
