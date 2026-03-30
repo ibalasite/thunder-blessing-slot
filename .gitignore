@@ -1,7 +1,10 @@
 local/
 temp/
 library/
-build/
+# Cocos Creator intermediate build artifacts (NOT web-desktop — that's version-controlled)
+build/web-mobile/
+build/jsb-default/
+build/jsb-link/
 node_modules/
 *.meta.user
 

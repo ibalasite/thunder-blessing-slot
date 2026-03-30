@@ -64,7 +64,6 @@
  *   npx playwright test tests/rpa/AllButtons.rpa.spec.ts
  *   npx playwright test --ui
  *
- * @jest-environment playwright
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -128,17 +127,6 @@ export const BTN = {
 
 type CocosEvalFn<T> = (args: { nodeName: string }) => T | null;
 
-/** 走訪 Cocos 場景樹，找到指定名稱的節點 */
-const FIND_NODE_SCRIPT = `
-function findNode(node, name) {
-    if (node.name === name) return node;
-    for (const c of (node.children || [])) {
-        const f = findNode(c, name);
-        if (f) return f;
-    }
-    return null;
-}
-`;
 
 /** 讀取 Label 節點的 string */
 async function getLabelText(page: Page, nodeName: string): Promise<string | null> {
@@ -436,9 +424,7 @@ test.describe('HUD 按鈕', () => {
         // 等待餘額變動（spin 扣款後更新）
         const balAfter = await waitBalanceChange(page, balBefore, 20000);
 
-        // 餘額減少量 ≈ bet（可能有 win 所以只驗最大減少量）
-        expect(balAfter).toBeLessThanOrEqual(balBefore);
-        // 至少扣了一部分押分（win 可能小於 bet）
+        // 餘額有變動（扣押分或淨贏）
         const delta = Math.abs(balAfter - balBefore);
         expect(delta).toBeGreaterThan(0);
 

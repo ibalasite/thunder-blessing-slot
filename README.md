@@ -178,14 +178,33 @@ pnpm install
 >
 > - 遊戲：`http://localhost:30080`
 > - Fastify API：`http://localhost:30001`
-> - Supabase：`http://localhost:30005`
+> - Supabase Kong：`http://localhost:30000`
 
-### 步驟 1：首次部署
+### 前提：安裝 helm
 
 ```bash
-./infra/k8s/build.sh
-# 首次約 5-10 分鐘（下載 kaniko、建立 namespace、啟動 Supabase）
+# Mac
+brew install helm
+
+# Windows (PowerShell — admin)
+choco install kubernetes-helm
+# 或 scoop install helm
 ```
+
+### 步驟 1：首次部署（一鍵啟動全部）
+
+```bash
+./infra/k8s/start-dev.sh
+# 首次約 10-15 分鐘：
+#   1. 建立 namespace
+#   2. Helm install Supabase（PostgreSQL + Auth + Kong）
+#   3. 執行 DB migrations
+#   4. Kaniko build + deploy Fastify API
+#   5. Kaniko build + deploy Cocos nginx pod（使用 build/web-desktop/ 內已版控的 build 產出）
+```
+
+> **注意**：`build/web-desktop/` 已 commit 到 git，無需安裝 Cocos Creator 就能部署遊戲。
+> 只有在修改 `assets/scripts/` 後才需要重新執行 `build-cocos.sh`（需要 Cocos Creator）。
 
 ### 步驟 2：確認所有服務正常
 
@@ -193,9 +212,12 @@ pnpm install
 kubectl get pods -n thunder-dev
 # 預期全部 Running：
 #   thunder-web-xxx      ← Fastify API
-#   thunder-cocos-xxx    ← Cocos nginx
+#   thunder-cocos-xxx    ← Cocos nginx (Phase 2 連線版)
 #   registry-xxx         ← in-cluster image registry（port 30500）
-#   supabase-*           ← DB / Kong / Auth / REST / Meta
+#   supabase-supabase-db-0    ← PostgreSQL
+#   supabase-supabase-kong-*  ← Kong API Gateway
+#   supabase-supabase-auth-*  ← GoTrue Auth
+#   supabase-supabase-rest-*  ← PostgREST
 ```
 
 ### 步驟 3：開啟遊戲
@@ -203,6 +225,8 @@ kubectl get pods -n thunder-dev
 ```
 http://localhost:30080
 ```
+
+遊戲自動以 Phase 2 連線模式啟動，連接 `http://localhost:30001`（K8s Fastify API）。
 
 ### 步驟 4：更新 Fastify API（修改 apps/web/src/ 後）
 
@@ -213,6 +237,8 @@ kubectl rollout status deployment/thunder-web -n thunder-dev
 ```
 
 ### 步驟 5：更新 Cocos 遊戲（修改 assets/scripts/ 後）
+
+> 需要已安裝 Cocos Creator 3.8.7（路徑：`/Applications/Cocos/Creator/3.8.7/`）。
 
 ```bash
 IMAGE_TAG="cocos-$(git rev-parse --short HEAD)"
@@ -241,7 +267,7 @@ cp apps/web/.env.example apps/web/.env.local
 
 ```env
 NODE_ENV=development
-SUPABASE_URL=http://localhost:30005
+SUPABASE_URL=http://localhost:30000
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.ywbHA4mc8iwfpziFbKDMxj6K9HsJ5x3Y_34-PA8vQm8
 JWT_SECRET=dev-jwt-secret-min-32-chars-long-here
 ALLOWED_ORIGIN=*

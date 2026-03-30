@@ -1,5 +1,15 @@
-# Thunder Blessing Slot — 完整開發啟動指南
-# 適用對象：Cocos Creator 零基礎，開發完全小白
+# Thunder Blessing Slot — 開發啟動指南
+
+> **[已過期 — Phase 1 舊文件]**
+>
+> 本文件描述的是 Phase 1 單機版設定方式，**目前專案已升級為 Phase 2 K8s 連線版**。
+>
+> 請改看 **[README.md](README.md)** 的「三、K8s Dev 模式啟動」章節。
+> 一鍵啟動指令：`./infra/k8s/start-dev.sh`
+
+---
+
+> ⚠️ 以下為歷史參考，僅適用於需要在無 K8s 環境下跑 Phase 1 單機版的情境。
 
 ---
 
