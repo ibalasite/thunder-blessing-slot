@@ -357,38 +357,26 @@ test.describe('HUD 按鈕', () => {
         expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');
     });
 
-    // ── TurboBtn 框架不被 ON 文字撐大 ────────────────────────────────────────
-    test('HUD-01b: TurboBtn 顯示 ⚡ ON 時，節點 UITransform 寬高仍為 62×62', async ({ page }) => {
+    // ── TurboBtn ⚡ 旁不得出現額外文字（regression：Windows stale build 曾出現 'on' 撐框）
+    test('HUD-01b: TurboBtn 點擊前後標籤只有 ⚡，旁邊不出現任何額外文字', async ({ page }) => {
         test.skip(!k8sAvailable, 'K8s not available');
         await page.goto(gameURL(TEST_EMAIL, TEST_PASSWORD));
         await waitGameReady(page);
 
-        // 切到 ON 狀態
+        // 初始狀態
+        expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');
+
+        // 點擊切換（模擬 ON）
         await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
         await page.waitForTimeout(300);
+        expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');   // 不能出現 'ON' 或其他附加字
 
-        // 直接讀 Cocos 場景，確認 TurboBtn UITransform 尺寸不被 Label 撐大
-        const size = await page.evaluate(() => {
-            /* eslint-disable @typescript-eslint/no-explicit-any */
-            const cc = (window as any).cc;
-            function findNode(n: any, name: string): any {
-                if (n.name === name) return n;
-                for (const c of (n.children ?? [])) { const f = findNode(c, name); if (f) return f; }
-                return null;
-            }
-            const scene = cc?.director?.getScene();
-            if (!scene) return null;
-            const btn = findNode(scene, 'TurboBtn');
-            const uit = btn?.getComponent(cc.UITransform);
-            return uit ? { w: Math.round(uit.width), h: Math.round(uit.height) } : null;
-            /* eslint-enable @typescript-eslint/no-explicit-any */
-        });
+        // 再點切換（模擬 OFF）
+        await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
+        await page.waitForTimeout(300);
+        expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');   // 仍然只有 ⚡
 
-        expect(size).not.toBeNull();
-        expect(size!.w).toBe(62);
-        expect(size!.h).toBe(62);
-
-        await page.screenshot({ path: '.playwright-output/hud-01b-turbo-size.png' });
+        await page.screenshot({ path: '.playwright-output/hud-01b-turbo-no-extra-text.png' });
     });
 
     // ── BetMinusBtn (−) ──────────────────────────────────────────────────────
