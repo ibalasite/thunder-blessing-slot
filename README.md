@@ -129,62 +129,53 @@ npm install -g pnpm
 # 4. Helm（K8s 套件管理，Supabase 安裝用）
 brew install helm
 
-# 5. Python + Playwright（RPA 視覺 E2E 測試用）
-pip3 install playwright && playwright install chromium
-
-# 6. Cocos Creator（修改遊戲邏輯時才需要）
+# 5. Cocos Creator（修改遊戲邏輯時才需要）
 #    下載 Cocos Dashboard：https://www.cocos.com/creator
 #    安裝 Cocos Creator 3.8.7
 ```
 
 ### Windows 11
 
-> **重要**：所有 `.sh` 腳本需在 **Git Bash** 內執行（PowerShell 不支援 bash 腳本）。
-> 安裝 Git 時會自動安裝 Git Bash。
+> **終端說明**：
+> - **Git Bash**：執行所有 `.sh` 腳本（`start-dev.sh`、`build.sh`、`build-cocos.sh`）
+> - **PowerShell**：執行 `pnpm`、`npx`、`kubectl`、`helm` 等一般指令
+>
+> Git 安裝時會自動包含 Git Bash。
+
+**步驟 1：安裝基本工具（PowerShell 系統管理員）**
 
 ```powershell
-# ── 以下指令在 PowerShell (系統管理員) 執行 ──────────────────
-
-# 1. Git（含 Git Bash）
+# Git（含 Git Bash）
 winget install Git.Git
-# 安裝後重新開啟終端，確認：git --version
 
-# 2. Node.js 20+
+# Node.js 20+
 winget install OpenJS.NodeJS.LTS
-# 確認：node --version
 
-# 3. pnpm
+# pnpm
 npm install -g pnpm
-# 確認：pnpm --version
 
-# 4. Rancher Desktop（K8s + containerd）
-#    下載：https://rancherdesktop.io → 安裝 .exe
-#    開啟後：Preferences → Kubernetes → Enable → Apply & Restart
-#    等待右下角 Kubernetes 圖示變綠（約 3-5 分鐘）
-#    確認（PowerShell）：kubectl cluster-info
-
-# 5. Helm（K8s 套件管理，Supabase 安裝用）
+# Helm
 winget install Helm.Helm
-# 確認：helm version
-
-# 6. Python + Playwright（RPA 視覺 E2E 測試用）
-winget install Python.Python.3
-# 重新開啟終端後：
-pip install playwright
-playwright install chromium
-
-# 7. Cocos Creator（修改遊戲邏輯時才需要）
-#    https://www.cocos.com/creator → 安裝 Cocos Dashboard → 安裝 Creator 3.8.x
 ```
 
-> **PATH 確認（Windows）**：Rancher Desktop 安裝後，`kubectl`、`helm`、`rdctl` 應自動加入 PATH。
-> 若找不到指令，手動將 `%USERPROFILE%\.rd\bin` 加入系統 PATH，然後重新開啟終端。
+**步驟 2：安裝 Rancher Desktop（K8s）**
+
+1. 下載 [https://rancherdesktop.io](https://rancherdesktop.io) → 安裝 `.exe`
+2. 開啟後：Preferences → Kubernetes → Enable → Apply & Restart
+3. 等右下角 Kubernetes 圖示變綠（約 3–5 分鐘）
+4. 確認（PowerShell）：`kubectl cluster-info`
+
+> **PATH 確認**：若找不到 `kubectl`、`helm`、`rdctl`，手動將 `%USERPROFILE%\.rd\bin` 加入系統 PATH 後重開終端。
+
+**步驟 3：Cocos Creator（選用，只在修改 `assets/scripts/` 時需要）**
+
+[https://www.cocos.com/creator](https://www.cocos.com/creator) → Cocos Dashboard → 安裝 Creator 3.8.7
 
 ---
 
 ## 二、Clone & 安裝依賴
 
-**Mac（Terminal）/ Windows（Git Bash）**：
+**Mac（Terminal）/ Windows（PowerShell 或 Git Bash）**：
 
 ```bash
 git clone https://github.com/ibalasite/thunder-blessing-slot.git
@@ -192,28 +183,35 @@ cd thunder-blessing-slot
 pnpm install
 ```
 
+安裝 Playwright 瀏覽器（RPA 測試用，Mac/Windows 都要執行一次）：
+
+```bash
+npx playwright install chromium
+```
+
 ---
 
 ## 三、K8s Dev 模式啟動（完整 stack）
 
-> Cocos 遊戲（nginx）、Fastify API、Supabase 全在 K8s（Rancher Desktop k3s）。
->
-> | 服務 | URL |
-> |------|-----|
-> | 遊戲（Cocos） | `http://localhost:30080` |
-> | Fastify API | `http://localhost:30001` |
-> | Supabase Kong | `http://localhost:30000` |
+| 服務 | URL |
+|------|-----|
+| 遊戲（Cocos） | `http://localhost:30080` |
+| Fastify API | `http://localhost:30001` |
+| Supabase Kong | `http://localhost:30000` |
 
-> **build/web-desktop/ 已版控**：不需安裝 Cocos Creator 就能部署完整遊戲（Phase 2 連線版）。
-> 只有在修改 `assets/scripts/` 後才需要重新 build Cocos。
+> `build/web-desktop/` 已版控：**不需安裝 Cocos Creator** 即可部署完整 Phase 2 連線版遊戲。
+> 只有修改 `assets/scripts/` 後才需要重新 build Cocos。
 
-### 步驟 1：首次部署（Mac Terminal 或 Windows Git Bash）
+### 步驟 1：首次部署
+
+> **Windows 請用 Git Bash 執行 `.sh` 腳本**（PowerShell 不支援）
 
 ```bash
+# Mac Terminal 或 Windows Git Bash
 ./infra/k8s/start-dev.sh
 ```
 
-首次約 **10-15 分鐘**，自動完成：
+首次約 **10–15 分鐘**，自動完成：
 1. 建立 `thunder-dev` namespace
 2. Helm install Supabase（PostgreSQL + GoTrue Auth + PostgREST + Kong）
 3. 執行 DB migrations
@@ -223,6 +221,7 @@ pnpm install
 ### 步驟 2：確認所有服務正常
 
 ```bash
+# Mac Terminal / Windows PowerShell / Windows Git Bash
 kubectl get pods -n thunder-dev
 ```
 
@@ -231,8 +230,8 @@ kubectl get pods -n thunder-dev
 ```
 NAME                                    READY   STATUS
 thunder-web-xxx                         1/1     Running   ← Fastify API
-thunder-cocos-xxx                       1/1     Running   ← Cocos nginx (Phase 2)
-registry-xxx                            1/1     Running   ← image registry (port 30500)
+thunder-cocos-xxx                       1/1     Running   ← Cocos nginx
+registry-xxx                            1/1     Running   ← image registry
 supabase-supabase-db-0                  1/1     Running   ← PostgreSQL
 supabase-supabase-kong-xxx              1/1     Running   ← Kong API Gateway
 supabase-supabase-auth-xxx              1/1     Running   ← GoTrue Auth
@@ -242,35 +241,23 @@ supabase-supabase-meta-xxx              1/1     Running   ← Meta
 
 ### 步驟 3：開啟遊戲
 
-用瀏覽器開啟：
-
-```
-http://localhost:30080
-```
-
-遊戲自動以 **Phase 2 連線模式**啟動，連接 K8s Fastify API（`http://localhost:30001`）。
+瀏覽器開啟 `http://localhost:30080`，遊戲自動以 Phase 2 連線模式啟動。
 
 ### 步驟 4：更新 Fastify API（修改 `apps/web/src/` 後）
 
-**Mac Terminal 或 Windows Git Bash**：
-
 ```bash
-IMAGE_TAG=$(git rev-parse --short HEAD)
-./infra/k8s/build.sh $IMAGE_TAG
+# Windows Git Bash 或 Mac Terminal
+./infra/k8s/build.sh
 kubectl rollout status deployment/thunder-web -n thunder-dev
 ```
 
 ### 步驟 5：更新 Cocos 遊戲（修改 `assets/scripts/` 後）
 
-> 需要已安裝 Cocos Creator 3.8.7。
-> Mac 路徑：`/Applications/Cocos/Creator/3.8.7/CocosCreator.app`
-> Windows 路徑：`C:\CocosDashboard\versions\CocosCreator_v3.8.7\`（Dashboard 安裝位置）
-
-**Mac Terminal 或 Windows Git Bash**：
+> 需已安裝 Cocos Creator 3.8.7。沒有 Creator 時腳本會跳過 build，直接使用現有 `build/web-desktop/`。
 
 ```bash
-IMAGE_TAG="cocos-$(git rev-parse --short HEAD)"
-./infra/k8s/cocos/build-cocos.sh $IMAGE_TAG
+# Windows Git Bash 或 Mac Terminal
+./infra/k8s/cocos/build-cocos.sh
 kubectl rollout status deployment/thunder-cocos -n thunder-dev
 ```
 
@@ -325,68 +312,91 @@ http://localhost:30080?apiUrl=http://localhost:3001
 
 ## 五、執行測試
 
-### 遊戲引擎測試（根目錄）
+### 測試分類總覽
 
-**Mac（Terminal）**：
+| 測試類型 | 指令 | 需要 K8s |
+|---------|------|---------|
+| 遊戲引擎 unit | `pnpm test:unit` | 否 |
+| 遊戲引擎全部 | `pnpm test` | 否 |
+| API unit | `cd apps/web && pnpm test` | 否 |
+| API integration | `cd apps/web && INTEGRATION=1 pnpm test:int` | 是（Supabase）|
+| API E2E live | `cd apps/web && E2E_LIVE=1 pnpm test:e2e:live` | 是（完整 stack）|
+| K8s E2E | `npx jest tests/e2e/ --no-coverage` | 是（完整 stack）|
+| RPA 瀏覽器 | `npx playwright test tests/rpa/` | 是（完整 stack）|
+
+---
+
+### 不需要 K8s（可直接執行）
+
+**Mac Terminal / Windows PowerShell / Windows Git Bash**：
+
 ```bash
-pnpm test                    # 全部單元測試（~888 tests）
-pnpm test:unit               # 只跑 unit
+# 遊戲引擎測試（根目錄）
+pnpm test:unit               # unit 測試
+pnpm test                    # 全部（unit + integration + e2e）
 pnpm test:coverage           # 含覆蓋率報告
-```
 
-**Windows（PowerShell 或 Git Bash）**：
-```powershell
-pnpm test
-pnpm test:unit
-pnpm test:coverage
-```
-
-### Fastify API 測試
-
-**Mac（Terminal）**：
-```bash
+# Fastify API unit 測試
 cd apps/web
-pnpm test                    # unit tests（100% coverage）
-pnpm test:coverage           # unit tests + coverage report
-INTEGRATION=1 pnpm test:int  # integration tests（需要 K8s Supabase 運行）
-E2E_LIVE=1 pnpm test:e2e:live  # live E2E（需要完整 K8s stack）
-```
-
-**Windows（PowerShell）**：
-```powershell
-cd apps\web
 pnpm test
 pnpm test:coverage
+```
+
+---
+
+### 需要 K8s stack（先完成三、K8s Dev 模式啟動）
+
+**Mac Terminal / Windows PowerShell**：
+
+```bash
+# API integration 測試（需要 K8s Supabase）
+cd apps/web
+
+# Mac
+INTEGRATION=1 pnpm test:int
+
+# Windows PowerShell
 $env:INTEGRATION=1; pnpm test:int
+```
+
+```bash
+# API live E2E（需要完整 K8s stack）
+
+# Mac
+E2E_LIVE=1 pnpm test:e2e:live
+
+# Windows PowerShell
 $env:E2E_LIVE=1; pnpm test:e2e:live
 ```
 
-### K8s 端對端測試（需要完整 stack 運行）
-
-**Mac / Windows（PowerShell 或 Git Bash）**：
 ```bash
-npx jest tests/e2e/k8s-server.e2e.test.ts --no-coverage
+# K8s E2E（根目錄，Mac / Windows PowerShell）
+npx jest tests/e2e/ --no-coverage
 ```
 
-### RPA 視覺 E2E（需要完整 stack + 瀏覽器）
+---
 
-**Mac**：
+### RPA 瀏覽器測試（Playwright，需要完整 K8s stack）
+
+> 前提：`npx playwright install chromium` 已執行過（見二、Clone & 安裝依賴）
+
+**Mac Terminal / Windows PowerShell**：
+
 ```bash
-python3 tests/visual-e2e/e2e_slot_test.py --target k8s
-```
+# 全部 RPA 測試
+npx playwright test tests/rpa/
 
-**Windows（PowerShell）**：
-```powershell
-python tests/visual-e2e/e2e_slot_test.py --target k8s
-```
-
-### Playwright RPA 按鈕測試
-
-**Mac / Windows（Git Bash 或 PowerShell）**：
-```bash
+# 只跑按鈕測試
 npx playwright test tests/rpa/AllButtons.rpa.spec.ts
-npx playwright test --ui    # 互動式 UI 模式
+
+# 只跑儲值流程測試
+npx playwright test tests/rpa/Deposit.rpa.spec.ts
+
+# 互動式 UI 模式（可逐步觀察）
+npx playwright test --ui
 ```
+
+> RPA 測試若 K8s 未啟動，`beforeAll` 會偵測並自動 skip 全部測試（不會 fail）。
 
 ---
 
