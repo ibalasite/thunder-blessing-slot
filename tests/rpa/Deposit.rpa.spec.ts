@@ -220,8 +220,8 @@ test.beforeAll(async ({ request }) => {
     const login = await request.post(`${API_URL}/auth/login`, {
         data: { email: TEST_EMAIL, password: TEST_PASSWORD },
     });
-    const loginBody = await login.json() as { access_token: string };
-    accessToken = loginBody.access_token;
+    const loginBody = await login.json() as { accessToken: string };
+    accessToken = loginBody.accessToken;
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

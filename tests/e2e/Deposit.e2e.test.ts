@@ -111,7 +111,7 @@ describe('Deposit RPA: setup', () => {
             body: JSON.stringify({ email: testEmail, password: testPassword }),
         });
         expect(login.ok).toBe(true);
-        accessToken = (login.body as { access_token: string }).access_token;
+        accessToken = (login.body as { accessToken: string }).accessToken;
         expect(typeof accessToken).toBe('string');
         expect(accessToken.length).toBeGreaterThan(10);
     }, 10000);
@@ -193,11 +193,11 @@ describe('Deposit RPA: 交易歷史', () => {
         );
         expect(ok).toBe(true);
 
-        const txs = body as Array<{ type: string; amount: string }>;
+        const { transactions: txs } = body as { transactions: Array<{ type: string; amount: number }> };
         const depositTxs = txs.filter(tx => tx.type === 'deposit');
         expect(depositTxs.length).toBeGreaterThan(0);
 
-        const amounts = depositTxs.map(tx => parseFloat(tx.amount));
+        const amounts = depositTxs.map(tx => tx.amount);
         expect(amounts).toContain(100);
     }, 10000);
 });
@@ -261,17 +261,17 @@ describe('Deposit RPA: 儲值 → Spin 金流一致性', () => {
                 'x-session-id': `deposit-e2e-${Date.now()}`,
             },
             body: JSON.stringify({
-                mode: 'base',
+                mode: 'main',
                 betLevel: 25,
                 currency: 'USD',
             }),
         });
         expect(ok).toBe(true);
 
-        const spin = body as { wagered: string; totalWin: string; balance: string };
-        const wagered = parseFloat(spin.wagered);
-        const totalWin = parseFloat(spin.totalWin);
-        const reportedBalance = parseFloat(spin.balance);
+        const spin = body as { playerBet: string; playerWin: string; balance: number };
+        const wagered = parseFloat(spin.playerBet);
+        const totalWin = parseFloat(spin.playerWin);
+        const reportedBalance = spin.balance;
 
         const balAfter = await getBalance(accessToken);
 

@@ -317,8 +317,8 @@ test.beforeAll(async ({ request }) => {
     const login = await request.post(`${API_URL}/auth/login`, {
         data: { email: TEST_EMAIL, password: TEST_PASSWORD },
     });
-    const body = await login.json() as { access_token: string };
-    accessToken = body.access_token;
+    const body = await login.json() as { accessToken: string };
+    accessToken = body.accessToken;
 
     // 確保足夠餘額（10,000）供全部測試使用
     await request.post(`${API_URL}/wallet/deposit`, {
