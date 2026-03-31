@@ -33,13 +33,22 @@ cocos_build() {
 
   # Patch index.html: CLI defaults to 1280x960 (landscape), patch to 720x1280 (portrait)
   # Always runs — even when Cocos CLI is absent — so the existing build/ stays portrait-correct.
+  # Cross-platform sed: macOS requires 'sed -i ""', GNU/Linux requires 'sed -i'
   local HTML="$PROJECT_ROOT/build/web-desktop/index.html"
   if [ -f "$HTML" ]; then
-    sed -i '' \
-      -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
-      -e 's/width="1280" height="960"/width="720" height="1280"/g' \
-      -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
-      "$HTML"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' \
+        -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
+        -e 's/width="1280" height="960"/width="720" height="1280"/g' \
+        -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
+        "$HTML"
+    else
+      sed -i \
+        -e 's/style="width: 1280px; height: 960px;"/style="width: 720px; height: 1280px;"/g' \
+        -e 's/width="1280" height="960"/width="720" height="1280"/g' \
+        -e 's/var DW=1280,DH=960/var DW=720,DH=1280/g' \
+        "$HTML"
+    fi
     log "Patched index.html → 720×1280 portrait"
   else
     log "WARNING: $HTML not found — nothing to patch"
