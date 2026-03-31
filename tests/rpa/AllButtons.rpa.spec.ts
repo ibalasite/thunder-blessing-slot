@@ -147,6 +147,27 @@ async function getLabelText(page: Page, nodeName: string): Promise<string | null
     }, nodeName);
 }
 
+/** 從 Cocos 場景讀取目前 turboMode 值（經 UIController._session） */
+async function getTurboMode(page: Page): Promise<boolean | null> {
+    return page.evaluate(() => {
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const cc = (window as any).cc;
+        const scene = cc?.director?.getScene();
+        if (!scene) return null;
+        function search(n: any): boolean | null {
+            for (const comp of (n._components ?? [])) {
+                if (comp._session && typeof comp._session.turboMode === 'boolean') {
+                    return comp._session.turboMode;
+                }
+            }
+            for (const c of (n.children ?? [])) { const r = search(c); if (r !== null) return r; }
+            return null;
+        }
+        return search(scene);
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+    });
+}
+
 /** 讀取某節點子節點 'lbl' 的 Label.string（按鈕標籤） */
 async function getButtonLabel(page: Page, buttonNodeName: string): Promise<string | null> {
     return page.evaluate((name: string) => {
@@ -334,27 +355,27 @@ test.beforeAll(async ({ request }) => {
 test.describe('HUD 按鈕', () => {
 
     // ── TurboBtn (⚡) ────────────────────────────────────────────────────────
-    test('HUD-01: TurboBtn (⚡) 點擊後切換 Turbo 狀態，標籤由 ⚡ 變 ⚡ ON', async ({ page }) => {
+    test('HUD-01: TurboBtn default 金框（turboMode=true），點擊變暗框（turboMode=false）', async ({ page }) => {
         test.skip(!k8sAvailable, 'K8s not available');
         await page.goto(gameURL(TEST_EMAIL, TEST_PASSWORD));
         await waitGameReady(page);
 
-        const before = await getButtonLabel(page, 'TurboBtn');
-        // 初始狀態為 OFF（標籤 '⚡'）
-        expect(before).toBe('⚡');
+        // 初始狀態：turboMode=true（金框）
+        expect(await getTurboMode(page)).toBe(true);
 
+        // 點擊 → turboMode=false（暗框）
         await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
         await page.waitForTimeout(300);
+        expect(await getTurboMode(page)).toBe(false);
 
-        const after = await getButtonLabel(page, 'TurboBtn');
-        expect(after).toBe('⚡ ON');
+        await page.screenshot({ path: '.playwright-output/hud-01-turbo-off.png' });
+
+        // 再點 → turboMode=true（金框還原）
+        await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
+        await page.waitForTimeout(300);
+        expect(await getTurboMode(page)).toBe(true);
 
         await page.screenshot({ path: '.playwright-output/hud-01-turbo-on.png' });
-
-        // 再點一次切回 OFF
-        await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
-        await page.waitForTimeout(300);
-        expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');
     });
 
     // ── TurboBtn ⚡ 旁不得出現額外文字（regression：Windows stale build 曾出現 'on' 撐框）
