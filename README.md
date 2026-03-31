@@ -112,27 +112,45 @@ thunder-blessing-slot/               ← Mono-repo root (pnpm workspace)
 
 ### Mac
 
+**步驟 1：Homebrew（若尚未安裝）**
+
 ```bash
-# 1. Node.js 20+
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+**步驟 2：Node.js 20+ 與 pnpm**
+
+```bash
+brew install nvm
+echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc
+echo '[ -s "$(brew --prefix nvm)/nvm.sh" ] && . "$(brew --prefix nvm)/nvm.sh"' >> ~/.zshrc
 source ~/.zshrc
 nvm install 20 && nvm use 20
-
-# 2. pnpm
 npm install -g pnpm
-
-# 3. Rancher Desktop（K8s + 容器執行環境）
-#    下載：https://rancherdesktop.io → 安裝 .dmg
-#    Preferences → Kubernetes → Enable Kubernetes → Apply
-#    確認：kubectl cluster-info
-
-# 4. Helm（K8s 套件管理，Supabase 安裝用）
-brew install helm
-
-# 5. Cocos Creator（修改遊戲邏輯時才需要）
-#    下載 Cocos Dashboard：https://www.cocos.com/creator
-#    安裝 Cocos Creator 3.8.7
 ```
+
+**步驟 3：Rancher Desktop（K8s）**
+
+1. 下載 [https://rancherdesktop.io](https://rancherdesktop.io) → 安裝 `.dmg`
+2. Preferences → Kubernetes → Enable Kubernetes → Apply
+3. 等待右下角圖示變綠（約 3–5 分鐘）
+4. 確認：`kubectl cluster-info`
+
+```bash
+# PATH 設定（若找不到 kubectl / helm / rdctl）
+echo 'export PATH="$PATH:$HOME/.rd/bin"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**步驟 4：Helm**
+
+```bash
+brew install helm
+```
+
+**步驟 5：Cocos Creator（選用，只在修改 `assets/scripts/` 時需要）**
+
+[https://www.cocos.com/creator](https://www.cocos.com/creator) → Cocos Dashboard → 安裝 Creator 3.8.7
 
 ### Windows 11
 
@@ -328,49 +346,61 @@ http://localhost:30080?apiUrl=http://localhost:3001
 
 ### 不需要 K8s（可直接執行）
 
-**Mac Terminal / Windows PowerShell / Windows Git Bash**：
-
 ```bash
+# ── Mac Terminal ──────────────────────────────────────────
 # 遊戲引擎測試（根目錄）
 pnpm test:unit               # unit 測試
 pnpm test                    # 全部（unit + integration + e2e）
 pnpm test:coverage           # 含覆蓋率報告
 
 # Fastify API unit 測試
-cd apps/web
+cd apps/web && pnpm test
+cd apps/web && pnpm test:coverage
+```
+
+```powershell
+# ── Windows PowerShell ───────────────────────────────────
+# 遊戲引擎測試（根目錄）
+pnpm test:unit
 pnpm test
 pnpm test:coverage
+
+# Fastify API unit 測試
+cd apps\web; pnpm test
+cd apps\web; pnpm test:coverage
 ```
 
 ---
 
 ### 需要 K8s stack（先完成三、K8s Dev 模式啟動）
 
-**Mac Terminal / Windows PowerShell**：
-
 ```bash
-# API integration 測試（需要 K8s Supabase）
+# ── Mac Terminal ──────────────────────────────────────────
 cd apps/web
 
-# Mac
+# API integration（需要 K8s Supabase）
 INTEGRATION=1 pnpm test:int
 
-# Windows PowerShell
-$env:INTEGRATION=1; pnpm test:int
-```
-
-```bash
 # API live E2E（需要完整 K8s stack）
-
-# Mac
 E2E_LIVE=1 pnpm test:e2e:live
 
-# Windows PowerShell
-$env:E2E_LIVE=1; pnpm test:e2e:live
+# K8s E2E（根目錄）
+cd ..
+npx jest tests/e2e/ --no-coverage
 ```
 
-```bash
-# K8s E2E（根目錄，Mac / Windows PowerShell）
+```powershell
+# ── Windows PowerShell ───────────────────────────────────
+cd apps\web
+
+# API integration（需要 K8s Supabase）
+$env:INTEGRATION=1; pnpm test:int
+
+# API live E2E（需要完整 K8s stack）
+$env:E2E_LIVE=1; pnpm test:e2e:live
+
+# K8s E2E（根目錄）
+cd ..
 npx jest tests/e2e/ --no-coverage
 ```
 
@@ -379,24 +409,23 @@ npx jest tests/e2e/ --no-coverage
 ### RPA 瀏覽器測試（Playwright，需要完整 K8s stack）
 
 > 前提：`npx playwright install chromium` 已執行過（見二、Clone & 安裝依賴）
-
-**Mac Terminal / Windows PowerShell**：
+> K8s 未啟動時 `beforeAll` 自動偵測，所有 RPA 測試會 skip（不會 fail）。
 
 ```bash
+# ── Mac Terminal 或 Windows PowerShell（指令相同）────────
+
 # 全部 RPA 測試
 npx playwright test tests/rpa/
 
-# 只跑按鈕測試
+# 只跑按鈕互動測試
 npx playwright test tests/rpa/AllButtons.rpa.spec.ts
 
 # 只跑儲值流程測試
 npx playwright test tests/rpa/Deposit.rpa.spec.ts
 
-# 互動式 UI 模式（可逐步觀察）
+# 互動式 UI 模式（可逐步觀察每個步驟）
 npx playwright test --ui
 ```
-
-> RPA 測試若 K8s 未啟動，`beforeAll` 會偵測並自動 skip 全部測試（不會 fail）。
 
 ---
 
@@ -430,18 +459,14 @@ k9s -n thunder-dev
 
 ### `kubectl` / `helm` / `rdctl` 找不到指令
 
-**Mac（Terminal）**：
+**Mac**：
 ```bash
-export PATH="$PATH:$HOME/.rd/bin"
-echo 'export PATH="$PATH:$HOME/.rd/bin"' >> ~/.zshrc
-source ~/.zshrc
+echo 'export PATH="$PATH:$HOME/.rd/bin"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-**Windows（PowerShell — 永久設定）**：
+**Windows PowerShell（永久設定）**：
 ```powershell
-# 確認 Rancher Desktop 已安裝
-$rdBin = "$env:USERPROFILE\.rd\bin"
-[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$rdBin", "User")
+[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$env:USERPROFILE\.rd\bin", "User")
 # 重新開啟 PowerShell 後生效
 ```
 
