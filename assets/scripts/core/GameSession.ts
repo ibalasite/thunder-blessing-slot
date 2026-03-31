@@ -119,7 +119,7 @@ export class GameSession implements IGameSession {
     }
 
     // ── 滾輪速度模式 ─────────────────────────────────────────
-    private _turboMode: boolean = true;   // 預設 ON（快速同時停轉）
+    private _turboMode: boolean = false;  // 預設 OFF（玩家首次點擊才啟用）
 
     get turboMode(): boolean { return this._turboMode; }
 
