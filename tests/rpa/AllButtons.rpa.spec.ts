@@ -334,24 +334,25 @@ test.beforeAll(async ({ request }) => {
 test.describe('HUD 按鈕', () => {
 
     // ── TurboBtn (⚡) ────────────────────────────────────────────────────────
-    test('HUD-01: TurboBtn (⚡) 點擊後切換 Turbo 狀態，標籤由 ⚡ 變 ⚡ ON', async ({ page }) => {
+    test('HUD-01: TurboBtn (⚡) 點擊後切換 Turbo 狀態，標籤永遠顯示 ⚡（顏色代表開關）', async ({ page }) => {
         test.skip(!k8sAvailable, 'K8s not available');
         await page.goto(gameURL(TEST_EMAIL, TEST_PASSWORD));
         await waitGameReady(page);
 
+        // TurboBtn 標籤永遠只顯示 '⚡'，顏色（金/暗）才是開關指示
         const before = await getButtonLabel(page, 'TurboBtn');
-        // 初始狀態為 OFF（標籤 '⚡'）
         expect(before).toBe('⚡');
 
         await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
         await page.waitForTimeout(300);
 
+        // 點擊後標籤仍為 '⚡'，不應出現 'ON' 文字（避免撐大 button 框）
         const after = await getButtonLabel(page, 'TurboBtn');
-        expect(after).toBe('⚡ ON');
+        expect(after).toBe('⚡');
 
         await page.screenshot({ path: '.playwright-output/hud-01-turbo-on.png' });
 
-        // 再點一次切回 OFF
+        // 再點一次確認可再次切換
         await page.mouse.click(BTN.turbo.x, BTN.turbo.y);
         await page.waitForTimeout(300);
         expect(await getButtonLabel(page, 'TurboBtn')).toBe('⚡');

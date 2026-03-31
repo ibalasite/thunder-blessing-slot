@@ -484,12 +484,9 @@ export class UIController extends Component implements IUIController {
         gfx.lineWidth = on ? 2 : 1;
         gfx.roundRect(-30, -30, 60, 60, 11);
         gfx.stroke();
-        // 按鈕圖示顏色與文字
+        // 按鈕圖示顏色（文字永遠為 '⚡'，不改變）
         const lbl = this.btnTurbo.getChildByName('lbl')?.getComponent(Label);
-        if (lbl) {
-            lbl.string = on ? '⚡ ON' : '⚡';
-            lbl.color = Color.fromHEX(new Color(), on ? '#ffcc22' : '#444456');
-        }
+        if (lbl) lbl.color = Color.fromHEX(new Color(), on ? '#ffcc22' : '#444456');
     }
 
     pressExtraBet(): void {
