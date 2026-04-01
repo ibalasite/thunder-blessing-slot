@@ -1,6 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as jose from 'jose';
-import crypto from 'crypto';
 import type { IAuthProvider, AuthUser, AuthTokens } from '../../domain/interfaces/IAuthProvider';
 import { AppError } from '../../shared/errors/AppError';
 import { env } from '../../infrastructure/config/env';
@@ -38,11 +37,11 @@ export class SupabaseAuthAdapter implements IAuthProvider {
 
   async login(email: string, password: string): Promise<{ user: AuthUser; tokens: AuthTokens }> {
     const { data, error } = await this._client.auth.signInWithPassword({ email, password });
-    if (error || !data.user) {
+    if (error || !data.user || !data.session) {
       throw AppError.unauthorized('Invalid credentials');
     }
     const user = this._mapUser(data.user);
-    const tokens = await this._issueTokens(user.id);
+    const tokens = await this._issueTokens(user.id, data.session.refresh_token);
     return { user, tokens };
   }
 
@@ -51,7 +50,7 @@ export class SupabaseAuthAdapter implements IAuthProvider {
     if (error || !data.session) {
       throw AppError.unauthorized('Invalid or expired refresh token');
     }
-    return this._issueTokens(data.user!.id);
+    return this._issueTokens(data.user!.id, data.session.refresh_token);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -81,7 +80,7 @@ export class SupabaseAuthAdapter implements IAuthProvider {
     return this._mapUser(data.user);
   }
 
-  private async _issueTokens(userId: string): Promise<AuthTokens> {
+  private async _issueTokens(userId: string, goTrueRefreshToken: string): Promise<AuthTokens> {
     const { data } = await this._client.auth.admin.getUserById(userId);
     const email = data.user?.email ?? '';
 
@@ -92,8 +91,7 @@ export class SupabaseAuthAdapter implements IAuthProvider {
       .setExpirationTime(`${env.JWT_ACCESS_TTL_SECONDS}s`)
       .sign(this._jwtSecret);
 
-    const refreshToken = crypto.randomBytes(64).toString('hex');
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken: goTrueRefreshToken };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -11,10 +11,11 @@ export class SupabaseSpinLogRepository implements ISpinLogRepository {
     });
   }
 
-  async create(log: Omit<SpinLog, 'id' | 'createdAt'>): Promise<SpinLog> {
+  async create(log: Omit<SpinLog, 'createdAt'>): Promise<SpinLog> {
     const { data, error } = await this._client
       .from('spin_logs')
       .insert({
+        spin_id: log.id,
         user_id: log.userId,
         session_id: log.sessionId,
         mode: log.mode,
@@ -40,7 +41,7 @@ export class SupabaseSpinLogRepository implements ISpinLogRepository {
     const { data, error } = await this._client
       .from('spin_logs')
       .select('*')
-      .eq('id', id)
+      .eq('spin_id', id)
       .single();
     if (error) return null;
     return this._mapLog(data);
@@ -60,7 +61,7 @@ export class SupabaseSpinLogRepository implements ISpinLogRepository {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _mapLog(row: any): SpinLog {
     return {
-      id: row.id,
+      id: row.spin_id,
       userId: row.user_id,
       sessionId: row.session_id,
       mode: row.mode,

@@ -109,7 +109,7 @@ function simMode(
 
 const SAMPLE_BETS = [BET_MIN, 0.50, 1.00, 2.50, 5.00, BET_MAX];
 const MODES: GameMode[] = ['main', 'buyFG', 'extraBet'];
-const SPINS_PER_SEED = 10_000; // × 10 seeds = 100k total per combo
+const SPINS_PER_SEED = 100_000; // × 10 seeds = 1M total per combo
 
 describe(`Batch RTP: ${MODES.length} modes × ${SAMPLE_BETS.length} bets (${SPINS_PER_SEED * SEEDS.length / 1000}k each)`, () => {
     const results: { mode: GameMode; bet: number; rtp: number }[] = [];

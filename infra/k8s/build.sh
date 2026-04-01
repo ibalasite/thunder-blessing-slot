@@ -29,17 +29,36 @@ REGISTRY_SVC="registry.${NAMESPACE}.svc.cluster.local:5000"
 REGISTRY_NODE="localhost:30500"
 IMAGE_TAG="${1:-$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'dev')}"
 
+# ── OS-aware Rancher Desktop shell ────────────────────────────────────────────
+# macOS/Linux: rdctl shell → Lima VM
+# Windows (Git Bash / MSYS2): wsl -d rancher-desktop → WSL2 distro
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) RDSHELL=(wsl -d rancher-desktop --) ;;
+  *)                     RDSHELL=(rdctl shell --) ;;
+esac
+
 # Colours
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[build.sh]${NC} $*"; }
 warn() { echo -e "${YELLOW}[build.sh]${NC} $*"; }
 die()  { echo -e "${RED}[build.sh] ERROR:${NC} $*" >&2; exit 1; }
 
+# ── Portable template rendering (replaces envsubst — not in Git Bash by default)
+render_template() {
+  sed \
+    -e "s|\${IMAGE_TAG}|${IMAGE_TAG}|g" \
+    -e "s|\${REGISTRY_SVC}|${REGISTRY_SVC}|g" \
+    "$1"
+}
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 preflight() {
   log "Preflight checks..."
   command -v kubectl >/dev/null || die "kubectl not found at ~/.rd/bin/kubectl"
-  command -v rdctl   >/dev/null || die "rdctl not found — is Rancher Desktop running?"
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) command -v wsl >/dev/null || die "wsl not found — is WSL2 enabled and Rancher Desktop installed?" ;;
+    *) command -v rdctl >/dev/null || die "rdctl not found — is Rancher Desktop running?" ;;
+  esac
   kubectl cluster-info >/dev/null 2>&1 || die "K8s cluster not reachable"
   kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || \
     kubectl create namespace "$NAMESPACE"
@@ -59,7 +78,7 @@ bootstrap_registry() {
   log "Registry ClusterIP: $REGISTRY_IP"
 
   # Check if containerd config already covers localhost:30500
-  if rdctl shell -- grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null; then
+  if "${RDSHELL[@]}" grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null; then
     log "Containerd registry config already up to date."
     return 0
   fi
@@ -67,29 +86,34 @@ bootstrap_registry() {
   log "Configuring k3s containerd to trust localhost:30500 (NodePort registry, one-time)..."
 
   # Kubelet pulls via NodePort (localhost:30500) — node-accessible, no DNS needed
-  rdctl shell -- sudo tee /etc/rancher/k3s/registries.yaml > /dev/null << 'REGEOF'
-mirrors:
-  "localhost:30500":
-    endpoint:
-      - "http://localhost:30500"
-configs:
-  "localhost:30500":
-    tls:
-      insecureSkipVerify: true
-REGEOF
+  # Use printf+pipe instead of heredoc so the command works on Windows (Git Bash/MSYS2)
+  printf '%s\n' \
+    'mirrors:' \
+    '  "localhost:30500":' \
+    '    endpoint:' \
+    '      - "http://localhost:30500"' \
+    'configs:' \
+    '  "localhost:30500":' \
+    '    tls:' \
+    '      insecureSkipVerify: true' \
+    | "${RDSHELL[@]}" sudo tee /etc/rancher/k3s/registries.yaml > /dev/null
 
-  rdctl shell -- sudo mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500
-  rdctl shell -- sudo tee /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500/hosts.toml > /dev/null << 'HOSTSEOF'
-server = "http://localhost:30500"
+  "${RDSHELL[@]}" sudo mkdir -p \
+    /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500
 
-[host."http://localhost:30500"]
-  capabilities = ["pull", "resolve"]
-  skip_verify = true
-HOSTSEOF
+  printf '%s\n' \
+    'server = "http://localhost:30500"' \
+    '' \
+    '[host."http://localhost:30500"]' \
+    '  capabilities = ["pull", "resolve"]' \
+    '  skip_verify = true' \
+    | "${RDSHELL[@]}" sudo tee \
+        /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500/hosts.toml \
+        > /dev/null
 
-  # Reload containerd via SIGHUP
-  rdctl shell -- sudo sh -c \
-    'kill -HUP $(pidof k3s-agent 2>/dev/null || pidof k3s 2>/dev/null) 2>/dev/null || true'
+  # Reload containerd via SIGHUP — pkill is POSIX; pidof is Linux-only
+  "${RDSHELL[@]}" sudo sh -c \
+    'pkill -HUP k3s-agent 2>/dev/null || pkill -HUP k3s 2>/dev/null || true'
   sleep 3
   log "Containerd registry config applied."
 }
@@ -154,10 +178,8 @@ run_build() {
   # Remove any previous job with the same tag
   kubectl delete job "$JOB_NAME" -n "$NAMESPACE" --ignore-not-found --wait=true
 
-  # Render template and apply
-  IMAGE_TAG="$IMAGE_TAG" REGISTRY_SVC="$REGISTRY_SVC" \
-    envsubst < "$K8S_DIR/build/kaniko-job.yaml" | \
-    kubectl apply -f -
+  # Render template and apply (render_template replaces envsubst, absent on Windows Git Bash)
+  render_template "$K8S_DIR/build/kaniko-job.yaml" | kubectl apply -f -
 
   log "Waiting for kaniko build to complete (timeout: 15m)..."
   if ! kubectl wait "job/$JOB_NAME" -n "$NAMESPACE" \

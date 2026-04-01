@@ -15,17 +15,20 @@ afterEach(() => {
 });
 
 describe('SupabaseSpinLogger', () => {
-  it('calls repo.create with spin data (excluding id and createdAt)', async () => {
+  it('calls repo.create with spin data (including id, excluding createdAt)', async () => {
     const repo = createMockSpinLogRepo();
     const logger = new SupabaseSpinLogger(repo);
     logger.logAsync(TEST_SPIN_LOG);
     await Promise.resolve();
     await Promise.resolve();
     expect(repo.create).toHaveBeenCalledWith(
-      expect.not.objectContaining({ id: TEST_SPIN_LOG.id }),
+      expect.objectContaining({ id: TEST_SPIN_LOG.id }),
     );
     expect(repo.create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: TEST_SPIN_LOG.userId }),
+    );
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ createdAt: expect.anything() }),
     );
   });
 

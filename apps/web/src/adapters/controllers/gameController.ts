@@ -36,7 +36,8 @@ export async function gameController(app: FastifyInstance): Promise<void> {
       clientSeed: body.clientSeed ?? null,
       txId: body.txId,
     });
-    reply.send(result);
+    // Return balance as number (API contract); playerBet/playerWin remain strings for precision
+    reply.send({ ...result, balance: parseFloat(result.balance) });
   });
 
   app.get('/:spinId/replay', { preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {

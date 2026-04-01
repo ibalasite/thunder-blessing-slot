@@ -26,7 +26,10 @@ async function api(
   path: string,
   opts: { token?: string; body?: unknown; cookie?: string } = {},
 ): Promise<{ status: number; body: unknown; headers: Headers }> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {};
+  // Only set Content-Type: application/json when there is a body.
+  // Fastify 5 rejects Content-Type: application/json with an empty body (FST_ERR_CTP_EMPTY_JSON_BODY).
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (opts.token) headers['Authorization'] = `Bearer ${opts.token}`;
   if (opts.cookie) headers['Cookie'] = opts.cookie;
 
@@ -165,11 +168,11 @@ describeIf(RUN)(`Live E2E → ${BASE}`, () => {
       body: { mode: 'main', betLevel: 25, currency: 'USD', extraBetOn: false },
     });
     expect(status).toBe(200);
-    const s = body as { spinId: string; playerBet: string; playerWin: string; balance: string; currency: string };
+    const s = body as { spinId: string; playerBet: string; playerWin: string; balance: number; currency: string };
     expect(s.spinId).toMatch(/^[0-9a-f-]{36}$/);
     expect(s.playerBet).toBe('0.25');
     expect(typeof s.playerWin).toBe('string');
-    expect(typeof s.balance).toBe('string');
+    expect(typeof s.balance).toBe('number');   // gameController returns parseFloat(balance)
     expect(s.currency).toBe('USD');
     spinId = s.spinId;
   });
@@ -216,9 +219,14 @@ describeIf(RUN)(`Live E2E → ${BASE}`, () => {
   // ── 10. Replay ────────────────────────────────────────────────────────────
 
   it('GET /api/v1/game/:spinId/replay → 200', async () => {
-    const { status, body } = await api(`GET`, `/api/v1/game/${spinId}/replay`, {
-      token: accessToken,
-    });
+    // Spin log is fire-and-forget — retry for up to 2s to allow async DB insert to complete
+    let status = 0;
+    let body: unknown = {};
+    for (let i = 0; i < 10; i++) {
+      ({ status, body } = await api(`GET`, `/api/v1/game/${spinId}/replay`, { token: accessToken }));
+      if (status === 200) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
     expect(status).toBe(200);
     expect((body as { spinId: string }).spinId).toBe(spinId);
   });

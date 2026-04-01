@@ -12,8 +12,21 @@ data:
       sleep 2
     done
     echo "PostgreSQL is ready. Running migrations..."
-    psql -h supabase-supabase-db.thunder-dev -p 5432 -U postgres -d postgres -f /migrations/initial_schema.sql
-    echo "Migrations completed."
+    for f in $(ls /migrations/*.sql 2>/dev/null | sort); do
+      echo "  → $f"
+      psql -h supabase-supabase-db.thunder-dev -p 5432 -U postgres -d postgres -f "$f"
+    done
+    echo "All migrations completed."
+---
+# supabase-sql-migrations ConfigMap is created dynamically by start-dev.sh
+# using: kubectl create configmap supabase-sql-migrations --from-file=...
+# This placeholder allows the Job to reference the ConfigMap before it is populated.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-sql-migrations
+  namespace: thunder-dev
+data: {}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -45,10 +58,3 @@ spec:
         - name: migrations
           configMap:
             name: supabase-sql-migrations
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: supabase-sql-migrations
-  namespace: thunder-dev
-binaryData: {}

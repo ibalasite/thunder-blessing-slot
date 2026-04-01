@@ -17,12 +17,30 @@ log() { echo -e "${GREEN}[cocos-build]${NC} $*"; }
 # ── Step 0: Cocos CLI build + patch portrait resolution ───────────────────────
 cocos_build() {
   log "[0/3] Building Cocos web-desktop..."
-  COCOS_CLI="/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/MacOS/CocosCreator"
-  if [ ! -f "$COCOS_CLI" ]; then
-    log "Cocos Creator not found at $COCOS_CLI — skipping build (using existing build/ output)"
+
+  # Detect Cocos Creator CLI path per platform
+  # Override with COCOS_CLI env var for non-standard installs
+  if [ -z "${COCOS_CLI:-}" ]; then
+    case "$(uname -s)" in
+      Darwin)
+        COCOS_CLI="/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/MacOS/CocosCreator"
+        ;;
+      MINGW*|MSYS*|CYGWIN*)
+        # Windows default install path (Git Bash / MSYS2 mount of C:)
+        COCOS_CLI="/c/Program Files/Cocos/Creator/3.8.7/CocosCreator.exe"
+        ;;
+      *)
+        # Linux or WSL — set COCOS_CLI explicitly; no standard install path
+        COCOS_CLI=""
+        ;;
+    esac
+  fi
+
+  if [ -z "$COCOS_CLI" ] || [ ! -f "$COCOS_CLI" ]; then
+    log "Cocos Creator not found (COCOS_CLI=${COCOS_CLI:-unset}) — skipping build (using existing build/ output)"
   else
     local BUILD_LOG
-    BUILD_LOG="$(mktemp /tmp/cocos-build-XXXXXX.log)"
+    BUILD_LOG="$(mktemp)"  # POSIX-safe; avoids /tmp which doesn't exist on Windows
     "$COCOS_CLI" \
       --project "$PROJECT_ROOT" \
       --build "platform=web-desktop;debug=false;outputPath=./build" \

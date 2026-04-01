@@ -20,7 +20,7 @@ export interface SpinLog {
 }
 
 export interface ISpinLogRepository {
-  create(log: Omit<SpinLog, 'id' | 'createdAt'>): Promise<SpinLog>;
+  create(log: Omit<SpinLog, 'createdAt'>): Promise<SpinLog>;
   getById(id: string): Promise<SpinLog | null>;
   getByUser(userId: string, limit: number, offset: number): Promise<SpinLog[]>;
 }

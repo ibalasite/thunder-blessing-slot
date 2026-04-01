@@ -54,12 +54,31 @@ kubectl rollout status statefulset/supabase-supabase-db -n "$NAMESPACE" --timeou
 
 # ── Step 3: DB Migrations ─────────────────────────────────────────────────────
 log "[3/5] Running DB migrations..."
-kubectl apply -f "$SCRIPT_DIR/supabase/migration-job.yaml" 2>/dev/null || true
 
-# Wait for migration job to complete (best-effort — idempotent SQL)
-kubectl wait job/supabase-migrate -n "$NAMESPACE" \
-  --for=condition=complete --timeout=2m 2>/dev/null || \
-  warn "Migration job not found or already ran — continuing"
+# Build ConfigMap from every *.sql file in supabase/migrations/ (sorted = ordered execution)
+MIGRATION_DIR="$PROJECT_ROOT/supabase/migrations"
+FROM_FILE_ARGS=""
+for sql in $(ls "$MIGRATION_DIR"/*.sql 2>/dev/null | sort); do
+  base="$(basename "$sql")"
+  FROM_FILE_ARGS="$FROM_FILE_ARGS --from-file=${base}=${sql}"
+done
+
+if [ -z "$FROM_FILE_ARGS" ]; then
+  warn "No SQL migration files found in $MIGRATION_DIR — skipping migration job"
+else
+  # shellcheck disable=SC2086
+  kubectl create configmap supabase-sql-migrations $FROM_FILE_ARGS \
+    -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+  # Delete stale job if exists, then apply job YAML
+  kubectl delete job supabase-migrate -n "$NAMESPACE" --ignore-not-found --wait=true
+  kubectl apply -f "$SCRIPT_DIR/supabase/migration-job.yaml" 2>/dev/null
+
+  # Wait for migration job to complete
+  kubectl wait job/supabase-migrate -n "$NAMESPACE" \
+    --for=condition=complete --timeout=5m 2>/dev/null || \
+    warn "Migration job did not complete in time — check: kubectl logs job/supabase-migrate -n $NAMESPACE"
+fi
 
 # ── Step 4: Build & Deploy Fastify API ───────────────────────────────────────
 log "[4/5] Building & deploying Fastify API..."

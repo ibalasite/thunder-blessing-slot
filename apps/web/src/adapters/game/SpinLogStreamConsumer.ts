@@ -56,6 +56,7 @@ export class SpinLogStreamConsumer {
       const d = entry.data;
       try {
         await this.spinLogRepo.create({
+          id: d['id'],
           userId: d['userId'],
           sessionId: d['sessionId'],
           mode: d['mode'],
