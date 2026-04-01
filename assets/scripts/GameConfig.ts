@@ -266,10 +266,11 @@ export const BUY_FG_MIN_WIN_MULT = 20;
 export const BUY_FG_PAYOUT_SCALE = 0.995;
 /**
  * EB_PAYOUT_SCALE: Scale applied to Extra Bet mode wins.
- * Value 2.75 verified by Monte Carlo (10 seeds × 200k = 2M spins) to achieve ~97.44% RTP.
- * Extra Bet costs 3× base bet (EXTRA_BET_MULT=3), pays at 2.75× raw win.
+ * Value 2.475 calibrated via Monte Carlo (10 seeds × 200k = 2M spins) to achieve ~97.5% RTP.
+ * Extra Bet costs 3× base bet (EXTRA_BET_MULT=3), pays at 2.475× raw win.
+ * Derived: 2.75 × (0.975 / 1.0836) = 2.475 (prior 2.75 measured 108.36% RTP).
  */
-export const EB_PAYOUT_SCALE = 2.75;
+export const EB_PAYOUT_SCALE = 2.475;
 /**
  * EB_BUY_FG_PAYOUT_SCALE: Scale applied to Extra Bet ON + Buy FG combined mode wins.
  * Value 1.065 calibrated to achieve 97.5% RTP when both EB and Buy FG are active.
