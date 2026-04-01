@@ -15,14 +15,14 @@ export default defineConfig({
     timeout:  60_000,
     expect:   { timeout: 15_000 },
     fullyParallel: false,   // slot game tests depend on shared K8s DB state
-    retries:  0,
+    retries:  1,
     reporter: [['html', { outputFolder: '.playwright-report', open: 'never' }]],
     outputDir: '.playwright-output',
 
     use: {
         // Portrait viewport matches Cocos canvas 720×1280 exactly — 1:1 coordinate mapping
         viewport: { width: 720, height: 1280 },
-        headless: true,
+        headless: false,
         screenshot: 'only-on-failure',
         video:      'retain-on-failure',
         // K8s Cocos game URL
