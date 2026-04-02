@@ -160,7 +160,20 @@ brew install helm
 >
 > Git 安裝時會自動包含 Git Bash。
 
-**步驟 1：安裝基本工具（PowerShell 系統管理員）**
+**步驟 1：啟用 WSL2（必要，PowerShell 系統管理員）**
+
+> `build.sh` 使用 `wsl -d rancher-desktop` 設定 K8s 容器 registry，WSL2 未啟用時會失敗。
+
+```powershell
+# 啟用 WSL2 及 Virtual Machine Platform
+wsl --install
+# 若已安裝 WSL1，升級至 WSL2：
+wsl --set-default-version 2
+```
+
+> 完成後**重新開機**。重開後確認：`wsl --status` 應顯示 `Default Version: 2`。
+
+**步驟 2：安裝基本工具（PowerShell 系統管理員）**
 
 ```powershell
 # Git（含 Git Bash）
@@ -176,16 +189,18 @@ npm install -g pnpm
 winget install Helm.Helm
 ```
 
-**步驟 2：安裝 Rancher Desktop（K8s）**
+**步驟 3：安裝 Rancher Desktop（K8s）**
 
 1. 下載 [https://rancherdesktop.io](https://rancherdesktop.io) → 安裝 `.exe`
-2. 開啟後：Preferences → Kubernetes → Enable → Apply & Restart
-3. 等右下角 Kubernetes 圖示變綠（約 3–5 分鐘）
-4. 確認（PowerShell）：`kubectl cluster-info`
+2. 開啟後：Preferences → WSL → 確認 **rancher-desktop** distro 已勾選
+3. Preferences → Kubernetes → Enable → Apply & Restart
+4. 等右下角 Kubernetes 圖示變綠（約 3–5 分鐘）
+5. 確認（PowerShell）：`kubectl cluster-info`
+6. 確認 WSL distro（PowerShell）：`wsl -l -v` → 應有 `rancher-desktop` 且 VERSION=2
 
 > **PATH 確認**：若找不到 `kubectl`、`helm`、`rdctl`，手動將 `%USERPROFILE%\.rd\bin` 加入系統 PATH 後重開終端。
 
-**步驟 3：Cocos Creator（選用，只在修改 `assets/scripts/` 時需要）**
+**步驟 4：Cocos Creator（選用，只在修改 `assets/scripts/` 時需要）**
 
 [https://www.cocos.com/creator](https://www.cocos.com/creator) → Cocos Dashboard → 安裝 Creator 3.8.7
 
@@ -479,6 +494,36 @@ echo 'export PATH="$PATH:$HOME/.rd/bin"' >> ~/.zshrc && source ~/.zshrc
 ```bash
 # 在 Git Bash 中執行
 ./infra/k8s/start-dev.sh
+```
+
+### Helm 安裝 Supabase 失敗（`nil pointer` / `kong.credentials.anonKey`）
+
+Supabase Helm chart 不同版本的 values schema 有差異。`values-dev.yaml` 已同時提供
+`secret.jwt` 與 `kong.credentials` 兩種格式，理論上任何版本均可渲染。
+若仍失敗，請先更新 helm repo 再重試：
+```bash
+# Git Bash 或 Mac Terminal
+helm repo update supabase
+./infra/k8s/start-dev.sh
+```
+
+### `build.sh` 失敗：`tee: C:/Program Files/Git/etc/rancher/k3s/...`
+
+這表示 WSL2 未正確啟用，`wsl -d rancher-desktop` 指令找不到 distro。
+確認步驟：
+```powershell
+# PowerShell — 應看到 rancher-desktop (Version 2)
+wsl -l -v
+```
+若缺少 `rancher-desktop`：重新開啟 Rancher Desktop → Preferences → WSL → 勾選 `rancher-desktop` → Apply。
+
+### `build-cocos.sh` 失敗：`one of src or dest must be a local file specification`
+
+這是 `kubectl cp` 在 Git Bash 下的路徑辨識問題。指令碼已內建 `cygpath` 轉換，
+確認使用最新 code（`git pull`）後重試。若問題持續，確認 Rancher Desktop
+版本 ≥ 1.10（kubectl ≥ 1.28）：
+```powershell
+kubectl version --client
 ```
 
 ### Build 時 kaniko 失敗
