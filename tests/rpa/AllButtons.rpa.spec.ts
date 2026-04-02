@@ -303,6 +303,11 @@ async function waitGameReady(page: Page): Promise<void> {
     );
     // Extra buffer: loading screen fade-out (0.5s CSS transition) + Cocos engine warm-up
     await page.waitForTimeout(1000);
+    // Click reel area center to give canvas focus — required for Cocos mouse events
+    // to register reliably in headed Chrome (WebGL canvas needs a real pointer event
+    // before synthetic mouse.click() coords are dispatched to the Cocos input system).
+    await page.mouse.click(360, 600);
+    await page.waitForTimeout(200);
 }
 
 /** 解析 '餘額: 1000.00' 格式 */
@@ -492,6 +497,11 @@ test.describe('HUD 按鈕', () => {
         test.skip(!k8sAvailable, 'K8s not available');
         await page.goto(gameURL(TEST_EMAIL, TEST_PASSWORD));
         await waitGameReady(page);
+
+        // Pre-increment: DEFAULT_BET = BET_MIN (0.25), so BetMinus needs room.
+        // Click BetPlus once to move above minimum before measuring original.
+        await page.mouse.click(BTN.betPlus.x, BTN.betPlus.y);
+        await page.waitForTimeout(200);
 
         const original = parseBet(await getLabelText(page, 'BetLabel'));
         await page.mouse.click(BTN.betMinus.x, BTN.betMinus.y);
