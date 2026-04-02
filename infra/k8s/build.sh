@@ -51,6 +51,15 @@ render_template() {
     "$1"
 }
 
+# ── Windows-safe local path for kubectl cp ────────────────────────────────────
+# Git Bash converts /c/Users/... → C:\Users\... (backslash) before passing to
+# kubectl.exe, which then mistakes "C:" for a pod namespace. cygpath -m produces
+# C:/Users/... (forward-slash) which kubectl correctly identifies as a local path.
+# On Mac/Linux, cygpath is absent and the path is returned unchanged.
+_kcp_path() {
+  command -v cygpath >/dev/null 2>&1 && cygpath -m "$1" || echo "$1"
+}
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 preflight() {
   log "Preflight checks..."
@@ -78,7 +87,9 @@ bootstrap_registry() {
   log "Registry ClusterIP: $REGISTRY_IP"
 
   # Check if containerd config already covers localhost:30500
-  if "${RDSHELL[@]}" grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null; then
+  # MSYS_NO_PATHCONV=1 prevents Git Bash on Windows from converting Linux paths like
+  # /etc/rancher/k3s/... into C:/Program Files/Git/etc/rancher/... before passing to wsl.exe
+  if MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null; then
     log "Containerd registry config already up to date."
     return 0
   fi
@@ -96,9 +107,9 @@ bootstrap_registry() {
     '  "localhost:30500":' \
     '    tls:' \
     '      insecureSkipVerify: true' \
-    | "${RDSHELL[@]}" sudo tee /etc/rancher/k3s/registries.yaml > /dev/null
+    | MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo tee /etc/rancher/k3s/registries.yaml > /dev/null
 
-  "${RDSHELL[@]}" sudo mkdir -p \
+  MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo mkdir -p \
     /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500
 
   printf '%s\n' \
@@ -107,12 +118,12 @@ bootstrap_registry() {
     '[host."http://localhost:30500"]' \
     '  capabilities = ["pull", "resolve"]' \
     '  skip_verify = true' \
-    | "${RDSHELL[@]}" sudo tee \
+    | MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo tee \
         /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500/hosts.toml \
         > /dev/null
 
   # Reload containerd via SIGHUP — pkill is POSIX; pidof is Linux-only
-  "${RDSHELL[@]}" sudo sh -c \
+  MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo sh -c \
     'pkill -HUP k3s-agent 2>/dev/null || pkill -HUP k3s 2>/dev/null || true'
   sleep 3
   log "Containerd registry config applied."
@@ -156,7 +167,7 @@ upload_context() {
     --for=condition=Ready --timeout=60s
 
   log "Copying source code to PVC (this may take 30-60s)..."
-  kubectl cp "$PROJECT_ROOT/." \
+  kubectl cp "$(_kcp_path "$PROJECT_ROOT/.")" \
     "${NAMESPACE}/context-loader:/workspace/" \
     --retries=3
 

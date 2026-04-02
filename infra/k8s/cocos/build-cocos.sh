@@ -14,6 +14,15 @@ IMAGE_TAG="${1:-cocos-$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/nul
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[cocos-build]${NC} $*"; }
 
+# ── Windows-safe local path for kubectl cp ────────────────────────────────────
+# Git Bash converts /c/Users/... → C:\Users\... before passing to kubectl.exe,
+# which then mistakes "C:" for a pod namespace → "one of src or dest must be a
+# local file specification". cygpath -m yields C:/Users/... (forward-slash),
+# which kubectl correctly treats as a local path. No-op on Mac/Linux.
+_kcp_path() {
+  command -v cygpath >/dev/null 2>&1 && cygpath -m "$1" || echo "$1"
+}
+
 # ── Step 0: Cocos CLI build + patch portrait resolution ───────────────────────
 cocos_build() {
   log "[0/3] Building Cocos web-desktop..."
@@ -97,11 +106,11 @@ kubectl run cocos-context-loader \
 kubectl wait pod/cocos-context-loader -n "$NAMESPACE" --for=condition=Ready --timeout=60s
 
 # Copy nginx Dockerfile and config
-kubectl cp "$SCRIPT_DIR/Dockerfile"   "${NAMESPACE}/cocos-context-loader:/workspace/Dockerfile"
-kubectl cp "$SCRIPT_DIR/nginx.conf"   "${NAMESPACE}/cocos-context-loader:/workspace/nginx.conf"
+kubectl cp "$(_kcp_path "$SCRIPT_DIR/Dockerfile")"  "${NAMESPACE}/cocos-context-loader:/workspace/Dockerfile"
+kubectl cp "$(_kcp_path "$SCRIPT_DIR/nginx.conf")"  "${NAMESPACE}/cocos-context-loader:/workspace/nginx.conf"
 
 # Copy Cocos web-desktop build output
-kubectl cp "$PROJECT_ROOT/build/web-desktop/." \
+kubectl cp "$(_kcp_path "$PROJECT_ROOT/build/web-desktop/.")" \
   "${NAMESPACE}/cocos-context-loader:/workspace/web-desktop/" --retries=3
 
 kubectl exec -n "$NAMESPACE" cocos-context-loader -- \

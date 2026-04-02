@@ -46,6 +46,7 @@ helm repo update supabase
 helm upgrade --install supabase supabase/supabase \
   --namespace "$NAMESPACE" \
   --values "$SCRIPT_DIR/supabase/values-dev.yaml" \
+  --version 0.5.2 \
   --timeout 10m \
   --wait
 
