@@ -128,11 +128,17 @@ async function waitForGameReady(page: Page): Promise<void> {
             const balNode = findNode(scene, 'BalanceLabel');
             const lbl = balNode?.getComponent(cc.Label);
             // 等待餘額標籤顯示非空值（表示 loginOrRegister + fetchWallet 完成）
-            return typeof lbl?.string === 'string' && lbl.string.startsWith('餘額:');
+            if (!(typeof lbl?.string === 'string' && lbl.string.startsWith('餘額:'))) return false;
+            // 等待 LoadingScreen 覆蓋層消失（否則點擊被攔截）
+            const ls = document.getElementById('LoadingScreen');
+            if (ls && ls.style.display !== 'none' && !ls.classList.contains('fade-out')) return false;
+            return true;
             /* eslint-enable @typescript-eslint/no-explicit-any */
         },
         { timeout: 45_000, polling: 500 },
     );
+    // 額外緩衝：LoadingScreen CSS 淡出動畫（0.5s）+ Cocos 引擎暖身
+    await page.waitForTimeout(1000);
 }
 
 /**

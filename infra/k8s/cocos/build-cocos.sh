@@ -115,9 +115,11 @@ kubectl exec -i -n "$NAMESPACE" cocos-context-loader -- \
   sh -c 'cat > /workspace/nginx.conf' < "$SCRIPT_DIR/nginx.conf"
 
 # Copy Cocos web-desktop build output via tar stream
+# mkdir -p here guards against a race where the pod's start command
+# hasn't finished creating /workspace/web-desktop before we exec into it.
 (cd "$PROJECT_ROOT/build/web-desktop" && tar -cf - .) \
   | kubectl exec -i -n "$NAMESPACE" cocos-context-loader -- \
-      sh -c 'cd /workspace/web-desktop && tar -xf -'
+      sh -c 'mkdir -p /workspace/web-desktop && cd /workspace/web-desktop && tar -xf -'
 
 kubectl exec -n "$NAMESPACE" cocos-context-loader -- \
   test -f /workspace/web-desktop/index.html || { echo "ERROR: index.html not found in PVC"; exit 1; }
