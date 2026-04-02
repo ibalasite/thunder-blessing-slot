@@ -11,7 +11,8 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 const currentLevel: LogLevel =
-    (typeof process !== 'undefined' && (process.env['LOG_LEVEL'] as LogLevel)) || 'warn';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (((globalThis as any).process?.env?.['LOG_LEVEL']) as LogLevel) || 'warn';
 
 function shouldLog(level: LogLevel): boolean {
     return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[currentLevel];
