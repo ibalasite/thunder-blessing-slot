@@ -410,6 +410,9 @@ npx jest tests/e2e/ --no-coverage
 
 > 前提：`npx playwright install chromium` 已執行過（見二、Clone & 安裝依賴）
 > K8s 未啟動時 `beforeAll` 自動偵測，所有 RPA 測試會 skip（不會 fail）。
+>
+> ⚠️ **注意：不可加 `--timeout` 或 `--retries` 覆蓋旗標**，playwright.config.ts 已設好 `timeout: 60000, retries: 1`，
+> 手動縮短 timeout 會造成大量誤判 fail。
 
 ```bash
 # ── Mac Terminal 或 Windows PowerShell（指令相同）────────
@@ -537,6 +540,25 @@ taskkill /PID <PID> /F
 # 重新執行一鍵啟動
 ./infra/k8s/start-dev.sh
 ```
+
+### `git pull` 後 Live E2E / RPA 測試失敗
+
+`git pull` 只更新本機程式碼，K8s 裡的 image **不會自動更新**。
+若 pull 後 `apps/web/src/` 或 `build/web-desktop/` 有變更，需重新 build 並部署：
+
+```bash
+# Mac Terminal 或 Windows Git Bash
+
+# 更新 Fastify API image
+./infra/k8s/build.sh
+kubectl rollout status deployment/thunder-web -n thunder-dev
+
+# 若 Cocos 前端也有變更
+./infra/k8s/cocos/build-cocos.sh
+kubectl rollout status deployment/thunder-cocos -n thunder-dev
+```
+
+> 跳過此步驟會導致：balance 型別錯誤、replay 404、HUD 按鈕標籤顯示舊內容等。
 
 ---
 
