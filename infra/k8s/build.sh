@@ -86,18 +86,19 @@ bootstrap_registry() {
     -o jsonpath='{.spec.clusterIP}')
   log "Registry ClusterIP: $REGISTRY_IP"
 
-  # Check if containerd config already covers localhost:30500
-  # MSYS_NO_PATHCONV=1 prevents Git Bash on Windows from converting Linux paths like
-  # /etc/rancher/k3s/... into C:/Program Files/Git/etc/rancher/... before passing to wsl.exe
-  if MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null; then
+  # Check if containerd config already covers localhost:30500.
+  # All RDSHELL invocations below use 'sh -c <quoted-cmd>' so that Linux paths
+  # like /etc/rancher/k3s/... are embedded inside a shell-string argument, NOT
+  # passed as standalone arguments.  Git Bash only converts standalone arguments
+  # that start with '/' — paths inside a quoted sh -c string are left untouched.
+  if "${RDSHELL[@]}" sh -c \
+       'grep -q "localhost:30500" /etc/rancher/k3s/registries.yaml 2>/dev/null'; then
     log "Containerd registry config already up to date."
     return 0
   fi
 
   log "Configuring k3s containerd to trust localhost:30500 (NodePort registry, one-time)..."
 
-  # Kubelet pulls via NodePort (localhost:30500) — node-accessible, no DNS needed
-  # Use printf+pipe instead of heredoc so the command works on Windows (Git Bash/MSYS2)
   printf '%s\n' \
     'mirrors:' \
     '  "localhost:30500":' \
@@ -107,10 +108,10 @@ bootstrap_registry() {
     '  "localhost:30500":' \
     '    tls:' \
     '      insecureSkipVerify: true' \
-    | MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo tee /etc/rancher/k3s/registries.yaml > /dev/null
+    | "${RDSHELL[@]}" sh -c 'sudo tee /etc/rancher/k3s/registries.yaml > /dev/null'
 
-  MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo mkdir -p \
-    /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500
+  "${RDSHELL[@]}" sh -c \
+    'sudo mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500'
 
   printf '%s\n' \
     'server = "http://localhost:30500"' \
@@ -118,12 +119,11 @@ bootstrap_registry() {
     '[host."http://localhost:30500"]' \
     '  capabilities = ["pull", "resolve"]' \
     '  skip_verify = true' \
-    | MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo tee \
-        /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500/hosts.toml \
-        > /dev/null
+    | "${RDSHELL[@]}" sh -c \
+        'sudo tee /var/lib/rancher/k3s/agent/etc/containerd/certs.d/localhost:30500/hosts.toml > /dev/null'
 
-  # Reload containerd via SIGHUP — pkill is POSIX; pidof is Linux-only
-  MSYS_NO_PATHCONV=1 "${RDSHELL[@]}" sudo sh -c \
+  # Reload containerd via SIGHUP
+  "${RDSHELL[@]}" sh -c \
     'pkill -HUP k3s-agent 2>/dev/null || pkill -HUP k3s 2>/dev/null || true'
   sleep 3
   log "Containerd registry config applied."
