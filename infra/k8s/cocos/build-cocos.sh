@@ -105,13 +105,19 @@ kubectl run cocos-context-loader \
 
 kubectl wait pod/cocos-context-loader -n "$NAMESPACE" --for=condition=Ready --timeout=60s
 
-# Copy nginx Dockerfile and config
-kubectl cp "$(_kcp_path "$SCRIPT_DIR/Dockerfile")"  "${NAMESPACE}/cocos-context-loader:/workspace/Dockerfile"
-kubectl cp "$(_kcp_path "$SCRIPT_DIR/nginx.conf")"  "${NAMESPACE}/cocos-context-loader:/workspace/nginx.conf"
+# Use stdin redirection / tar instead of kubectl cp:
+# Shell (Git Bash on Windows, bash on Mac) handles the local path for I/O
+# redirections natively — kubectl never sees a local path argument, so
+# Windows drive-letter / path-conversion issues are completely avoided.
+kubectl exec -i -n "$NAMESPACE" cocos-context-loader -- \
+  sh -c 'cat > /workspace/Dockerfile' < "$SCRIPT_DIR/Dockerfile"
+kubectl exec -i -n "$NAMESPACE" cocos-context-loader -- \
+  sh -c 'cat > /workspace/nginx.conf' < "$SCRIPT_DIR/nginx.conf"
 
-# Copy Cocos web-desktop build output
-kubectl cp "$(_kcp_path "$PROJECT_ROOT/build/web-desktop/.")" \
-  "${NAMESPACE}/cocos-context-loader:/workspace/web-desktop/" --retries=3
+# Copy Cocos web-desktop build output via tar stream
+(cd "$PROJECT_ROOT/build/web-desktop" && tar -cf - .) \
+  | kubectl exec -i -n "$NAMESPACE" cocos-context-loader -- \
+      sh -c 'cd /workspace/web-desktop && tar -xf -'
 
 kubectl exec -n "$NAMESPACE" cocos-context-loader -- \
   test -f /workspace/web-desktop/index.html || { echo "ERROR: index.html not found in PVC"; exit 1; }

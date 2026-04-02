@@ -167,9 +167,12 @@ upload_context() {
     --for=condition=Ready --timeout=60s
 
   log "Copying source code to PVC (this may take 30-60s)..."
-  kubectl cp "$(_kcp_path "$PROJECT_ROOT/.")" \
-    "${NAMESPACE}/context-loader:/workspace/" \
-    --retries=3
+  # tar+exec instead of kubectl cp: shell handles the local path (no kubectl path
+  # conversion), kubectl exec -i reads from stdin — works identically on Mac and
+  # Windows Git Bash regardless of drive-letter or path format issues.
+  (cd "$PROJECT_ROOT" && tar --exclude='./.git' --exclude='./temp' -cf - .) \
+    | kubectl exec -i -n "$NAMESPACE" context-loader -- \
+        sh -c 'cd /workspace && tar -xf -'
 
   # Verify key files arrived
   kubectl exec -n "$NAMESPACE" context-loader -- \

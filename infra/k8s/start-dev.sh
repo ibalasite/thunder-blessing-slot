@@ -50,7 +50,16 @@ helm upgrade --install supabase supabase/supabase \
   --wait
 
 log "Waiting for Supabase DB to be ready..."
-kubectl rollout status statefulset/supabase-supabase-db -n "$NAMESPACE" --timeout=5m
+# Discover StatefulSet name dynamically — chart versions differ in naming convention
+# (e.g. older: "supabase-supabase-db", newer charts may use a different prefix)
+DB_STS=$(kubectl get statefulset -n "$NAMESPACE" \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -n "$DB_STS" ]; then
+  kubectl rollout status "statefulset/$DB_STS" -n "$NAMESPACE" --timeout=5m || \
+    warn "DB rollout timed out — pods may still be initializing, continuing anyway"
+else
+  warn "No StatefulSet found in $NAMESPACE yet — skipping DB readiness check"
+fi
 
 # ── Step 3: DB Migrations ─────────────────────────────────────────────────────
 log "[3/5] Running DB migrations..."
