@@ -1,38 +1,38 @@
 {
   "mainGame": {
-    "rtp": "0.00%",
-    "rtpVal": 0,
-    "hitRate": "0.00%",
-    "maxWin": "0.00× bet",
-    "avgWin": "0.0000× bet (before scale/cost)",
-    "spins": 200000,
+    "rtp": "96.61%",
+    "rtpVal": 96.61383445528588,
+    "hitRate": "33.04%",
+    "maxWin": "30000.00× bet",
+    "avgWin": "0.9661× bet (before scale/cost)",
+    "spins": 10000000,
     "label": "Main Game"
   },
   "extraBet": {
-    "rtp": "NaN%",
-    "rtpVal": null,
-    "hitRate": "0.00%",
-    "maxWin": "0.00× bet",
-    "avgWin": "NaN× bet (before scale/cost)",
-    "spins": 200000,
+    "rtp": "98.70%",
+    "rtpVal": 98.700306040577,
+    "hitRate": "32.21%",
+    "maxWin": "30000.00× bet",
+    "avgWin": "2.9610× bet (before scale/cost)",
+    "spins": 10000000,
     "label": "Extra Bet"
   },
   "buyFG": {
-    "rtp": "NaN%",
-    "rtpVal": null,
-    "hitRate": "0.00%",
-    "maxWin": "0.00× bet",
-    "avgWin": "NaN× bet (before scale/cost)",
-    "spins": 200000,
+    "rtp": "97.67%",
+    "rtpVal": 97.67393844357156,
+    "hitRate": "100.00%",
+    "maxWin": "30000.00× bet",
+    "avgWin": "97.6739× bet (before scale/cost)",
+    "spins": 10000000,
     "label": "Buy FG"
   },
   "ebBuyFG": {
-    "rtp": "NaN%",
-    "rtpVal": null,
-    "hitRate": "0.00%",
-    "maxWin": "0.00× bet",
-    "avgWin": "NaN× bet (before scale/cost)",
-    "spins": 200000,
+    "rtp": "97.83%",
+    "rtpVal": 97.82553459072486,
+    "hitRate": "100.00%",
+    "maxWin": "30000.00× bet",
+    "avgWin": "97.8255× bet (before scale/cost)",
+    "spins": 10000000,
     "label": "EB + BuyFG"
   }
 }

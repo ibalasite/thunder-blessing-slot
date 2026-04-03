@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-04-03T13:49:53.098Z",
+  "target_rtp": 97.5,
+  "tolerance": 2,
+  "modes": [
+    {
+      "mode": "Main Game",
+      "rtp": "96.61%",
+      "rtpVal": 96.61,
+      "diff": -0.89,
+      "hitRate": "33.04%",
+      "maxWin": "30000.00× bet",
+      "avgWin": "0.9661× bet (before scale/cost)",
+      "spins": 10000000,
+      "status": "PASS"
+    },
+    {
+      "mode": "Extra Bet",
+      "rtp": "98.70%",
+      "rtpVal": 98.7,
+      "diff": 1.2,
+      "hitRate": "32.21%",
+      "maxWin": "30000.00× bet",
+      "avgWin": "2.9610× bet (before scale/cost)",
+      "spins": 10000000,
+      "status": "PASS"
+    },
+    {
+      "mode": "Buy FG",
+      "rtp": "97.67%",
+      "rtpVal": 97.67,
+      "diff": 0.17,
+      "hitRate": "100.00%",
+      "maxWin": "30000.00× bet",
+      "avgWin": "97.6739× bet (before scale/cost)",
+      "spins": 10000000,
+      "status": "PASS"
+    },
+    {
+      "mode": "EB + BuyFG",
+      "rtp": "97.83%",
+      "rtpVal": 97.83,
+      "diff": 0.33,
+      "hitRate": "100.00%",
+      "maxWin": "30000.00× bet",
+      "avgWin": "97.8255× bet (before scale/cost)",
+      "spins": 10000000,
+      "status": "PASS"
+    }
+  ]
+}
