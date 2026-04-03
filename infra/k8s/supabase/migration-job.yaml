@@ -18,16 +18,10 @@ data:
     done
     echo "All migrations completed."
 ---
-# supabase-sql-migrations ConfigMap is created dynamically by start-dev.sh
-# using: kubectl create configmap supabase-sql-migrations --from-file=...
-# This placeholder allows the Job to reference the ConfigMap before it is populated.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: supabase-sql-migrations
-  namespace: thunder-dev
-data: {}
----
+# Note: supabase-sql-migrations ConfigMap is created by start-dev.sh via:
+#   kubectl create configmap supabase-sql-migrations --from-file=... | kubectl apply -f -
+# It is NOT defined here so that kubectl apply -f migration-job.yaml never resets it
+# to empty data:{} and erases the SQL files loaded by the script.
 apiVersion: batch/v1
 kind: Job
 metadata:

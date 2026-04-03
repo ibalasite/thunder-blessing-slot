@@ -61,6 +61,12 @@ else
   warn "No StatefulSet found in $NAMESPACE yet — skipping DB readiness check"
 fi
 
+# Patch Kong service to fixed NodePort 30000 — Helm chart template does not support
+# nodePort in values.yaml so K8s assigns a random port without this patch.
+kubectl patch svc supabase-supabase-kong -n "$NAMESPACE" --type='json' \
+  -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":30000}]' 2>/dev/null || true
+log "Kong NodePort patched → 30000"
+
 # ── Step 3: DB Migrations ─────────────────────────────────────────────────────
 log "[3/5] Running DB migrations..."
 
@@ -75,11 +81,13 @@ done
 if [ -z "$FROM_FILE_ARGS" ]; then
   warn "No SQL migration files found in $MIGRATION_DIR — skipping migration job"
 else
+  # Create the SQL ConfigMap FIRST so the Job pod sees the files immediately on mount.
+  # migration-job.yaml does NOT define supabase-sql-migrations (removed to prevent reset).
   # shellcheck disable=SC2086
   kubectl create configmap supabase-sql-migrations $FROM_FILE_ARGS \
     -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-  # Delete stale job if exists, then apply job YAML
+  # Delete stale job if exists, then apply job YAML (only creates run.sh ConfigMap + Job).
   kubectl delete job supabase-migrate -n "$NAMESPACE" --ignore-not-found --wait=true
   kubectl apply -f "$SCRIPT_DIR/supabase/migration-job.yaml" 2>/dev/null
 

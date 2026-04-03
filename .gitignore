@@ -21,3 +21,4 @@ assets/scripts/services/Remote*.ts.meta
 # Supabase local temp directories
 supabase/.branches/
 supabase/.temp/
+.gstack/
