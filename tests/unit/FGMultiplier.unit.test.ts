@@ -11,9 +11,10 @@
 import { SlotEngine, calcWinAmount } from '../../assets/scripts/SlotEngine';
 import {
     REEL_COUNT, MAX_ROWS, BASE_ROWS,
-    FG_MULTIPLIERS, PAYTABLE, LINES_BASE,
+    FG_MULTIPLIERS, FG_SPIN_BONUS, PAYTABLE, LINES_BASE,
     SymType,
 } from '../../assets/scripts/GameConfig';
+import type { FGSpinOutcome } from '../../assets/scripts/contracts/types';
 
 function mulberry32(seed: number): () => number {
     return () => {
@@ -108,15 +109,20 @@ describe('computeFullSpin FG chain（per-spin toss model）', () => {
         }
     });
 
-    it('每個 FG spin: multipliedWin = rawWin × multiplier', () => {
+    it('每個 FG spin: multipliedWin = rawWin × multiplier × spinBonus，spinBonus 為有效倍率', () => {
         const N = 2000;
         const rng = mulberry32(42);
         const engine = new SlotEngine(rng);
+        const validBonusMults = FG_SPIN_BONUS.map(t => t.mult);
 
         for (let i = 0; i < N; i++) {
             const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
-            for (const fg of o.fgSpins) {
-                expect(fg.multipliedWin).toBeCloseTo(fg.rawWin * fg.multiplier, 2);
+            for (const fg of o.fgSpins as FGSpinOutcome[]) {
+                // spinBonus must be stored and be a valid tier
+                const bonus = fg.spinBonus ?? 1;
+                expect(validBonusMults).toContain(bonus);
+                // multipliedWin = rawWin × multiplier × spinBonus
+                expect(fg.multipliedWin).toBeCloseTo(fg.rawWin * fg.multiplier * bonus, 2);
             }
         }
     });

@@ -937,6 +937,178 @@ test.describe('TotalWin 面板', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// WIN 累積驗證：spin 期間 WinLabel 應單調遞增，不得在同一 spin 內歸零
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('WIN 累積驗證', () => {
+
+    /**
+     * WIN-01: 普通 spin 中，WinLabel 一旦出現非零值，不得在同一 spin 內歸零。
+     * 以最多 10 次 spin 嘗試觸發一個有 win 的回合。
+     */
+    test('WIN-01: 單次 spin WinLabel 不在有 win 後歸零', async ({ page }) => {
+        test.skip(!k8sAvailable, 'K8s not available');
+        await page.goto(gameURL(TEST_EMAIL, TEST_PASSWORD));
+        await waitGameReady(page);
+
+        /** 解析 WinLabel 數值（"WIN: 3.50" → 3.50，"WIN: 0" → 0） */
+        async function readWin(): Promise<number> {
+            const txt = await getLabelText(page, 'WinLabel');
+            if (!txt) return 0;
+            const m = txt.match(/WIN:\s*([\d.]+)/i);
+            return m ? parseFloat(m[1]) : 0;
+        }
+
+        let foundAccum = false;
+
+        for (let attempt = 0; attempt < 10 && !foundAccum; attempt++) {
+            const balBefore = parseBal(await getLabelText(page, 'BalanceLabel'));
+            if (balBefore <= 0) break;
+
+            // Click spin
+            await page.mouse.click(BTN.spin.x, BTN.spin.y);
+
+            // Poll WIN label every 80ms while spin is running (max 8s)
+            const winSamples: number[] = [];
+            const deadline = Date.now() + 8000;
+            let lastBal = balBefore;
+            let spinDone = false;
+
+            while (Date.now() < deadline && !spinDone) {
+                winSamples.push(await readWin());
+                const curBal = parseBal(await getLabelText(page, 'BalanceLabel'));
+                if (curBal !== lastBal) spinDone = true;
+                lastBal = curBal;
+                await page.waitForTimeout(80);
+            }
+
+            // Dismiss TotalWinPanel if appeared
+            if (await isPanelActive(page, 'TotalWinPanel')) {
+                await page.mouse.click(BTN.collect.x, BTN.collect.y);
+                await waitPanelClosed(page, 'TotalWinPanel');
+            }
+
+            const peak = Math.max(...winSamples);
+            if (peak <= 0) continue; // no win this spin, try again
+
+            foundAccum = true;
+
+            // Once WIN > 0 appears, it must never drop back to 0 within the same spin
+            let seenNonZero = false;
+            for (const w of winSamples) {
+                if (w > 0) seenNonZero = true;
+                if (seenNonZero && w === 0) {
+                    throw new Error(
+                        `WIN 在同一 spin 內歸零！samples: ${winSamples.slice(0, 30).join(',')}`,
+                    );
+                }
+            }
+        }
+
+        if (!foundAccum) {
+            test.skip(true, 'WIN-01: 10 次 spin 內未出現有 win 的回合（機率性），跳過');
+        }
+    });
+
+    /**
+     * WIN-02: BuyFG 期間，WinLabel 一旦出現非零值，整個 FG 鏈不得歸零。
+     * BuyFG 保證進入 FG（entry toss 100%），因此一定有 FG spins。
+     */
+    test('WIN-02: BuyFG WinLabel 在整個 FG 鏈中不歸零', async ({ page }) => {
+        test.skip(!k8sAvailable, 'K8s not available');
+
+        // 使用獨立帳號，避免 FG session 狀態污染共用帳號
+        const winEmail = `rpa-win-${Date.now()}@test.local`;
+        await page.goto(gameURL(winEmail, TEST_PASSWORD));
+        await waitGameReady(page);
+
+        // 儲值確保有足夠餘額（BuyFG 預設押分 0.25 × 25 lines × 100 = 625）
+        await clickUntilPanelOpen(page, BTN.menu, 'DepositPanel');
+        await page.mouse.click(BTN.deposit500.x, BTN.deposit500.y);
+        await waitPanelClosed(page, 'DepositPanel', 10000);
+        await clickUntilPanelOpen(page, BTN.menu, 'DepositPanel');
+        await page.mouse.click(BTN.deposit500.x, BTN.deposit500.y);
+        await waitPanelClosed(page, 'DepositPanel', 10000);
+
+        /** 解析 WinLabel 數值 */
+        async function readWin(): Promise<number> {
+            const txt = await getLabelText(page, 'WinLabel');
+            if (!txt) return 0;
+            const m = txt.match(/WIN:\s*([\d.]+)/i);
+            return m ? parseFloat(m[1]) : 0;
+        }
+
+        const balBefore = parseBal(await getLabelText(page, 'BalanceLabel'));
+        expect(balBefore).toBeGreaterThan(100);
+
+        // Open BuyFG panel and start
+        await clickUntilPanelOpen(page, BTN.buyFG, 'BuyFGPanel');
+        await page.mouse.click(BTN.buyFGStart.x, BTN.buyFGStart.y);
+
+        // Wait for BuyFGPanel to close (spin started)
+        await waitPanelClosed(page, 'BuyFGPanel', 15000);
+
+        // Poll WIN label throughout the entire BuyFG session (max 45s)
+        const winSamples: number[] = [];
+        const deadline = Date.now() + 45000;
+        let sessionDone = false;
+
+        while (Date.now() < deadline && !sessionDone) {
+            winSamples.push(await readWin());
+
+            // Session ends when TotalWinPanel appears or balance changes
+            if (await isPanelActive(page, 'TotalWinPanel')) {
+                sessionDone = true;
+            } else {
+                const curBal = parseBal(await getLabelText(page, 'BalanceLabel'));
+                // Balance decreases by buyCost then increases by win — watch for final credit
+                if (curBal > balBefore - 500) sessionDone = true; // cost deducted + win credited
+            }
+
+            await page.waitForTimeout(100);
+        }
+
+        // Dismiss TotalWinPanel if present
+        if (await isPanelActive(page, 'TotalWinPanel')) {
+            await page.mouse.click(BTN.collect.x, BTN.collect.y);
+            await waitPanelClosed(page, 'TotalWinPanel', 10000);
+        }
+
+        await page.screenshot({ path: '.playwright-output/win-02-buyfg-complete.png' });
+
+        // Verify: once WIN > 0, never returns to 0 in the same session
+        const peak = Math.max(...winSamples);
+        if (peak <= 0) {
+            // BuyFG almost always produces some win — this is a real failure
+            throw new Error('WIN-02: BuyFG 全程 WIN 為 0，FG Spin 獎金未被記錄');
+        }
+
+        let seenNonZero = false;
+        for (const w of winSamples) {
+            if (w > 0) seenNonZero = true;
+            if (seenNonZero && w === 0) {
+                throw new Error(
+                    `WIN-02: BuyFG 期間 WIN 歸零！samples: ${winSamples.slice(0, 40).join(',')}`,
+                );
+            }
+        }
+
+        // Verify WIN is non-decreasing throughout FG (each FG spin adds to total)
+        let prevWin = 0;
+        for (const w of winSamples) {
+            if (w < prevWin - 0.01) { // allow tiny float rounding
+                throw new Error(
+                    `WIN-02: BuyFG 期間 WIN 下降！${prevWin} → ${w} samples: ${winSamples.join(',')}`,
+                );
+            }
+            if (w > prevWin) prevWin = w;
+        }
+
+        console.log(`WIN-02 PASS: peak=${peak.toFixed(2)}, samples=${winSamples.length}`);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 互斥性驗證：同一時間只有一個面板開啟
 // ═══════════════════════════════════════════════════════════════════════════════
 

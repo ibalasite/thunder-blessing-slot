@@ -496,6 +496,7 @@ export class SlotEngine {
                     spin: this._toSpinResponse(r, mult, fgMarks),
                     rawWin,
                     multipliedWin,
+                    spinBonus,
                     coinToss: { probability: tossProb, heads: tossHeads },
                 });
 

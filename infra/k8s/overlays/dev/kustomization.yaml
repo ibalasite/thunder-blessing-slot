@@ -9,7 +9,7 @@ namespace: thunder-dev
 images:
 - name: thunder-web
   newName: localhost:30500/thunder-web
-  newTag: 6df863c
+  newTag: a73cb22
 
 
   # Expose as NodePort for direct local access

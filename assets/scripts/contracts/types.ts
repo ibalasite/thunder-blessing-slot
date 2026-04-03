@@ -53,6 +53,8 @@ export interface FGSpinOutcome {
     spin:            SpinResponse;
     rawWin:          number;
     multipliedWin:   number;
+    /** FG Spin Bonus 倍率（1/5/20/100，由 FG_SPIN_BONUS 抽取）。缺省視為 1。 */
+    spinBonus?:      number;
     /** 此轉結束後的 coin toss（決定是否升級繼續） */
     coinToss:        CoinTossOutcome;
 }

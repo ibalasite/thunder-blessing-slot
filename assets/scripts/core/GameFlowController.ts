@@ -231,7 +231,7 @@ export class GameFlowController {
             this._session.setGrid(spin.grid);
             this._session.setCurrentRows(spin.finalRows);
             await this._reels.spinWithGrid(spin.grid);
-            await this._replayCascade(spin, 1, scale, balanceAfterDebit);
+            await this._replayCascade(spin, 1, scale, 1, balanceAfterDebit);
 
             if (spin.tbStep) {
                 await this._replayTB(spin.tbStep.gridAfter);
@@ -299,7 +299,7 @@ export class GameFlowController {
                 this._session.setGrid(fg.spin.grid);
                 this._session.setCurrentRows(fg.spin.finalRows);
                 await this._reels.spinWithGrid(fg.spin.grid, true);
-                await this._replayCascade(fg.spin, mult, scale, balanceAfterDebit);
+                await this._replayCascade(fg.spin, mult, scale, fg.spinBonus ?? 1, balanceAfterDebit);
 
                 if (fg.spin.tbStep) {
                     await this._replayTB(fg.spin.tbStep.gridAfter);
@@ -367,6 +367,7 @@ export class GameFlowController {
      */
     private async _replayCascade(
         spin: SpinResponse, fgMultiplier: number, modeScale: number,
+        spinBonus: number = 1,
         balanceAfterDebit?: number,
     ): Promise<void> {
         const inFG = fgMultiplier > 1;
@@ -382,10 +383,10 @@ export class GameFlowController {
                 newSyms.set(`${cell.reel},${cell.row}`, spin.grid[cell.reel][cell.row]);
             }
 
-            // ② 計算本步獎金
+            // ② 計算本步獎金（含 FG Spin Bonus 倍率）
             const rawWin = step.wins.reduce(
                 (s, w) => s + calcWinAmount(w as WinLine, this._baseTotalBet), 0);
-            const stepWin = Math.round(rawWin * fgMultiplier * modeScale * 100 + Number.EPSILON) / 100;
+            const stepWin = Math.round(rawWin * fgMultiplier * spinBonus * modeScale * 100 + Number.EPSILON) / 100;
 
             this._session.addRoundWin(stepWin);
 

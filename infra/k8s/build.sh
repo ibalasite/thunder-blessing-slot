@@ -170,7 +170,7 @@ upload_context() {
   # tar+exec instead of kubectl cp: shell handles the local path (no kubectl path
   # conversion), kubectl exec -i reads from stdin — works identically on Mac and
   # Windows Git Bash regardless of drive-letter or path format issues.
-  (cd "$PROJECT_ROOT" && tar --exclude='./.git' --exclude='./temp' -cf - .) \
+  (cd "$PROJECT_ROOT" && tar --exclude='./.git' --exclude='./temp' --exclude='./node_modules' --exclude='./.playwright-output' --exclude='./.playwright-report' -cf - .) \
     | kubectl exec -i -n "$NAMESPACE" context-loader -- \
         sh -c 'cd /workspace && tar -xf -'
 

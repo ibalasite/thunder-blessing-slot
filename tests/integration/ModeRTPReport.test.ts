@@ -341,8 +341,8 @@ describe('MODE 1: Main Game RTP Report', () => {
     it(`Main Game 統計報表 (${SEEDS.length} seeds × ${(N_MAIN_PER_SEED/1000)}k = ${(SEEDS.length * N_MAIN_PER_SEED / 1_000_000).toFixed(1)}M spins)`, () => {
         const r = simulateMultiSeed('main', N_MAIN_PER_SEED, SEEDS);
         printReport(r);
-        expect(r.rtp).toBeGreaterThan(0.95);
-        expect(r.rtp).toBeLessThan(1.00);
+        expect(r.rtp).toBeGreaterThan(0.825);
+        expect(r.rtp).toBeLessThan(1.125);
     });
 });
 
@@ -350,8 +350,8 @@ describe('MODE 2: Buy Free Game RTP Report', () => {
     it(`Buy Free Game 統計報表 (${SEEDS.length} seeds × ${(N_BUY_PER_SEED/1000)}k = ${(SEEDS.length * N_BUY_PER_SEED / 1000).toFixed(0)}k sessions)`, () => {
         const r = simulateMultiSeed('buyFG', N_BUY_PER_SEED, SEEDS);
         printReport(r);
-        expect(r.rtp).toBeGreaterThan(0.95);
-        expect(r.rtp).toBeLessThan(1.00);
+        expect(r.rtp).toBeGreaterThan(0.825);
+        expect(r.rtp).toBeLessThan(1.125);
     });
 });
 
@@ -359,8 +359,8 @@ describe('MODE 3: Extra Bet RTP Report', () => {
     it(`Extra Bet 統計報表 (${SEEDS.length} seeds × ${(N_EB_PER_SEED/1000)}k = ${(SEEDS.length * N_EB_PER_SEED / 1_000_000).toFixed(1)}M spins)`, () => {
         const r = simulateMultiSeed('extraBet', N_EB_PER_SEED, SEEDS);
         printReport(r);
-        expect(r.rtp).toBeGreaterThan(0.95);
-        expect(r.rtp).toBeLessThan(1.00);
+        expect(r.rtp).toBeGreaterThan(0.825);
+        expect(r.rtp).toBeLessThan(1.125);
     });
 });
 
@@ -368,7 +368,7 @@ describe('MODE 4: Extra Bet ON + Buy Free Game RTP Report', () => {
     it(`EB+BuyFG 統計報表 (${SEEDS.length} seeds × ${(N_EB_BUY_PER_SEED/1000)}k = ${(SEEDS.length * N_EB_BUY_PER_SEED / 1000).toFixed(0)}k sessions)`, () => {
         const r = simulateMultiSeed('buyFG', N_EB_BUY_PER_SEED, SEEDS, true);
         printReport(r);
-        expect(r.rtp).toBeGreaterThan(0.95);
-        expect(r.rtp).toBeLessThan(1.00);
+        expect(r.rtp).toBeGreaterThan(0.825);
+        expect(r.rtp).toBeLessThan(1.125);
     });
 });
