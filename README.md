@@ -350,12 +350,13 @@ http://localhost:30080?apiUrl=http://localhost:3001
 | 測試類型 | 指令 | 需要 K8s |
 |---------|------|---------|
 | 遊戲引擎 unit | `pnpm test:unit` | 否 |
-| 遊戲引擎全部 | `pnpm test` | 否 |
-| API unit | `cd apps/web && pnpm test` | 否 |
+| 遊戲引擎 integration | `pnpm test:integration` | 否（約 16 分鐘）|
+| 遊戲引擎 security | `npx jest --testPathPatterns=tests/security --maxWorkers=1 --forceExit` | 否 |
+| API unit + e2e | `pnpm web:test` | 否 |
 | API integration | `cd apps/web && INTEGRATION=1 pnpm test:int` | 是（Supabase）|
 | API E2E live | `cd apps/web && E2E_LIVE=1 pnpm test:e2e:live` | 是（完整 stack）|
-| K8s E2E | `npx jest tests/e2e/ --no-coverage` | 是（完整 stack）|
-| RPA 瀏覽器 | `npx playwright test tests/rpa/` | 是（完整 stack）|
+| K8s E2E | `pnpm test:e2e` | 是（完整 stack）|
+| RPA 瀏覽器 | `pnpm test:rpa` | 是（完整 stack）|
 
 ---
 
@@ -363,26 +364,28 @@ http://localhost:30080?apiUrl=http://localhost:3001
 
 ```bash
 # ── Mac Terminal ──────────────────────────────────────────
-# 遊戲引擎測試（根目錄）
-pnpm test:unit               # unit 測試
-pnpm test                    # 全部（unit + integration + e2e）
-pnpm test:coverage           # 含覆蓋率報告
+# 遊戲引擎 unit 測試（快，開發時用）
+pnpm test:unit
 
-# Fastify API unit 測試
-cd apps/web && pnpm test
-cd apps/web && pnpm test:coverage
+# 遊戲引擎 integration 測試（300k spin 模擬，約 16 分鐘）
+pnpm test:integration --forceExit
+
+# 遊戲引擎 security 測試（CSPRNG，需 --maxWorkers=1 防 CPU 競爭）
+npx jest --testPathPatterns=tests/security --maxWorkers=1 --forceExit
+
+# 覆蓋率報告
+pnpm test:coverage
+
+# Fastify API unit + E2E 測試（e2e 在 K8s 未啟動時自動 skip）
+pnpm web:test
 ```
 
 ```powershell
 # ── Windows PowerShell ───────────────────────────────────
-# 遊戲引擎測試（根目錄）
 pnpm test:unit
-pnpm test
-pnpm test:coverage
-
-# Fastify API unit 測試
-cd apps\web; pnpm test
-cd apps\web; pnpm test:coverage
+pnpm test:integration --forceExit
+npx jest --testPathPatterns=tests/security --maxWorkers=1 --forceExit
+pnpm web:test
 ```
 
 ---
@@ -391,32 +394,26 @@ cd apps\web; pnpm test:coverage
 
 ```bash
 # ── Mac Terminal ──────────────────────────────────────────
-cd apps/web
+# K8s E2E（根目錄，111 tests）
+pnpm test:e2e
 
-# API integration（需要 K8s Supabase）
-INTEGRATION=1 pnpm test:int
+# API integration（需要 K8s Supabase，14 tests）
+cd apps/web && INTEGRATION=1 pnpm test:int
 
 # API live E2E（需要完整 K8s stack）
-E2E_LIVE=1 pnpm test:e2e:live
-
-# K8s E2E（根目錄）
-cd ..
-npx jest tests/e2e/ --no-coverage
+cd apps/web && E2E_LIVE=1 pnpm test:e2e:live
 ```
 
 ```powershell
 # ── Windows PowerShell ───────────────────────────────────
-cd apps\web
+# K8s E2E
+pnpm test:e2e
 
-# API integration（需要 K8s Supabase）
-$env:INTEGRATION=1; pnpm test:int
+# API integration
+cd apps\web; $env:INTEGRATION=1; pnpm test:int
 
-# API live E2E（需要完整 K8s stack）
+# API live E2E
 $env:E2E_LIVE=1; pnpm test:e2e:live
-
-# K8s E2E（根目錄）
-cd ..
-npx jest tests/e2e/ --no-coverage
 ```
 
 ---
@@ -428,12 +425,14 @@ npx jest tests/e2e/ --no-coverage
 >
 > ⚠️ **注意：不可加 `--timeout` 或 `--retries` 覆蓋旗標**，playwright.config.ts 已設好 `timeout: 60000, retries: 1`，
 > 手動縮短 timeout 會造成大量誤判 fail。
+>
+> 預期結果：31 passed，8 flaky（retry 後全過），1 skipped（TWP-01 隨機性測試）
 
 ```bash
 # ── Mac Terminal 或 Windows PowerShell（指令相同）────────
 
-# 全部 RPA 測試
-npx playwright test tests/rpa/
+# 全部 RPA 測試（40 tests）
+pnpm test:rpa
 
 # 只跑按鈕互動測試
 npx playwright test tests/rpa/AllButtons.rpa.spec.ts
@@ -442,7 +441,7 @@ npx playwright test tests/rpa/AllButtons.rpa.spec.ts
 npx playwright test tests/rpa/Deposit.rpa.spec.ts
 
 # 互動式 UI 模式（可逐步觀察每個步驟）
-npx playwright test --ui
+pnpm test:rpa:ui
 ```
 
 ---
@@ -624,4 +623,4 @@ kubectl rollout status deployment/thunder-cocos -n thunder-dev
 ---
 
 *RTP 目標：97.5% ± 0.5%（4 種模式均已驗證）*
-*測試：888 tests（遊戲引擎）+ 269 tests（API unit，100% coverage）+ K8s E2E + RPA Visual E2E（14 steps）*
+*測試：828 tests（遊戲引擎：719 unit + 83 integration + 26 security）+ 293 tests（API：260 unit/e2e + 33 skipped）+ 111 K8s E2E + 40 RPA Playwright（31 passed + 8 flaky + 1 skipped）*
