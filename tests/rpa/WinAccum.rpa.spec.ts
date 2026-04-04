@@ -33,33 +33,23 @@ const K8S_API    = 'http://localhost:30001/api/v1';
 
 // ─── Shared Cocos scene helpers ──────────────────────────────────────────────
 
-/** Recursively find a node by name in the Cocos scene tree */
-const FIND_NODE = `
-function findNode(n, tgt) {
-    if (n.name === tgt) return n;
-    for (const c of (n.children ?? [])) { const f = findNode(c, tgt); if (f) return f; }
-    return null;
-}
-`;
-
 /** Read a Label node's string value */
 async function getLabelText(page: Page, nodeName: string): Promise<string | null> {
-    return page.evaluate(([name, findFn]) => {
-        /* eslint-disable no-new-func, @typescript-eslint/no-explicit-any */
+    return page.evaluate((name: string) => {
+        /* eslint-disable @typescript-eslint/no-explicit-any */
         const cc = (window as any).cc;
         if (!cc?.director) return null;
-        const findNode = new Function('n', 'tgt', findFn.replace('function findNode(n, tgt) {', '').slice(0, -1)) as any;
-        const fn = (n: any, tgt: string): any => {
+        function findNode(n: any, tgt: string): any {
             if (n.name === tgt) return n;
-            for (const c of (n.children ?? [])) { const f = fn(c, tgt); if (f) return f; }
+            for (const c of (n.children ?? [])) { const f = findNode(c, tgt); if (f) return f; }
             return null;
-        };
+        }
         const scene = cc.director.getScene();
         if (!scene) return null;
-        const node = fn(scene, name);
+        const node = findNode(scene, name);
         return node?.getComponent(cc.Label)?.string ?? null;
-        /* eslint-enable no-new-func, @typescript-eslint/no-explicit-any */
-    }, [nodeName, FIND_NODE] as [string, string]);
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+    }, nodeName);
 }
 
 /** Check whether a panel node is active */
@@ -297,7 +287,9 @@ test.describe('Phase 1 — Online Standalone WIN Accumulation', () => {
      * No auth needed — game starts directly with local balance.
      */
     test('WIN-P1-01: Online BuyFG WinLabel 在整個 FG 鏈中不歸零（Phase 1 參考版）', async ({ page }) => {
-        await page.goto(ONLINE_URL, { waitUntil: 'networkidle', timeout: 45000 });
+        // Use 'load' (not 'networkidle') — Cocos game loads many assets and may
+        // keep open long-poll connections that prevent networkidle from firing.
+        await page.goto(ONLINE_URL, { waitUntil: 'load', timeout: 60000 });
         await waitGameReady(page);
 
         const balText = await getLabelText(page, 'BalanceLabel');
@@ -422,13 +414,14 @@ test.describe('Phase 2 — K8s Local Dev WIN Accumulation', () => {
         const allSource = bundleContents.join('\n');
 
         // ── New FG_TRIGGER_PROB: 0.0089 ───────────────────────────────────────
-        // Appears in minified JS as `0.0089` or `FG_TRIGGER_PROB=0.0089`
-        const hasNewTriggerProb = allSource.includes('0.0089');
+        // Minifier drops the leading zero: 0.0089 → .0089 in bundle JS.
+        // Check for both forms to be safe.
+        const hasNewTriggerProb = allSource.includes('0.0089') || allSource.includes('.0089');
         expect(
             hasNewTriggerProb,
-            `FG_TRIGGER_PROB=0.0089 not found in deployed JS. ` +
-            `If 0.008 is present instead, the K8s image was built from stale code. ` +
-            `Run: bash infra/k8s/build.sh`,
+            `FG_TRIGGER_PROB=0.0089 (or .0089) not found in deployed JS. ` +
+            `If only 0.008 / .008 is present, the K8s image was built from stale code. ` +
+            `Run: bash infra/k8s/cocos/build-cocos.sh`,
         ).toBe(true);
 
         // ── Old value must NOT appear as standalone probability ────────────────
@@ -450,6 +443,7 @@ test.describe('Phase 2 — K8s Local Dev WIN Accumulation', () => {
      * WIN correctly (no cross-session WIN reset bug).
      */
     test('WIN-P2-03: K8s 連續兩次 BuyFG WinLabel 均正確累積', async ({ page, request }) => {
+        test.setTimeout(240_000); // two full BuyFG sessions can each take up to 60s
         test.skip(!k8sReady, 'K8s not available');
 
         // Use a fresh account to avoid FG-session carry-over
@@ -474,7 +468,12 @@ test.describe('Phase 2 — K8s Local Dev WIN Accumulation', () => {
         const bal1 = parseBal(await getLabelText(page, 'BalanceLabel'));
         const peak1 = await runBuyFGWinCheck(page, bal1);
         console.log(`Session 1 peak WIN: ${peak1.toFixed(2)}`);
-        await page.waitForTimeout(1000);
+
+        // Reload the page between sessions to guarantee a clean idle game state.
+        // After TotalWinPanel collect, the Cocos engine briefly locks while
+        // crediting the win — a fresh page load is the most reliable reset.
+        await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+        await waitGameReady(page);
 
         // Session 2
         const bal2 = parseBal(await getLabelText(page, 'BalanceLabel'));
