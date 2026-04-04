@@ -458,16 +458,12 @@ export class SlotEngine {
             for (let safety = 0; safety < 200; safety++) {
                 const mult = FG_MULTIPLIERS[multIdx];
 
-                let r: SpinResult;
-                if (isBuyFG) {
-                    r = this._guaranteedWinSpin(totalBet, mult, fgMarks, extraBet);
-                } else {
-                    r = this.simulateSpin({
-                        inFreeGame: true, fgMultiplier: mult,
-                        totalBet, lightningMarks: fgMarks,
-                        extraBet,
-                    });
-                }
+                const r = this.simulateSpin({
+                    inFreeGame: true, fgMultiplier: mult,
+                    buyFG: isBuyFG,
+                    totalBet, lightningMarks: fgMarks,
+                    extraBet,
+                });
 
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
@@ -538,26 +534,6 @@ export class SlotEngine {
         return FG_SPIN_BONUS[FG_SPIN_BONUS.length - 1].mult;
     }
 
-    private _guaranteedWinSpin(
-        totalBet: number, mult: number, marks: Set<string>,
-        extraBet = false,
-    ): SpinResult {
-        for (let attempt = 0; attempt < 50; attempt++) {
-            const r = this.simulateSpin({
-                buyFG: true, fgMultiplier: mult,
-                totalBet, lightningMarks: marks,
-                extraBet,   // apply SC guarantee when extraBetOn+buyFG
-                maxCascade: 1,
-            });
-            if (r.totalRawWin > 0) return r;
-        }
-        return this.simulateSpin({
-            buyFG: true, fgMultiplier: mult,
-            totalBet, lightningMarks: marks,
-            extraBet,
-            maxCascade: 1,
-        });
-    }
 }
 
 /** 建立引擎實例（rng 為必傳參數） */

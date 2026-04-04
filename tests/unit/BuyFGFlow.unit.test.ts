@@ -45,11 +45,12 @@ describe('Buy Free Game — computeFullSpin', () => {
         }
     });
 
-    it('always has exactly 5 FG spins (full multiplier progression)', () => {
+    it('has at most 5 FG spins (full progression or max win cap)', () => {
         for (let seed = 0; seed < TRIALS; seed++) {
             const engine = new SlotEngine(mulberry32(seed));
             const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1 });
-            expect(o.fgSpins.length).toBe(FG_MULTIPLIERS.length);
+            expect(o.fgSpins.length).toBeGreaterThanOrEqual(1);
+            expect(o.fgSpins.length).toBeLessThanOrEqual(FG_MULTIPLIERS.length);
         }
     });
 

@@ -232,7 +232,7 @@ async function runBuyFGWinCheck(page: Page, initialBal: number): Promise<number>
     const peak = Math.max(0, ...winSamples);
 
     // ── Assertion 1: BuyFG must produce a non-zero WIN ────────────────────────
-    // BuyFG guarantees wins (_guaranteedWinSpin retries up to 50×).
+    // BuyFG wins come from SYMBOL_WEIGHTS_BUY_FG (tuned in Excel).
     if (peak <= 0) {
         throw new Error(
             `BuyFG produced no WIN at all. WinLabel samples: [${winSamples.slice(0, 30).join(',')}]`,

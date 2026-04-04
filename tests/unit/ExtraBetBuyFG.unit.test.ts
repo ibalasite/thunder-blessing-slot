@@ -164,11 +164,12 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
             }
         });
 
-        it('always has exactly 5 FG spins (full multiplier progression)', () => {
+        it('has at most 5 FG spins (full progression or max win cap)', () => {
             for (let seed = 0; seed < TRIALS; seed++) {
                 const engine = new SlotEngine(mulberry32(seed));
                 const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1, extraBetOn: true });
-                expect(o.fgSpins.length).toBe(5);
+                expect(o.fgSpins.length).toBeGreaterThanOrEqual(1);
+                expect(o.fgSpins.length).toBeLessThanOrEqual(5);
             }
         });
     });
