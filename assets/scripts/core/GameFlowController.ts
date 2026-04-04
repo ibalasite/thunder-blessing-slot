@@ -316,7 +316,14 @@ export class GameFlowController {
                     await this._replayTB(fg.spin.tbStep.gridAfter);
                 }
 
-                const spinWin = this._session.roundWin - winBefore;
+                let spinWin = this._session.roundWin - winBefore;
+
+                // BuyFG: UI must reflect engine's per-spin minimum (fg.multipliedWin already has floor)
+                if (o.mode === 'buyFG' && spinWin < fg.multipliedWin) {
+                    this._session.addRoundWin(fg.multipliedWin - spinWin);
+                    spinWin = fg.multipliedWin;
+                }
+
                 fgAccumulatedWin += spinWin;
 
                 if (spinWin > 0) {

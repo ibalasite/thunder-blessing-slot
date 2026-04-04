@@ -151,7 +151,8 @@ export const BET_LEVELS: number[] = [];
 // ─── Extra Bet & Buy FG ───────────────────────────────────
 export const EXTRA_BET_MULT  = 3;
 export const BUY_COST_MULT   = 100;
-export const BUY_FG_MIN_WIN_MULT = 20;
+export const BUY_FG_MIN_WIN_MULT      = 20;  // 整場 session 最低總獎
+export const BUY_FG_SPIN_MIN_WIN_MULT = 20;  // 每個 FG spin 最低獎 = 20 × baseBet（非 total bet = 100×BET）
 
 // ─── FG Spin Bonus ────────────────────────────────────────
 export const FG_SPIN_BONUS = [

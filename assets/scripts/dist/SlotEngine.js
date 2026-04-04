@@ -377,6 +377,12 @@ class SlotEngine {
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
                 let multipliedWin = rawWin * mult * spinBonus;
+                // BuyFG: per-spin minimum win = 20 × baseBet
+                // totalBet here IS baseBet (engine always receives baseBet; wagered = baseBet × 100)
+                if (isBuyFG) {
+                    const spinFloor = GameConfig_1.BUY_FG_SPIN_MIN_WIN_MULT * totalBet; // 20 × baseBet
+                    multipliedWin = Math.max(multipliedWin, spinFloor);
+                }
                 if (baseWin + fgWin + multipliedWin >= maxWinTotal) {
                     multipliedWin = Math.max(0, maxWinTotal - baseWin - fgWin);
                     maxWinCapped = true;

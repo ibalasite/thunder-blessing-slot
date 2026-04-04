@@ -12,7 +12,7 @@
  *   或修改 SlotEngine.ts import 路徑為 './GameConfig.generated'
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SYMBOL_DARK = exports.SYMBOL_COLORS = exports.SYMBOL_LABELS = exports.DEFAULT_BALANCE = exports.DEFAULT_BET = exports.MAX_WIN_MULT = exports.FG_SPIN_BONUS = exports.BUY_FG_MIN_WIN_MULT = exports.BUY_COST_MULT = exports.EXTRA_BET_MULT = exports.BET_LEVELS = exports.BET_STEP = exports.BET_MAX = exports.BET_MIN = exports.LINES_MAX = exports.LINES_BASE = exports.SYMBOL_UPGRADE = exports.TB_SECOND_HIT_PROB = exports.FG_TRIGGER_PROB = exports.ENTRY_TOSS_PROB_BUY = exports.ENTRY_TOSS_PROB_MAIN = exports.COIN_TOSS_HEADS_PROB = exports.FG_MULTIPLIERS = exports.PAYLINES_BY_ROWS = exports.PAYLINES_57 = exports.PAYLINES_45 = exports.PAYLINES_33 = exports.PAYLINES_25 = exports.REEL_START_X = exports.REEL_TOP_Y = exports.CANVAS_H = exports.CANVAS_W = exports.REEL_GAP = exports.SYMBOL_GAP = exports.SYMBOL_H = exports.SYMBOL_W = exports.MAX_ROWS = exports.BASE_ROWS = exports.REEL_COUNT = exports.PAYTABLE = exports.PAYTABLE_SCALE = exports.REEL_STRIP = exports.SYMBOL_WEIGHTS_BUY_FG = exports.SYMBOL_WEIGHTS_FG = exports.SYMBOL_WEIGHTS_EB = exports.SYMBOL_WEIGHTS = exports.SYM = void 0;
+exports.SYMBOL_DARK = exports.SYMBOL_COLORS = exports.SYMBOL_LABELS = exports.DEFAULT_BALANCE = exports.DEFAULT_BET = exports.MAX_WIN_MULT = exports.FG_SPIN_BONUS = exports.BUY_FG_SPIN_MIN_WIN_MULT = exports.BUY_FG_MIN_WIN_MULT = exports.BUY_COST_MULT = exports.EXTRA_BET_MULT = exports.BET_LEVELS = exports.BET_STEP = exports.BET_MAX = exports.BET_MIN = exports.LINES_MAX = exports.LINES_BASE = exports.SYMBOL_UPGRADE = exports.TB_SECOND_HIT_PROB = exports.FG_TRIGGER_PROB = exports.ENTRY_TOSS_PROB_BUY = exports.ENTRY_TOSS_PROB_MAIN = exports.COIN_TOSS_HEADS_PROB = exports.FG_MULTIPLIERS = exports.PAYLINES_BY_ROWS = exports.PAYLINES_57 = exports.PAYLINES_45 = exports.PAYLINES_33 = exports.PAYLINES_25 = exports.REEL_START_X = exports.REEL_TOP_Y = exports.CANVAS_H = exports.CANVAS_W = exports.REEL_GAP = exports.SYMBOL_GAP = exports.SYMBOL_H = exports.SYMBOL_W = exports.MAX_ROWS = exports.BASE_ROWS = exports.REEL_COUNT = exports.PAYTABLE = exports.PAYTABLE_SCALE = exports.REEL_STRIP = exports.SYMBOL_WEIGHTS_BUY_FG = exports.SYMBOL_WEIGHTS_FG = exports.SYMBOL_WEIGHTS_EB = exports.SYMBOL_WEIGHTS = exports.SYM = void 0;
 // ─── 符號類型 ─────────────────────────────────────────────
 exports.SYM = {
     WILD: 'W', SCATTER: 'SC',
@@ -141,7 +141,8 @@ exports.BET_LEVELS = (() => {
 // ─── Extra Bet & Buy FG ───────────────────────────────────
 exports.EXTRA_BET_MULT = 3;
 exports.BUY_COST_MULT = 100;
-exports.BUY_FG_MIN_WIN_MULT = 20;
+exports.BUY_FG_MIN_WIN_MULT = 20; // 整場 session 最低總獎
+exports.BUY_FG_SPIN_MIN_WIN_MULT = 20; // 每個 FG spin 最低獎 = 20 × baseBet（非 total bet = 100×BET）
 // ─── FG Spin Bonus ────────────────────────────────────────
 exports.FG_SPIN_BONUS = [
     { mult: 1, weight: 900 },

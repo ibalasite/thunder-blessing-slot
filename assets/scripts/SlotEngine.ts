@@ -39,7 +39,7 @@ import {
     FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
     ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
     BUY_COST_MULT, EXTRA_BET_MULT,
-    BUY_FG_MIN_WIN_MULT, FG_SPIN_BONUS,
+    BUY_FG_MIN_WIN_MULT, BUY_FG_SPIN_MIN_WIN_MULT, FG_SPIN_BONUS,
 } from './GameConfig';
 
 import type {
@@ -468,6 +468,13 @@ export class SlotEngine {
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
                 let multipliedWin = rawWin * mult * spinBonus;
+
+                // BuyFG: per-spin minimum win = 20 × baseBet
+                // totalBet here IS baseBet (engine always receives baseBet; wagered = baseBet × 100)
+                if (isBuyFG) {
+                    const spinFloor = BUY_FG_SPIN_MIN_WIN_MULT * totalBet; // 20 × baseBet
+                    multipliedWin = Math.max(multipliedWin, spinFloor);
+                }
 
                 if (baseWin + fgWin + multipliedWin >= maxWinTotal) {
                     multipliedWin = Math.max(0, maxWinTotal - baseWin - fgWin);
