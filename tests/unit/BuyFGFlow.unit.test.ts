@@ -10,7 +10,7 @@
  */
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
-    BASE_ROWS, MAX_ROWS, BUY_COST_MULT, BUY_FG_PAYOUT_SCALE,
+    BASE_ROWS, MAX_ROWS, BUY_COST_MULT,
     BUY_FG_MIN_WIN_MULT, FG_MULTIPLIERS,
 } from '../../assets/scripts/GameConfig';
 
@@ -77,11 +77,10 @@ describe('Buy Free Game — computeFullSpin', () => {
         expect(o.wagered).toBe(2 * BUY_COST_MULT);
     });
 
-    it('mode = "buyFG" and modePayoutScale = BUY_FG_PAYOUT_SCALE', () => {
+    it('mode = "buyFG" is set correctly', () => {
         const engine = new SlotEngine(mulberry32(42));
         const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1 });
         expect(o.mode).toBe('buyFG');
-        expect(o.modePayoutScale).toBe(BUY_FG_PAYOUT_SCALE);
     });
 
     it('FG spins use multipliers from FG_MULTIPLIERS in non-decreasing order', () => {

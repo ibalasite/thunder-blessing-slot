@@ -12,12 +12,11 @@
  *   1. SC guarantee is applied when extraBetOn=true + mode=buyFG (Phase A)
  *   2. SC guarantee is applied when extraBetOn=true + mode=buyFG (Phase B FG spins)
  *   3. SC guarantee is NOT applied when extraBetOn=false + mode=buyFG
- *   4. modePayoutScale = EB_BUY_FG_PAYOUT_SCALE (dedicated scale for EB+BuyFG mode)
- *   5. extraBetOn is reflected in FullSpinOutcome
+ *   4. extraBetOn is reflected in FullSpinOutcome
  *   6. computeFullSpin with mode='buyFG' + extraBetOn=true passes SC guarantee through
  */
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
-import { SYM, BASE_ROWS, REEL_COUNT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, EB_BUY_FG_PAYOUT_SCALE } from '../../assets/scripts/GameConfig';
+import { SYM, BASE_ROWS, REEL_COUNT } from '../../assets/scripts/GameConfig';
 import type { SymType } from '../../assets/scripts/GameConfig';
 
 function mulberry32(seed: number): () => number {
@@ -88,17 +87,6 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
                 const engine = new SlotEngine(mulberry32(seed));
                 const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1, extraBetOn: true });
                 expect(o.mode).toBe('buyFG');
-            }
-        });
-
-        it('modePayoutScale = EB_BUY_FG_PAYOUT_SCALE (dedicated scale for EB+BuyFG mode)', () => {
-            // EB+BuyFG uses its own calibrated scale (different from both BUY_FG_PAYOUT_SCALE and EB_PAYOUT_SCALE)
-            for (let seed = 0; seed < TRIALS; seed++) {
-                const engine = new SlotEngine(mulberry32(seed));
-                const o = engine.computeFullSpin({ mode: 'buyFG', totalBet: 1, extraBetOn: true });
-                expect(o.modePayoutScale).toBe(EB_BUY_FG_PAYOUT_SCALE);
-                expect(o.modePayoutScale).not.toBe(BUY_FG_PAYOUT_SCALE);
-                expect(o.modePayoutScale).not.toBe(EB_PAYOUT_SCALE);
             }
         });
 
@@ -196,11 +184,6 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
             expect(o.wagered).toBeCloseTo(baseBetWithEB * 100, 2); // 75
         });
 
-        it('extraBet mode has EB_PAYOUT_SCALE (for reference)', () => {
-            const engine = new SlotEngine(mulberry32(42));
-            const o = engine.computeFullSpin({ mode: 'extraBet', totalBet: 0.25 });
-            expect(o.modePayoutScale).toBe(EB_PAYOUT_SCALE);
-        });
     });
 
     describe('extraBetOn=true reflected in base simulateSpin', () => {

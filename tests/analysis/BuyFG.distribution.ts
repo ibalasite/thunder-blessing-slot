@@ -18,7 +18,7 @@
 
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
-    BUY_FG_PAYOUT_SCALE, BUY_COST_MULT, MAX_WIN_MULT,
+    BUY_COST_MULT, MAX_WIN_MULT,
     FG_MULTIPLIERS, FG_ROUND_COUNTS, COIN_TOSS_HEADS_PROB,
 } from '../../assets/scripts/GameConfig';
 

@@ -14,7 +14,6 @@
  *
  * Also verifies that the K8s build uses the new probabilities:
  *   FG_TRIGGER_PROB = 0.0089  (old = 0.008)
- *   BUY_FG_PAYOUT_SCALE = 1.073 (old = 0.995 / 1.065)
  *
  * @jest-environment node
  *
@@ -422,17 +421,6 @@ test.describe('Phase 2 — K8s Local Dev WIN Accumulation', () => {
             `FG_TRIGGER_PROB=0.0089 (or .0089) not found in deployed JS. ` +
             `If only 0.008 / .008 is present, the K8s image was built from stale code. ` +
             `Run: bash infra/k8s/cocos/build-cocos.sh`,
-        ).toBe(true);
-
-        // ── Old value must NOT appear as standalone probability ────────────────
-        // 0.008 could appear in other contexts (e.g. hex colour, delay ms).
-        // We look for it next to adjacent config numbers to be precise.
-        // BUY_FG_PAYOUT_SCALE=1.073 confirms the new config is present.
-        const hasNewPayoutScale = allSource.includes('1.073');
-        expect(
-            hasNewPayoutScale,
-            `BUY_FG_PAYOUT_SCALE=1.073 not found in deployed JS. ` +
-            `K8s image may be built from old GameConfig.ts.`,
         ).toBe(true);
 
         console.log(`WIN-P2-02 PASS: New probabilities confirmed in ${bundleContents.length} JS bundle(s)`);

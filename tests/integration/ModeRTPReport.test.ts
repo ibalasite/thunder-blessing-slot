@@ -17,7 +17,7 @@ import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import type { FullSpinOutcome, GameMode } from '../../assets/scripts/contracts/types';
 import {
     FG_MULTIPLIERS, BUY_COST_MULT, EXTRA_BET_MULT,
-    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, MAX_WIN_MULT,
+    MAX_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
 
 jest.setTimeout(1_200_000);
@@ -143,8 +143,7 @@ function simulateMultiSeed(mode: GameMode, nPerSeed: number, seeds: number[], ex
 
             if (o.fgTriggered) {
                 fgTriggerCount++;
-                const fgWinScaled = o.fgWin * o.modePayoutScale;
-                fgTotalPayout += fgWinScaled;
+                fgTotalPayout += o.fgWin;
                 for (const fg of o.fgSpins) {
                     fgMultSum += fg.multiplier;
                     fgMultCount++;

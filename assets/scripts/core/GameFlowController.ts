@@ -221,7 +221,6 @@ export class GameFlowController {
     private async _playFullOutcome(
         o: FullSpinOutcome, balanceAfterDebit?: number,
     ): Promise<void> {
-        const scale = o.modePayoutScale;
         const fgWillTrigger = o.fgTriggered && o.entryCoinToss?.heads === true;
 
         // ── 1. Play Phase A: base cascade spins ──────────────
@@ -231,7 +230,7 @@ export class GameFlowController {
             this._session.setGrid(spin.grid);
             this._session.setCurrentRows(spin.finalRows);
             await this._reels.spinWithGrid(spin.grid);
-            await this._replayCascade(spin, 1, scale, 1, balanceAfterDebit);
+            await this._replayCascade(spin, 1, 1, balanceAfterDebit);
 
             if (spin.tbStep) {
                 await this._replayTB(spin.tbStep.gridAfter);
@@ -311,7 +310,7 @@ export class GameFlowController {
                 this._session.setGrid(fg.spin.grid);
                 this._session.setCurrentRows(fg.spin.finalRows);
                 await this._reels.spinWithGrid(fg.spin.grid, true);
-                await this._replayCascade(fg.spin, mult, scale, fg.spinBonus ?? 1, balanceAfterDebit);
+                await this._replayCascade(fg.spin, mult, fg.spinBonus ?? 1, balanceAfterDebit);
 
                 if (fg.spin.tbStep) {
                     await this._replayTB(fg.spin.tbStep.gridAfter);
@@ -332,7 +331,7 @@ export class GameFlowController {
                 }
                 this._ui.refresh();
 
-                if (this._session.roundWin >= o.totalBet * MAX_WIN_MULT * scale) {
+                if (this._session.roundWin >= o.totalBet * MAX_WIN_MULT) {
                     this._ui.setStatus('MAX WIN REACHED! 🎉', '#FFD700');
                     await this._wait(1.5);
                     break;
@@ -378,7 +377,7 @@ export class GameFlowController {
      * 實際入帳在 doSpin / onBuyFreeGame 的 completeSpin 統一處理。
      */
     private async _replayCascade(
-        spin: SpinResponse, fgMultiplier: number, modeScale: number,
+        spin: SpinResponse, fgMultiplier: number,
         spinBonus: number = 1,
         balanceAfterDebit?: number,
     ): Promise<void> {
@@ -398,7 +397,7 @@ export class GameFlowController {
             // ② 計算本步獎金（含 FG Spin Bonus 倍率）
             const rawWin = step.wins.reduce(
                 (s, w) => s + calcWinAmount(w as WinLine, this._baseTotalBet), 0);
-            const stepWin = Math.round(rawWin * fgMultiplier * spinBonus * modeScale * 100 + Number.EPSILON) / 100;
+            const stepWin = Math.round(rawWin * fgMultiplier * spinBonus * 100 + Number.EPSILON) / 100;
 
             this._session.addRoundWin(stepWin);
 
@@ -424,7 +423,7 @@ export class GameFlowController {
             // ④ 停頓：讓玩家看清中獎內容再開始下移
             await this._wait(0.3);
 
-            if (this._session.roundWin >= this._baseTotalBet * MAX_WIN_MULT * modeScale) break;
+            if (this._session.roundWin >= this._baseTotalBet * MAX_WIN_MULT) break;
 
             // ⑤ Cascade 動畫：消除中獎格、符號下移填充
             await this._reels.cascade(step.winCells, step.rowsAfter, newSyms);

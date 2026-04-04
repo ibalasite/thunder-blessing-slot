@@ -7,7 +7,7 @@
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
     BUY_COST_MULT, EXTRA_BET_MULT, MAX_WIN_MULT,
-    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, PAYTABLE_SCALE,
+    PAYTABLE_SCALE,
     FG_MULTIPLIERS, FG_ROUND_COUNTS,
     COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY, BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
@@ -165,8 +165,6 @@ console.log(`\n⏳ Running 3 modes × ${SEEDS.length} seeds × ${N.toLocaleStrin
 
 console.log('Config Summary:');
 console.log(`  PAYTABLE_SCALE:         ${PAYTABLE_SCALE}`);
-console.log(`  BUY_FG_PAYOUT_SCALE:    ${BUY_FG_PAYOUT_SCALE}`);
-console.log(`  EB_PAYOUT_SCALE:        ${EB_PAYOUT_SCALE}`);
 console.log(`  BUY_FG_MIN_WIN_MULT:    ${BUY_FG_MIN_WIN_MULT}`);
 console.log(`  COIN_TOSS_HEADS_PROB:     [${COIN_TOSS_HEADS_PROB.join(', ')}]`);
 console.log(`  COIN_TOSS_HEADS_PROB_BUY: [${COIN_TOSS_HEADS_PROB_BUY.join(', ')}]`);

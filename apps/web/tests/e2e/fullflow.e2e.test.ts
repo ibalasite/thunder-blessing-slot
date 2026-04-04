@@ -22,7 +22,6 @@ jest.mock('../../src/shared/engine/slotEngine', () => ({
       extraBetOn: false,
       totalBet: 1,
       wagered: 1,
-      modePayoutScale: 1,
       baseSpins: [],
       baseWin: 5,
       fgTriggered: false,

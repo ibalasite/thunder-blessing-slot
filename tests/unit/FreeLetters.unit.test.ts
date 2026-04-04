@@ -43,7 +43,6 @@ function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome 
         extraBetOn:      false,
         totalBet:        1,
         wagered:         1,
-        modePayoutScale: 1,
         baseSpins:       [makeSpinResponse()],
         baseWin:         0,
         fgTriggered:     false,
@@ -287,7 +286,6 @@ describe('Buy FG controller flow', () => {
         const eng = makeEngine({
             mode:            'buyFG',
             wagered:         100,
-            modePayoutScale: 0.98,
             fgTriggered:     true,
             entryCoinToss:   { probability: 1.0, heads: true },
             baseSpins:       introSpins,
@@ -330,7 +328,6 @@ describe('Buy FG controller flow', () => {
         const eng = makeEngine({
             mode:            'buyFG',
             wagered:         100,
-            modePayoutScale: 0.98,
             fgTriggered:     true,
             entryCoinToss:   { probability: 1.0, heads: true },
             baseSpins:       introSpins,

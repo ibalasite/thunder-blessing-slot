@@ -4,7 +4,7 @@
  */
 import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
-    BUY_FG_PAYOUT_SCALE, BUY_COST_MULT, MAX_WIN_MULT,
+    BUY_COST_MULT, MAX_WIN_MULT,
     BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
 

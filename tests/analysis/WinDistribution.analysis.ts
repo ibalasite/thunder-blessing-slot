@@ -22,7 +22,7 @@ import {
     GameMode, FullSpinOutcome,
 } from '../../assets/scripts/contracts/types';
 import {
-    PAYTABLE_SCALE, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
+    PAYTABLE_SCALE,
     FG_TRIGGER_PROB, BUY_COST_MULT, EXTRA_BET_MULT,
     FG_MULTIPLIERS, FG_ROUND_COUNTS, COIN_TOSS_HEADS_PROB,
     MAX_WIN_MULT,
@@ -245,8 +245,6 @@ function printConfigSummary(): void {
     console.log('  Current Probability Config');
     console.log('═'.repeat(90));
     console.log(`  PAYTABLE_SCALE:       ${PAYTABLE_SCALE}`);
-    console.log(`  BUY_FG_PAYOUT_SCALE:  ${BUY_FG_PAYOUT_SCALE}`);
-    console.log(`  EB_PAYOUT_SCALE:      ${EB_PAYOUT_SCALE}`);
     console.log(`  FG_TRIGGER_PROB:      ${FG_TRIGGER_PROB} (${(FG_TRIGGER_PROB * 100).toFixed(0)}%)`);
     console.log(`  COIN_TOSS_HEADS_PROB: [${COIN_TOSS_HEADS_PROB.join(', ')}]`);
     console.log(`  FG_MULTIPLIERS:       [${FG_MULTIPLIERS.join(', ')}]`);

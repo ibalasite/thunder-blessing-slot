@@ -54,7 +54,6 @@ function findScatters(grid, rows) {
 }
 // ─── SlotEngine ───────────────────────────────────────────────────────────────
 class SlotEngine {
-    rng;
     /**
      * @param rng 隨機數來源（必傳）。
      *   Production: 傳入 createCSPRNG()
@@ -112,7 +111,8 @@ class SlotEngine {
     }
     // ── 掃描連線中獎（使用 PAYLINES_BY_ROWS，自動匹配當前列數）─────────────────
     checkWins(grid, rows) {
-        const lines = GameConfig_1.PAYLINES_BY_ROWS[rows] ?? GameConfig_1.PAYLINES_BY_ROWS[GameConfig_1.BASE_ROWS];
+        var _a;
+        const lines = (_a = GameConfig_1.PAYLINES_BY_ROWS[rows]) !== null && _a !== void 0 ? _a : GameConfig_1.PAYLINES_BY_ROWS[GameConfig_1.BASE_ROWS];
         const results = [];
         for (let li = 0; li < lines.length; li++) {
             const rowPath = lines[li];
@@ -158,7 +158,7 @@ class SlotEngine {
     // ── 雷霆祝福：升階所有閃電標記格（含第二擊機率）────────────────────────────
     applyTB(grid, marks, rows) {
         const newGrid = grid.map(col => [...col]);
-        const upgrade = (sym) => (GameConfig_1.SYMBOL_UPGRADE[sym] ?? sym);
+        const upgrade = (sym) => { var _a; return ((_a = GameConfig_1.SYMBOL_UPGRADE[sym]) !== null && _a !== void 0 ? _a : sym); };
         // 第一擊：所有閃電標記格升階一次
         // First hit: every marked cell is upgraded once via SYMBOL_UPGRADE chain.
         // Example: L1 → P4 (low-tier lightning symbol becomes mid-tier premium)
@@ -201,20 +201,21 @@ class SlotEngine {
     //  drawSymbol() + cascadeLoop() 驅動，會有視覺上的重力落下效果，
     //  但長期 RTP 結果與此模擬相同。
     simulateSpin(opts = {}) {
-        const useFG = opts.inFreeGame ?? false;
-        const useEB = opts.extraBet ?? false;
-        const useBuyFG = opts.buyFG ?? false;
-        const fgMult = opts.fgMultiplier ?? 1;
-        const totalBet = opts.totalBet ?? 1;
-        const maxCascade = opts.maxCascade ?? 20;
-        const marks = opts.lightningMarks ?? new Set();
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        const useFG = (_a = opts.inFreeGame) !== null && _a !== void 0 ? _a : false;
+        const useEB = (_b = opts.extraBet) !== null && _b !== void 0 ? _b : false;
+        const useBuyFG = (_c = opts.buyFG) !== null && _c !== void 0 ? _c : false;
+        const fgMult = (_d = opts.fgMultiplier) !== null && _d !== void 0 ? _d : 1;
+        const totalBet = (_e = opts.totalBet) !== null && _e !== void 0 ? _e : 1;
+        const maxCascade = (_f = opts.maxCascade) !== null && _f !== void 0 ? _f : 20;
+        const marks = (_g = opts.lightningMarks) !== null && _g !== void 0 ? _g : new Set();
         let grid = this.generateGrid(useFG, useEB, useBuyFG);
         if (useEB)
             grid = this.applyExtraBetSC(grid);
         const initialGrid = grid.map(c => [...c]);
         const cascadeSteps = [];
         let totalRawWin = 0;
-        let rows = opts.startRows ?? GameConfig_1.BASE_ROWS;
+        let rows = (_h = opts.startRows) !== null && _h !== void 0 ? _h : GameConfig_1.BASE_ROWS;
         let fgTriggered = false;
         let maxWinCapped = false;
         let tbStep;
@@ -311,14 +312,11 @@ class SlotEngine {
      * Phase A 分數一定算入 TOTAL WIN，即使 Entry Toss 失敗。
      */
     computeFullSpin(opts) {
+        var _a;
         const { mode, totalBet } = opts;
         const isBuyFG = mode === 'buyFG';
         // extraBet flag: true for 'extraBet' mode OR when extraBetOn is explicitly set
         const extraBet = mode === 'extraBet' || opts.extraBetOn === true;
-        const modePayoutScale = (isBuyFG && extraBet) ? GameConfig_1.EB_BUY_FG_PAYOUT_SCALE
-            : isBuyFG ? GameConfig_1.BUY_FG_PAYOUT_SCALE
-                : extraBet ? GameConfig_1.EB_PAYOUT_SCALE
-                    : 1;
         const wagered = isBuyFG ? totalBet * GameConfig_1.BUY_COST_MULT
             : extraBet ? totalBet * GameConfig_1.EXTRA_BET_MULT
                 : totalBet;
@@ -384,15 +382,15 @@ class SlotEngine {
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
                 let multipliedWin = rawWin * mult * spinBonus;
-                if (baseWin * modePayoutScale + fgWin * modePayoutScale + multipliedWin * modePayoutScale >= maxWinTotal) {
-                    multipliedWin = Math.max(0, (maxWinTotal / modePayoutScale) - baseWin - fgWin);
+                if (baseWin + fgWin + multipliedWin >= maxWinTotal) {
+                    multipliedWin = Math.max(0, maxWinTotal - baseWin - fgWin);
                     maxWinCapped = true;
                 }
                 fgWin += multipliedWin;
                 // Coin toss after this spin
                 // Buy FG: toss is always heads (guaranteed full progression)
                 const tossProb = isBuyFG ? 1.0
-                    : (GameConfig_1.COIN_TOSS_HEADS_PROB[multIdx] ?? GameConfig_1.COIN_TOSS_HEADS_PROB[GameConfig_1.COIN_TOSS_HEADS_PROB.length - 1]);
+                    : ((_a = GameConfig_1.COIN_TOSS_HEADS_PROB[multIdx]) !== null && _a !== void 0 ? _a : GameConfig_1.COIN_TOSS_HEADS_PROB[GameConfig_1.COIN_TOSS_HEADS_PROB.length - 1]);
                 const tossHeads = isBuyFG ? true : this.rng() < tossProb;
                 fgSpins.push({
                     multiplierIndex: multIdx,
@@ -400,6 +398,7 @@ class SlotEngine {
                     spin: this._toSpinResponse(r, mult, fgMarks),
                     rawWin,
                     multipliedWin,
+                    spinBonus,
                     coinToss: { probability: tossProb, heads: tossHeads },
                 });
                 if (maxWinCapped || !tossHeads)
@@ -414,7 +413,7 @@ class SlotEngine {
         }
         // ⑤ Calculate totals
         const totalRawWin = baseWin + fgWin;
-        let totalWin = totalRawWin * modePayoutScale;
+        let totalWin = totalRawWin;
         if (isBuyFG && totalWin < GameConfig_1.BUY_FG_MIN_WIN_MULT * totalBet) {
             totalWin = GameConfig_1.BUY_FG_MIN_WIN_MULT * totalBet;
         }
@@ -424,7 +423,7 @@ class SlotEngine {
         }
         totalWin = parseFloat(totalWin.toFixed(2));
         return {
-            mode, extraBetOn: extraBet, totalBet, wagered, modePayoutScale,
+            mode, extraBetOn: extraBet, totalBet, wagered,
             baseSpins, baseWin,
             fgTriggered,
             entryCoinToss,

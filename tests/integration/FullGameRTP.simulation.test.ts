@@ -14,7 +14,7 @@ import {
     COIN_TOSS_HEADS_PROB, ENTRY_TOSS_PROB_MAIN,
     MAX_WIN_MULT, TB_SECOND_HIT_PROB,
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
-    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, BUY_FG_MIN_WIN_MULT,
+    BUY_COST_MULT, BUY_FG_MIN_WIN_MULT,
     SYM,
 } from '../../assets/scripts/GameConfig';
 
@@ -94,7 +94,7 @@ describe('Full-Game RTP Simulation (200k spins)', () => {
             for (let i = 0; i < SPINS_PER_SEED; i++) {
                 const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
                 totalWagered += o.wagered;
-                basePayout += o.baseWin * o.modePayoutScale;
+                basePayout += o.baseWin;
             }
         }
 
@@ -113,7 +113,7 @@ describe('Full-Game RTP Simulation (200k spins)', () => {
             for (let i = 0; i < SPINS_PER_SEED; i++) {
                 const o = engine.computeFullSpin({ mode: 'main', totalBet: 1 });
                 totalWagered += o.wagered;
-                fgPayout += o.fgWin * o.modePayoutScale;
+                fgPayout += o.fgWin;
             }
         }
 
@@ -157,7 +157,7 @@ describe('Coin Toss Mechanics Verification', () => {
 
 describe('Buy Feature Expected Value', () => {
 
-    it('Buy FG RTP ≈ 97.5% with BUY_FG_PAYOUT_SCALE (50k sessions)', () => {
+    it('Buy FG RTP ≈ 97.5% (50k sessions)', () => {
         const SPINS_PER_SEED = 5_000;
         let totalWagered = 0, totalReturn = 0;
 
@@ -172,7 +172,7 @@ describe('Buy Feature Expected Value', () => {
         }
 
         const buyRtp = totalReturn / totalWagered;
-        console.log(`Buy FG RTP: ${(buyRtp * 100).toFixed(2)}% (${SEEDS.length * SPINS_PER_SEED} sessions, scale=${BUY_FG_PAYOUT_SCALE})`);
+        console.log(`Buy FG RTP: ${(buyRtp * 100).toFixed(2)}% (${SEEDS.length * SPINS_PER_SEED} sessions)`);
         expect(buyRtp).toBeGreaterThan(0.92);
         expect(buyRtp).toBeLessThan(1.05);
     });

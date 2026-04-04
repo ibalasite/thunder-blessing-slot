@@ -24,8 +24,7 @@ import {
     TB_SECOND_HIT_PROB, SYMBOL_UPGRADE,
     MAX_WIN_MULT, REEL_COUNT, BASE_ROWS, MAX_ROWS,
     BET_MIN, BET_MAX, BET_STEP, EXTRA_BET_MULT,
-    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE,
-    BUY_FG_MIN_WIN_MULT,
+    BUY_COST_MULT, BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig';
 
 function mulberry32(seed: number): () => number {
@@ -495,16 +494,6 @@ describe('Mode-specific payout scales', () => {
     it('BUY_COST_MULT is a positive integer', () => {
         expect(BUY_COST_MULT).toBeGreaterThan(0);
         expect(Number.isInteger(BUY_COST_MULT)).toBe(true);
-    });
-
-    it('BUY_FG_PAYOUT_SCALE > 0 (positive scale)', () => {
-        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(0);
-        expect(BUY_FG_PAYOUT_SCALE).toBeLessThan(10);
-    });
-
-    it('EB_PAYOUT_SCALE > 1 (boosts EB returns to compensate 3x cost)', () => {
-        expect(EB_PAYOUT_SCALE).toBeGreaterThan(1);
-        expect(EB_PAYOUT_SCALE).toBeLessThan(10);
     });
 
     it('EXTRA_BET_MULT is 3', () => {

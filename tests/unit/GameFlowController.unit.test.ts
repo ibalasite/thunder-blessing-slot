@@ -40,7 +40,6 @@ function makeOutcome(overrides: Partial<FullSpinOutcome> = {}): FullSpinOutcome 
         extraBetOn:      false,
         totalBet:        1,
         wagered:         1,
-        modePayoutScale: 1,
         baseSpins:       [makeSpinResponse()],
         baseWin:         0,
         fgTriggered:     false,

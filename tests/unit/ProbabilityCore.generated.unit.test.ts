@@ -3,14 +3,10 @@
  *
  * 驗證 GameConfig.generated.ts（校準後新機率）是否符合規格：
  *   - 與 ProbabilityCore.unit.test.ts 對稱：複製所有結構性驗證
- *   - 加入新校準值的精確比對（FG_TRIGGER_PROB / PAYOUT_SCALE 三項）
- *   - 驗證 EB_PAYOUT_SCALE / BUY_FG_PAYOUT_SCALE 調整後仍維持遊戲設計語義
+ *   - 加入新校準值的精確比對（FG_TRIGGER_PROB）
  *
  * 校準來源：Thunder_Config.xlsx（2026-04-03）
  *   FG_TRIGGER_PROB      0.008   → 0.0089   (+11.25%，提升 MG RTP)
- *   EB_PAYOUT_SCALE      2.75    → 2.67     (-2.9%，補償 fgTP 上升)
- *   BUY_FG_PAYOUT_SCALE  0.995   → 1.073    (+7.8%，提升 BuyFG RTP)
- *   EB_BUY_FG_PAYOUT_SCALE 1.065 → 1.165   (+9.4%，提升 EB+BuyFG RTP)
  */
 
 import { SlotEngine, calcWinAmount, findScatters, WinLine } from '../../assets/scripts/SlotEngine';
@@ -25,8 +21,7 @@ import {
     TB_SECOND_HIT_PROB, SYMBOL_UPGRADE,
     REEL_COUNT, BASE_ROWS, MAX_ROWS,
     EXTRA_BET_MULT,
-    BUY_COST_MULT, BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, EB_BUY_FG_PAYOUT_SCALE,
-    BUY_FG_MIN_WIN_MULT,
+    BUY_COST_MULT, BUY_FG_MIN_WIN_MULT,
 } from '../../assets/scripts/GameConfig.generated';
 
 function mulberry32(seed: number): () => number {
@@ -52,18 +47,6 @@ describe('Calibrated Probability Values — 2026-04-03', () => {
         expect(FG_TRIGGER_PROB).toBeCloseTo(0.0089, 6);
     });
 
-    it('EB_PAYOUT_SCALE = 2.67 (降自 2.75，補償 fgTP 升高使 EB RTP 降回 97.5%)', () => {
-        expect(EB_PAYOUT_SCALE).toBeCloseTo(2.67, 6);
-    });
-
-    it('BUY_FG_PAYOUT_SCALE = 1.073 (升自 0.995，BuyFG RTP 校準)', () => {
-        expect(BUY_FG_PAYOUT_SCALE).toBeCloseTo(1.073, 6);
-    });
-
-    it('EB_BUY_FG_PAYOUT_SCALE = 1.165 (升自 1.065，EB+BuyFG RTP 校準)', () => {
-        expect(EB_BUY_FG_PAYOUT_SCALE).toBeCloseTo(1.165, 6);
-    });
-
     it('FG_TRIGGER_PROB 在合法範圍內（0 < p < 0.10）', () => {
         expect(FG_TRIGGER_PROB).toBeGreaterThan(0);
         expect(FG_TRIGGER_PROB).toBeLessThan(0.10);
@@ -73,39 +56,11 @@ describe('Calibrated Probability Values — 2026-04-03', () => {
         expect(FG_TRIGGER_PROB).toBeGreaterThan(0.008);
     });
 
-    it('BUY_FG_PAYOUT_SCALE 比舊值 0.995 更大（提升 BuyFG RTP）', () => {
-        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(0.995);
-    });
-
-    it('EB_PAYOUT_SCALE 比舊值 2.75 更小（避免 EB 過高）', () => {
-        expect(EB_PAYOUT_SCALE).toBeLessThan(2.75);
-    });
-
-    it('EB_BUY_FG_PAYOUT_SCALE 比舊值 1.065 更大', () => {
-        expect(EB_BUY_FG_PAYOUT_SCALE).toBeGreaterThan(1.065);
-    });
 });
 
 // ── 2. RTP 設計語義不變量 ────────────────────────────────────────────────────
 
 describe('RTP Design Invariants', () => {
-
-    it('EB 實際賠率比 = EB_PAYOUT_SCALE / EXTRA_BET_MULT < 1（EB 每分成本高於 MG，靠 SC 保證補回）', () => {
-        const ebEfficiency = EB_PAYOUT_SCALE / EXTRA_BET_MULT;
-        expect(ebEfficiency).toBeLessThan(1);
-        expect(ebEfficiency).toBeGreaterThan(0.7);
-    });
-
-    it('BuyFG 實際賠率比 = BUY_FG_PAYOUT_SCALE / BUY_COST_MULT < 0.02（獎金由高倍率堆疊）', () => {
-        const buyEfficiency = BUY_FG_PAYOUT_SCALE / BUY_COST_MULT;
-        expect(buyEfficiency).toBeLessThan(0.02);
-        expect(buyEfficiency).toBeGreaterThan(0);
-    });
-
-    it('EB_BUY_FG_PAYOUT_SCALE 介於 BUY_FG_PAYOUT_SCALE 與 2 之間', () => {
-        expect(EB_BUY_FG_PAYOUT_SCALE).toBeGreaterThan(BUY_FG_PAYOUT_SCALE);
-        expect(EB_BUY_FG_PAYOUT_SCALE).toBeLessThan(2);
-    });
 
     it('BUY_FG_MIN_WIN_MULT = 20（保底獎，不隨校準改變）', () => {
         expect(BUY_FG_MIN_WIN_MULT).toBe(20);
@@ -340,10 +295,6 @@ describe('Max Win Cap = 30000', () => {
 
     const EXPECTED_MAX_WIN = 30000; // GDD §13 硬碼值，不由 Excel 管理
 
-    it('BUY_FG_PAYOUT_SCALE > 0（MaxWin 限制才有意義）', () => {
-        expect(BUY_FG_PAYOUT_SCALE).toBeGreaterThan(0);
-    });
-
     it('BuyFG 最小保底（20×）遠小於最大獎（30000×）', () => {
         expect(BUY_FG_MIN_WIN_MULT).toBeLessThan(EXPECTED_MAX_WIN);
     });
@@ -430,30 +381,6 @@ describe('findScatters', () => {
     it('無 SC 時回傳空陣列', () => {
         const g = emptyGrid(SYM.P1);
         expect(findScatters(g, 3)).toHaveLength(0);
-    });
-});
-
-// ── 11. 新校準後 EB 模式成本效益驗算 ────────────────────────────────────────
-
-describe('Extra Bet Cost-Benefit with New Calibration', () => {
-
-    it('EB 總投入 3x，payoutScale=2.67 → 每原始贏分效率 = 2.67/3 = 0.89', () => {
-        const efficiency = EB_PAYOUT_SCALE / EXTRA_BET_MULT;
-        expect(efficiency).toBeCloseTo(0.89, 2);
-    });
-
-    it('BuyFG 總投入 100x，payoutScale=1.073 → 每原始贏分效率 ≈ 0.01073', () => {
-        const efficiency = BUY_FG_PAYOUT_SCALE / BUY_COST_MULT;
-        expect(efficiency).toBeCloseTo(0.01073, 5);
-    });
-
-    it('EB+BuyFG 總投入 100x，payoutScale=1.165 → 每原始贏分效率 ≈ 0.01165', () => {
-        const efficiency = EB_BUY_FG_PAYOUT_SCALE / BUY_COST_MULT;
-        expect(efficiency).toBeCloseTo(0.01165, 5);
-    });
-
-    it('EB+BuyFG 效率 > BuyFG 效率（SC 保證使 EB 原始贏分更高）', () => {
-        expect(EB_BUY_FG_PAYOUT_SCALE).toBeGreaterThan(BUY_FG_PAYOUT_SCALE);
     });
 });
 

@@ -39,7 +39,6 @@ import {
     FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
     ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
     BUY_COST_MULT, EXTRA_BET_MULT,
-    BUY_FG_PAYOUT_SCALE, EB_PAYOUT_SCALE, EB_BUY_FG_PAYOUT_SCALE,
     BUY_FG_MIN_WIN_MULT, FG_SPIN_BONUS,
 } from './GameConfig';
 
@@ -402,10 +401,6 @@ export class SlotEngine {
         // extraBet flag: true for 'extraBet' mode OR when extraBetOn is explicitly set
         const extraBet = mode === 'extraBet' || opts.extraBetOn === true;
 
-        const modePayoutScale = (isBuyFG && extraBet) ? EB_BUY_FG_PAYOUT_SCALE
-                              : isBuyFG              ? BUY_FG_PAYOUT_SCALE
-                              : extraBet             ? EB_PAYOUT_SCALE
-                              : 1;
         const wagered = isBuyFG  ? totalBet * BUY_COST_MULT
                       : extraBet ? totalBet * EXTRA_BET_MULT
                       : totalBet;
@@ -478,8 +473,8 @@ export class SlotEngine {
                 const spinBonus = this._drawFGSpinBonus();
                 let multipliedWin = rawWin * mult * spinBonus;
 
-                if (baseWin * modePayoutScale + fgWin * modePayoutScale + multipliedWin * modePayoutScale >= maxWinTotal) {
-                    multipliedWin = Math.max(0, (maxWinTotal / modePayoutScale) - baseWin - fgWin);
+                if (baseWin + fgWin + multipliedWin >= maxWinTotal) {
+                    multipliedWin = Math.max(0, maxWinTotal - baseWin - fgWin);
                     maxWinCapped = true;
                 }
                 fgWin += multipliedWin;
@@ -512,7 +507,7 @@ export class SlotEngine {
 
         // ⑤ Calculate totals
         const totalRawWin = baseWin + fgWin;
-        let totalWin = totalRawWin * modePayoutScale;
+        let totalWin = totalRawWin;
 
         if (isBuyFG && totalWin < BUY_FG_MIN_WIN_MULT * totalBet) {
             totalWin = BUY_FG_MIN_WIN_MULT * totalBet;
@@ -524,7 +519,7 @@ export class SlotEngine {
         totalWin = parseFloat(totalWin.toFixed(2));
 
         return {
-            mode, extraBetOn: extraBet, totalBet, wagered, modePayoutScale,
+            mode, extraBetOn: extraBet, totalBet, wagered,
             baseSpins, baseWin,
             fgTriggered,
             entryCoinToss,

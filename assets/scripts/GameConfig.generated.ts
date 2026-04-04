@@ -153,11 +153,6 @@ export const EXTRA_BET_MULT  = 3;
 export const BUY_COST_MULT   = 100;
 export const BUY_FG_MIN_WIN_MULT = 20;
 
-// ─── 模式專屬 PAYOUT_SCALE ───────────────────────────────
-export const BUY_FG_PAYOUT_SCALE    = 1.073;
-export const EB_PAYOUT_SCALE        = 2.67;
-export const EB_BUY_FG_PAYOUT_SCALE = 1.165;
-
 // ─── FG Spin Bonus ────────────────────────────────────────
 export const FG_SPIN_BONUS = [
     { mult: 1,   weight: 900 },

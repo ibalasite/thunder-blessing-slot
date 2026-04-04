@@ -9,7 +9,7 @@ import { SlotEngine } from '../../assets/scripts/SlotEngine';
 import {
     FG_MULTIPLIERS, FG_ROUND_COUNTS,
     COIN_TOSS_HEADS_PROB, COIN_TOSS_HEADS_PROB_BUY,
-    BUY_FG_PAYOUT_SCALE, MAX_WIN_MULT, PAYTABLE_SCALE,
+    MAX_WIN_MULT, PAYTABLE_SCALE,
 } from '../../assets/scripts/GameConfig';
 
 function mulberry32(seed: number): () => number {
@@ -60,17 +60,15 @@ const avgRawPerRound = 0.33; // empirical average raw win per FG round (in BET)
 for (let t = 0; t < FG_MULTIPLIERS.length; t++) {
     const mult = FG_MULTIPLIERS[t];
     const rounds = FG_ROUND_COUNTS[t];
-    const scale = BUY_FG_PAYOUT_SCALE;
-
-    // totalWin = totalRawWin * scale >= 30000
+    // totalWin = totalRawWin >= 30000 (no scale multiplier)
     // totalRawWin = baseWin + fgWin (fgWin = sum(roundRaw * mult))
-    // Ignore baseWin (~small): sum(roundRaw) * mult >= 30000 / scale
-    const needRawTotal = MAX_WIN_MULT / scale;
+    // Ignore baseWin (~small): sum(roundRaw) * mult >= 30000
+    const needRawTotal = MAX_WIN_MULT;
     const needFGRaw = needRawTotal / mult;
     const perRound = needFGRaw / rounds;
     const ratio = perRound / avgRawPerRound;
 
-    console.log(`    ${t}    ×${String(mult).padEnd(3)} ${String(rounds).padEnd(7)} ${scale.toFixed(2)}    ${needRawTotal.toFixed(0).padStart(12)}    ${perRound.toFixed(2).padStart(12)}   ${avgRawPerRound.toFixed(2).padStart(13)}   ${ratio.toFixed(0)}×`);
+    console.log(`    ${t}    ×${String(mult).padEnd(3)} ${String(rounds).padEnd(7)} 1.00    ${needRawTotal.toFixed(0).padStart(12)}    ${perRound.toFixed(2).padStart(12)}   ${avgRawPerRound.toFixed(2).padStart(13)}   ${ratio.toFixed(0)}×`);
 }
 
 // Empirical: Run focused high-tier analysis

@@ -71,8 +71,6 @@ export interface FullSpinOutcome {
     extraBetOn:       boolean;    // true when Extra Bet was active (orthogonal to mode)
     totalBet:         number;
     wagered:          number;
-    modePayoutScale:  number;
-
     /** Phase A: cascade spins（FG 觸發時保證到 MAX_ROWS；否則正常 spin） */
     baseSpins:        SpinResponse[];
     baseWin:          number;
