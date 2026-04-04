@@ -254,24 +254,36 @@ export class GameFlowController {
         // ── 2. Entry Coin Toss (if FG triggered) ─────────────
         if (o.fgTriggered && o.entryCoinToss) {
             this._ui.showFGBar(0);
-            this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
-            await this._wait(0.5);
 
-            await this._ui.playCoinToss(true, o.entryCoinToss.heads);
+            if (o.mode === 'buyFG') {
+                // BuyFG: entry is mathematically guaranteed (ENTRY_TOSS_PROB_BUY = 1).
+                // Skip the interactive coin toss UI — go directly to FG spin loop.
+                // Showing a coin toss with WIN: 0 (base spin often has no line wins
+                // in buyFG weight mode) confuses players. The per-spin tosses (x3→x7
+                // etc.) still show, all predetermined heads, each after a spin with wins.
+                this._ui.setStatus('FREE GAME — x3 START!', '#00ff88');
+                await this._wait(0.5);
+            } else {
+                // Normal / ExtraBet FG: entry coin toss is interactive (may be tails)
+                this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+                await this._wait(0.5);
 
-            if (!o.entryCoinToss.heads) {
-                this._ui.setStatus('Coin Toss — Tails. Free Game not entered.', '#ff6666');
-                await this._wait(0.8);
-                this._ui.hideFGBar();
+                await this._ui.playCoinToss(true, o.entryCoinToss.heads);
 
-                if (this._session.roundWin > 0) {
-                    await this._ui.showTotalWin(this._session.roundWin);
+                if (!o.entryCoinToss.heads) {
+                    this._ui.setStatus('Coin Toss — Tails. Free Game not entered.', '#ff6666');
+                    await this._wait(0.8);
+                    this._ui.hideFGBar();
+
+                    if (this._session.roundWin > 0) {
+                        await this._ui.showTotalWin(this._session.roundWin);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            this._ui.setStatus('Free Game x3 — START!', '#00ff88');
-            await this._wait(0.8);
+                this._ui.setStatus('Free Game x3 — START!', '#00ff88');
+                await this._wait(0.8);
+            }
         }
 
         // ── 3. FG Spin Loop (per-spin coin toss) ─────────────
