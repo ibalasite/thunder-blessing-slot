@@ -83,32 +83,29 @@
     ]
   },
   "scales": {
-    "PAYTABLE_SCALE": 3.622,
-    "BUY_FG_PAYOUT_SCALE": 1.073,
-    "EB_PAYOUT_SCALE": 2.67,
-    "EB_BUY_FG_PAYOUT_SCALE": 1.165
+    "PAYTABLE_SCALE": 3.622
   },
   "weights": {
     "mainGame": {
       "W": 3,
-      "SC": 4,
+      "SC": 2,
       "P1": 6,
       "P2": 7,
       "P3": 8,
       "P4": 10,
-      "L1": 12,
-      "L2": 12,
+      "L1": 13,
+      "L2": 13,
       "L3": 14,
       "L4": 14
     },
     "extraBet": {
       "W": 4,
-      "SC": 4,
+      "SC": 7,
       "P1": 7,
       "P2": 8,
-      "P3": 9,
-      "P4": 10,
-      "L1": 11,
+      "P3": 8,
+      "P4": 9,
+      "L1": 10,
       "L2": 11,
       "L3": 13,
       "L4": 13
@@ -126,16 +123,16 @@
       "L4": 10
     },
     "buyFG": {
-      "W": 1,
-      "SC": 2,
+      "W": 2,
+      "SC": 4,
       "P1": 2,
       "P2": 3,
-      "P3": 4,
+      "P3": 3,
       "P4": 6,
       "L1": 14,
       "L2": 14,
-      "L3": 22,
-      "L4": 22
+      "L3": 19,
+      "L4": 23
     }
   },
   "fgMults": [
@@ -159,7 +156,8 @@
     "tbSecondHit": 0.4,
     "extraBetMult": 3,
     "buyCostMult": 100,
-    "buyFGMinWin": 20
+    "buyFGMinWin": 20,
+    "mgFgTriggerProb": 0.0103
   },
   "fgBonus": [
     {
@@ -188,5 +186,19 @@
     "P3": "P2",
     "P2": "P1",
     "P1": "P1"
+  },
+  "betRanges": {
+    "USD": {
+      "baseUnit": "0.01",
+      "minLevel": 25,
+      "maxLevel": 1000,
+      "stepLevel": 25
+    },
+    "TWD": {
+      "baseUnit": "1",
+      "minLevel": 10,
+      "maxLevel": 320,
+      "stepLevel": 10
+    }
   }
 }

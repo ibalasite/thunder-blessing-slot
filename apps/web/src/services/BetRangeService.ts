@@ -1,41 +1,24 @@
 import type { IProbabilityProvider, BetRange } from '../domain/interfaces/IProbabilityProvider';
 import type { Currency } from '../domain/interfaces/IWalletRepository';
-
-// Cocos game uses totalBet [0.25..10.00] in steps of 0.25 with LINES_BASE=25.
-// betLevel = totalBet / baseUnit → multiples of 25 from 25 to 1000.
-// All 40 levels must be explicitly allowed for the validation check.
-const USD_LEVELS = Array.from({ length: 40 }, (_, i) => (i + 1) * 25);
-
-const BET_RANGES: Record<Currency, BetRange> = {
-  USD: {
-    currency: 'USD',
-    baseUnit: '0.01',         // 1 cent per level; totalBet = betLevel × 0.01
-    levels: USD_LEVELS,       // [25, 50, 75, ..., 1000] → $0.25 to $10.00
-    minLevel: 25,
-    maxLevel: 1000,
-  },
-  TWD: {
-    currency: 'TWD',
-    baseUnit: '1',            // 1 TWD per level
-    levels: USD_LEVELS,       // same integer steps, same validation logic
-    minLevel: 25,
-    maxLevel: 1000,
-  },
-};
+import { BET_RANGE_CONFIG } from '../generated/BetRangeConfig.generated';
 
 /**
- * Cache-first bet range provider.
- * Cache key: bet-range:{currency}  TTL: 1h
- * Falls back to hardcoded config if cache is unavailable.
+ * Bet range provider — config sourced from Thunder_Config.xlsx via engine_generator.js.
+ * DO NOT hardcode values here. Edit Thunder_Config.xlsx [幣種押注範圍] then run:
+ *   node tools/slot-engine/build_config.js
+ *   node tools/slot-engine/engine_generator.js
  */
 export class BetRangeService implements IProbabilityProvider {
-  constructor() {}
-
   async getBetRange(currency: Currency): Promise<BetRange> {
-    const range = BET_RANGES[currency];
-    if (!range) {
+    const entry = BET_RANGE_CONFIG[currency];
+    if (!entry) {
       throw new Error(`Unsupported currency: ${currency}`);
     }
-    return range;
+    const { baseUnit, minLevel, maxLevel, stepLevel } = entry;
+    const levels = Array.from(
+      { length: Math.round((maxLevel - minLevel) / stepLevel) + 1 },
+      (_, i) => minLevel + i * stepLevel,
+    );
+    return { currency, baseUnit, levels, minLevel, maxLevel };
   }
 }

@@ -110,7 +110,9 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
             expect(missingCount).toBe(0);
         });
 
-        it('Phase B FG spins have SC in visible rows (extraBetOn=true + buyFG)', () => {
+        it('Phase B FG spins: buyFG disables SC guarantee even with extraBetOn=true', () => {
+            // BuyFG FG spins do NOT enforce SC guarantee (extraBet=false internally for FG spins)
+            // because BuyFG already guarantees entry; SC guarantee in FG would inflate RTP beyond target
             let missingCount = 0;
             let totalFGSpins = 0;
             for (let seed = 0; seed < TRIALS; seed++) {
@@ -123,9 +125,9 @@ describe('Extra Bet + Buy FG SC guarantee (GDD §11)', () => {
                     }
                 }
             }
-            // With SC guarantee applied to every FG spin, no spin should miss SC
+            // Without SC guarantee, some FG spins should be missing SC
             expect(totalFGSpins).toBeGreaterThan(0);
-            expect(missingCount).toBe(0);
+            expect(missingCount).toBeGreaterThan(0);
         });
 
         it('buyFG without extraBetOn: some FG spins may lack SC (BUY_FG has low SC weight=2)', () => {

@@ -21,9 +21,10 @@ const XLSX = require('xlsx');
 const fs   = require('fs');
 const path = require('path');
 
-const CONFIG_PATH  = path.resolve(__dirname, 'Thunder_Config.xlsx');
-const OUTPUT_TS    = path.resolve(__dirname, '../../assets/scripts/GameConfig.generated.ts');
-const OUTPUT_JSON  = path.resolve(__dirname, 'generated/engine_config.json');
+const CONFIG_PATH      = path.resolve(__dirname, 'Thunder_Config.xlsx');
+const OUTPUT_TS        = path.resolve(__dirname, '../../assets/scripts/GameConfig.generated.ts');
+const OUTPUT_JSON      = path.resolve(__dirname, 'generated/engine_config.json');
+const OUTPUT_BET_RANGE = path.resolve(__dirname, '../../apps/web/src/generated/BetRangeConfig.generated.ts');
 
 if (!fs.existsSync(CONFIG_PATH)) {
   console.error('Thunder_Config.xlsx not found. Run build_config.js first.');
@@ -79,10 +80,7 @@ function readConfig() {
     if (!row[0] || String(row[0]).startsWith('[')) break;
     const key = String(row[0]).trim();
     const val = parseFloat(row[1]);
-    if (key.includes('Main Game'))       scales.PAYTABLE_SCALE          = val;
-    if (key.includes('Buy FG'))          scales.BUY_FG_PAYOUT_SCALE     = val;
-    if (key.includes('Extra Bet EB'))    scales.EB_PAYOUT_SCALE         = val;
-    if (key.includes('EB+BuyFG'))        scales.EB_BUY_FG_PAYOUT_SCALE  = val;
+    if (key.includes('PAYTABLE_SCALE'))   scales.PAYTABLE_SCALE          = val;
   }
 
   // Weights
@@ -123,6 +121,7 @@ function readConfig() {
     const key = String(row[0]).trim();
     const val = row[1];
     if (key === 'FG_TRIGGER_PROB')        special.fgTriggerProb   = parseFloat(val);
+    if (key === 'MG_FG_TRIGGER_PROB')    special.mgFgTriggerProb  = parseFloat(val);
     if (key === 'TB_SECOND_HIT_PROB')     special.tbSecondHit     = parseFloat(val);
     if (key === 'EXTRA_BET_MULT')         special.extraBetMult    = parseInt(val, 10);
     if (key === 'BUY_COST_MULT')          special.buyCostMult     = parseInt(val, 10);
@@ -149,8 +148,26 @@ function readConfig() {
     upgrade[String(row[0]).trim()] = String(row[1]).trim();
   }
 
+  // Bet Ranges（幣種押注範圍）
+  const brIdx = findSection('[幣種押注範圍]');
+  const betRanges = {};
+  if (brIdx >= 0) {
+    for (let i = brIdx + 2; i < raw.length; i++) {
+      const row = raw[i];
+      if (!row[0] || String(row[0]).startsWith('[')) break;
+      const currency = String(row[0]).trim();
+      if (!currency || currency === '幣種') continue;
+      betRanges[currency] = {
+        baseUnit:  String(row[1]).trim(),
+        minLevel:  parseInt(row[2], 10),
+        maxLevel:  parseInt(row[3], 10),
+        stepLevel: parseInt(row[4], 10),
+      };
+    }
+  }
+
   return { basic, basePT, scales, weights, fgMults, coinProbs,
-           entryMain, entryBuy, special, fgBonus, upgrade };
+           entryMain, entryBuy, special, fgBonus, upgrade, betRanges };
 }
 
 // ─── 驗證 SIMULATION tab 通過 ────────────────────────────────────────────────
@@ -324,7 +341,8 @@ export const FG_MULTIPLIERS = [${fgMults.join(', ')}];
 export const COIN_TOSS_HEADS_PROB = [${coinProbs.join(', ')}];
 export const ENTRY_TOSS_PROB_MAIN = ${entryMain};
 export const ENTRY_TOSS_PROB_BUY  = ${entryBuy};
-export const FG_TRIGGER_PROB = ${special.fgTriggerProb};
+export const FG_TRIGGER_PROB    = ${special.fgTriggerProb};
+export const MG_FG_TRIGGER_PROB = ${special.mgFgTriggerProb ?? special.fgTriggerProb};
 export const TB_SECOND_HIT_PROB = ${special.tbSecondHit};
 
 // ─── 符號升階表 ───────────────────────────────────────────
@@ -347,10 +365,6 @@ export const EXTRA_BET_MULT  = ${special.extraBetMult};
 export const BUY_COST_MULT   = ${special.buyCostMult};
 export const BUY_FG_MIN_WIN_MULT = ${special.buyFGMinWin};
 
-// ─── 模式專屬 PAYOUT_SCALE ───────────────────────────────
-export const BUY_FG_PAYOUT_SCALE    = ${scales.BUY_FG_PAYOUT_SCALE};
-export const EB_PAYOUT_SCALE        = ${scales.EB_PAYOUT_SCALE};
-export const EB_BUY_FG_PAYOUT_SCALE = ${scales.EB_BUY_FG_PAYOUT_SCALE};
 
 // ─── FG Spin Bonus ────────────────────────────────────────
 export const FG_SPIN_BONUS = [
@@ -401,6 +415,52 @@ function main() {
   const ts = genTS(cfg);
   fs.writeFileSync(OUTPUT_TS, ts, 'utf-8');
   console.log(`✅  GameConfig.generated.ts → ${OUTPUT_TS}`);
+
+  // BetRangeConfig.generated.ts（後端 BetRangeService 讀取）
+  if (Object.keys(cfg.betRanges).length > 0) {
+    const generatedDate = new Date().toISOString().slice(0, 10);
+    const entriesBlock = Object.entries(cfg.betRanges)
+      .map(([cur, r]) => {
+        const bu = parseFloat(r.baseUnit);
+        const minBet  = (r.minLevel  * bu).toFixed(2);
+        const maxBet  = (r.maxLevel  * bu).toFixed(2);
+        const stepBet = (r.stepLevel * bu).toFixed(2);
+        const cnt = Math.round((r.maxLevel - r.minLevel) / r.stepLevel) + 1;
+        return `  ${cur}: { baseUnit: '${r.baseUnit}', minLevel: ${r.minLevel}, maxLevel: ${r.maxLevel}, stepLevel: ${r.stepLevel} }, // ${cur} ${minBet}~${maxBet} step ${stepBet} (${cnt} levels)`;
+      })
+      .join('\n');
+    const betRangeTs = `/**
+ * BetRangeConfig.generated.ts
+ * ⚠️  此檔案由 tools/slot-engine/engine_generator.js 自動產生 (${generatedDate})
+ * ⚠️  請勿手動編輯 — 修改 Thunder_Config.xlsx DATA tab [幣種押注範圍] 後重新執行 engine_generator.js
+ */
+
+export type Currency = 'USD' | 'TWD';
+
+export interface BetRangeEntry {
+  baseUnit:  string;   // e.g. '0.01' (USD cent), '1' (TWD)
+  minLevel:  number;   // 最小 betLevel（整數）
+  maxLevel:  number;   // 最大 betLevel（整數）
+  stepLevel: number;   // betLevel 步進
+}
+
+/**
+ * 每幣種的押注設定。
+ * betLevel = totalBet / baseUnit（整數）
+ * 引擎只看 betLevel，幣種只影響金額顯示。
+ */
+export const BET_RANGE_CONFIG: Record<Currency, BetRangeEntry> = {
+${entriesBlock}
+} as const;
+`;
+    if (!fs.existsSync(path.dirname(OUTPUT_BET_RANGE))) {
+      fs.mkdirSync(path.dirname(OUTPUT_BET_RANGE), { recursive: true });
+    }
+    fs.writeFileSync(OUTPUT_BET_RANGE, betRangeTs, 'utf-8');
+    console.log(`✅  BetRangeConfig.generated.ts → ${OUTPUT_BET_RANGE}`);
+  } else {
+    console.warn('⚠️  [幣種押注範圍] 區塊未找到，跳過 BetRangeConfig.generated.ts 產生');
+  }
 
   // JSON 除錯輸出
   if (!fs.existsSync(path.dirname(OUTPUT_JSON))) {

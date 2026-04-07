@@ -36,10 +36,10 @@ import {
     PAYTABLE, PAYLINES_BY_ROWS,
     FG_MULTIPLIERS, SYMBOL_UPGRADE, TB_SECOND_HIT_PROB,
     REEL_COUNT, BASE_ROWS, MAX_ROWS, MAX_WIN_MULT,
-    FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
+    FG_TRIGGER_PROB, MG_FG_TRIGGER_PROB, COIN_TOSS_HEADS_PROB,
     ENTRY_TOSS_PROB_MAIN, ENTRY_TOSS_PROB_BUY,
     BUY_COST_MULT, EXTRA_BET_MULT,
-    BUY_FG_MIN_WIN_MULT, BUY_FG_SPIN_MIN_WIN_MULT, FG_SPIN_BONUS,
+    BUY_FG_MIN_WIN_MULT, FG_SPIN_BONUS,
 } from './GameConfig';
 
 import type {
@@ -279,6 +279,10 @@ export class SlotEngine {
         const totalBet = opts.totalBet     ?? 1;
         const maxCascade = opts.maxCascade ?? 20;
 
+        // Direction A fix: EB wins scale with wagered (= totalBet × EXTRA_BET_MULT).
+        // BuyFG+EB: totalBet already includes ebMult from GameFlowController, no extra scaling.
+        const effectiveBet = (useEB && !useBuyFG) ? totalBet * EXTRA_BET_MULT : totalBet;
+
         const marks = opts.lightningMarks ?? new Set<string>();
 
         let grid = this.generateGrid(useFG, useEB, useBuyFG);
@@ -327,7 +331,7 @@ export class SlotEngine {
             let rawWin = 0;
 
             for (const w of wins) {
-                rawWin += w.multiplier * totalBet;
+                rawWin += w.multiplier * effectiveBet;
                 for (const c of w.cells) {
                     const key = `${c.reel},${c.row}`;
                     if (!seenCell.has(key)) {
@@ -341,7 +345,7 @@ export class SlotEngine {
             totalRawWin += rawWin;
 
             // 檢查 Max Win 上限
-            if (totalRawWin * fgMult >= totalBet * MAX_WIN_MULT) {
+            if (totalRawWin * fgMult >= effectiveBet * MAX_WIN_MULT) {
                 maxWinCapped = true;
                 cascadeSteps.push({ wins, winCells, rawWin, rowsAfter: rows });
                 break;
@@ -404,10 +408,13 @@ export class SlotEngine {
         const wagered = isBuyFG  ? totalBet * BUY_COST_MULT
                       : extraBet ? totalBet * EXTRA_BET_MULT
                       : totalBet;
-        const maxWinTotal = totalBet * MAX_WIN_MULT;
+        // Max win = displayed total bet × MAX_WIN_MULT.
+        // EB: displayed bet = wagered (baseBet × EXTRA_BET_MULT); BuyFG: totalBet already has ebMult.
+        const maxWinTotal = (mode === 'extraBet') ? wagered * MAX_WIN_MULT : totalBet * MAX_WIN_MULT;
 
-        // ① Decide FG trigger at spin start
-        const fgTriggered = isBuyFG ? true : this.rng() < FG_TRIGGER_PROB;
+        // ① Decide FG trigger at spin start（MG 使用獨立 trigger prob 以校準至 97.5% RTP）
+        const fgProb = (mode === 'main') ? MG_FG_TRIGGER_PROB : FG_TRIGGER_PROB;
+        const fgTriggered = isBuyFG ? true : this.rng() < fgProb;
 
         // ② Phase A: cascade spins
         const baseSpins: SpinResponse[] = [];
@@ -462,19 +469,14 @@ export class SlotEngine {
                     inFreeGame: true, fgMultiplier: mult,
                     buyFG: isBuyFG,
                     totalBet, lightningMarks: fgMarks,
-                    extraBet,
+                    // BuyFG: no SC guarantee (marks always 0 at spin start, TB can't fire)
+                    // EB/MG FG: preserve SC guarantee to enable TB via accumulated marks
+                    extraBet: isBuyFG ? false : extraBet,
                 });
 
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
                 let multipliedWin = rawWin * mult * spinBonus;
-
-                // BuyFG: per-spin minimum win = 20 × baseBet
-                // totalBet here IS baseBet (engine always receives baseBet; wagered = baseBet × 100)
-                if (isBuyFG) {
-                    const spinFloor = BUY_FG_SPIN_MIN_WIN_MULT * totalBet; // 20 × baseBet
-                    multipliedWin = Math.max(multipliedWin, spinFloor);
-                }
 
                 if (baseWin + fgWin + multipliedWin >= maxWinTotal) {
                     multipliedWin = Math.max(0, maxWinTotal - baseWin - fgWin);

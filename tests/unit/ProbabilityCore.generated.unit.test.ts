@@ -85,8 +85,8 @@ describe('Symbol Weights — 與 GameConfig.ts 一致', () => {
 
     it('Main game: 精確符號權重', () => {
         const expected: Record<string, number> = {
-            W: 3, SC: 4, P1: 6, P2: 7, P3: 8, P4: 10,
-            L1: 12, L2: 12, L3: 14, L4: 14,
+            W: 3, SC: 2, P1: 6, P2: 7, P3: 8, P4: 10,
+            L1: 13, L2: 13, L3: 14, L4: 14,
         };
         for (const [sym, w] of Object.entries(expected)) {
             expect(SYMBOL_WEIGHTS[sym as SymType]).toBe(w);

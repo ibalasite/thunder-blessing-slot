@@ -56,8 +56,8 @@ describe('Symbol Weights — GDD §2 Compliance', () => {
 
     it('Main game: all 10 symbols defined with correct values', () => {
         const expected: Record<string, number> = {
-            W: 3, SC: 4, P1: 6, P2: 7, P3: 8, P4: 10,
-            L1: 12, L2: 12, L3: 14, L4: 14,
+            W: 3, SC: 2, P1: 6, P2: 7, P3: 8, P4: 10,
+            L1: 13, L2: 13, L3: 14, L4: 14,
         };
         for (const [sym, w] of Object.entries(expected)) {
             expect(SYMBOL_WEIGHTS[sym as SymType]).toBe(w);

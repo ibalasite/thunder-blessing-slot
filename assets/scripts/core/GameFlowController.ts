@@ -23,7 +23,7 @@ import type { IWalletService, SpinTx } from '../contracts/IWalletService';
 import type { FullSpinOutcome, GameMode, SpinResponse, FGSpinOutcome } from '../contracts/types';
 import { logger } from './logger';
 import { WinLine }         from '../SlotEngine';
-import { calcWinAmount, findScatters } from '../SlotEngine';
+import { findScatters } from '../SlotEngine';
 import {
     BASE_ROWS, MAX_ROWS, MAX_WIN_MULT, LINES_BASE,
     BUY_COST_MULT, EXTRA_BET_MULT, SymType,
@@ -118,7 +118,8 @@ export class GameFlowController {
         await this._playFullOutcome(outcome, balanceAfterDebit);
 
         // ── 3. 入帳（立即，帳務層）──────────────────────
-        const totalWin = this._session.roundWin;
+        // 以引擎的 totalWin 為唯一權威值；session.roundWin 僅供動畫期間 UI 顯示用
+        const totalWin = outcome.totalWin;
         if (w && tx) {
             const newBal = w.completeSpin(tx, totalWin);
             this._ui.setDisplayBalance(newBal);
@@ -126,7 +127,7 @@ export class GameFlowController {
             this._account.credit(totalWin);
         }
 
-        const rw = this._session.roundWin;
+        const rw = outcome.totalWin;
         this._ui.setStatus(
             rw > 0 ? `本輪獲得 ${rw.toFixed(2)}` : '沒有獎金',
             rw > 0 ? '#ffd700' : '#888888');
@@ -201,7 +202,8 @@ export class GameFlowController {
         await this._playFullOutcome(outcome, balanceAfterDebit);
 
         // ── 3. 入帳（立即）──────────────────────
-        const totalWin = this._session.roundWin;
+        // 以引擎的 totalWin 為唯一權威值；session.roundWin 僅供動畫期間 UI 顯示用
+        const totalWin = outcome.totalWin;
         if (w && tx) {
             const newBal = w.completeSpin(tx, totalWin);
             this._ui.setDisplayBalance(newBal);
@@ -304,27 +306,26 @@ export class GameFlowController {
                     `FREE GAME x${mult} — REMAINING: 1`, '#00cfff');
                 await this._wait(0.3);
 
-                const winBefore = this._session.roundWin;
-
                 this._reels.reset();
                 this._session.setGrid(fg.spin.grid);
                 this._session.setCurrentRows(fg.spin.finalRows);
                 await this._reels.spinWithGrid(fg.spin.grid, true);
+                const roundWinBefore = this._session.roundWin;
                 await this._replayCascade(fg.spin, mult, fg.spinBonus ?? 1, balanceAfterDebit);
 
                 if (fg.spin.tbStep) {
                     await this._replayTB(fg.spin.tbStep.gridAfter);
                 }
 
-                let spinWin = this._session.roundWin - winBefore;
-
-                // BuyFG: UI must reflect engine's per-spin minimum (fg.multipliedWin already has floor)
-                if (o.mode === 'buyFG' && spinWin < fg.multipliedWin) {
-                    this._session.addRoundWin(fg.multipliedWin - spinWin);
-                    spinWin = fg.multipliedWin;
-                }
-
+                const spinWin = fg.multipliedWin;
                 fgAccumulatedWin += spinWin;
+
+                // Sync session.roundWin to engine's authoritative multipliedWin.
+                // cascade animation may accumulate less than multipliedWin (e.g. floor guarantee).
+                const cascadeAccum = this._session.roundWin - roundWinBefore;
+                if (spinWin > cascadeAccum) {
+                    this._session.addRoundWin(spinWin - cascadeAccum);
+                }
 
                 if (spinWin > 0) {
                     this._ui.setStatus(
@@ -347,11 +348,19 @@ export class GameFlowController {
                 // Per-spin Coin Toss
                 if (fg.coinToss.heads && i < o.fgSpins.length - 1) {
                     const nextMult = o.fgSpins[i + 1].multiplier;
-                    this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
-                    await this._wait(0.3);
-                    await this._ui.playCoinToss(true, true);
-                    this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
-                    await this._wait(0.6);
+                    if (o.mode === 'buyFG') {
+                        // BuyFG: all per-spin tosses are guaranteed heads — skip interactive UI.
+                        // Same reason as entry toss: showing a full-screen overlay right after
+                        // wins confuses players (WIN can briefly show 0 behind the overlay).
+                        this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
+                        await this._wait(0.6);
+                    } else {
+                        this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+                        await this._wait(0.3);
+                        await this._ui.playCoinToss(true, true);
+                        this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
+                        await this._wait(0.6);
+                    }
                 } else if (!fg.coinToss.heads) {
                     this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
                     await this._wait(0.3);
@@ -372,7 +381,7 @@ export class GameFlowController {
             this._ui.refresh();
             await this._wait(1.0);
 
-            await this._ui.showTotalWin(this._session.roundWin);
+            await this._ui.showTotalWin(o.totalWin);
         }
     }
 
@@ -401,10 +410,8 @@ export class GameFlowController {
                 newSyms.set(`${cell.reel},${cell.row}`, spin.grid[cell.reel][cell.row]);
             }
 
-            // ② 計算本步獎金（含 FG Spin Bonus 倍率）
-            const rawWin = step.wins.reduce(
-                (s, w) => s + calcWinAmount(w as WinLine, this._baseTotalBet), 0);
-            const stepWin = Math.round(rawWin * fgMultiplier * spinBonus * 100 + Number.EPSILON) / 100;
+            // ② 每一消除回合的贏分（直接用引擎算好的 step.rawWin，不重算）
+            const stepWin = Math.round(step.rawWin * fgMultiplier * spinBonus * 100 + Number.EPSILON) / 100;
 
             this._session.addRoundWin(stepWin);
 

@@ -4,7 +4,7 @@
  * Server handles debit + engine + credit atomically (Phase 2 server mode)
  */
 import { IEngineAdapter } from '../contracts/IEngineAdapter';
-import { SpinRequest, SpinResponse, GameMode, FullSpinOutcome } from '../contracts/types';
+import { SpinRequest, SpinResponse, GameMode, FullSpinOutcome, FGSpinOutcome, CascadeStep } from '../contracts/types';
 import { RemoteApiClient } from './RemoteApiClient';
 
 export class RemoteEngineAdapter implements IEngineAdapter {
@@ -16,7 +16,7 @@ export class RemoteEngineAdapter implements IEngineAdapter {
   }
 
   async fullSpin(mode: GameMode, totalBet: number, extraBetOn?: boolean): Promise<FullSpinOutcome> {
-    // Convert totalBet (decimal amount) → betLevel (integer) using baseUnit from API
+    // Convert totalBet (decimal currency) → betLevel (integer) using baseUnit from API
     const betLevel = Math.round(totalBet / this._client.baseUnit);
 
     const result = await this._client.spin({
@@ -26,6 +26,51 @@ export class RemoteEngineAdapter implements IEngineAdapter {
       extraBetOn: extraBetOn ?? false,
     });
 
-    return result.outcome as FullSpinOutcome;
+    // Server engine receives betLevel (e.g. 25) as totalBet and produces all win values
+    // in betLevel units (e.g. totalWin=3000). Scale every monetary field back to
+    // currency units (×baseUnit = 0.01) so the controller and UI always see USD amounts.
+    return this._scaleOutcome(result.outcome as FullSpinOutcome);
+  }
+
+  /**
+   * Convert all monetary fields in a FullSpinOutcome from betLevel units back to
+   * currency units by multiplying by baseUnit.
+   *
+   * Non-monetary fields (grid, symbols, multiplier indices, spinBonus, booleans,
+   * probability, TBStep cell lists) are left unchanged.
+   */
+  private _scaleOutcome(raw: FullSpinOutcome): FullSpinOutcome {
+    const s = this._client.baseUnit;
+
+    const scaleStep = (step: CascadeStep): CascadeStep => ({
+      ...step,
+      rawWin: step.rawWin * s,
+    });
+
+    const scaleSpin = (spin: SpinResponse): SpinResponse => ({
+      ...spin,
+      totalWin:     spin.totalWin * s,
+      cascadeSteps: spin.cascadeSteps.map(scaleStep),
+    });
+
+    const scaleFGSpin = (fg: FGSpinOutcome): FGSpinOutcome => ({
+      ...fg,
+      rawWin:        fg.rawWin * s,
+      multipliedWin: fg.multipliedWin * s,
+      spin:          scaleSpin(fg.spin),
+      // spinBonus is a plain multiplier (1/5/20/100), not a monetary value — no scaling
+    });
+
+    return {
+      ...raw,
+      totalBet:    raw.totalBet    * s,
+      wagered:     raw.wagered     * s,
+      baseWin:     raw.baseWin     * s,
+      fgWin:       raw.fgWin       * s,
+      totalRawWin: raw.totalRawWin * s,
+      totalWin:    raw.totalWin    * s,
+      baseSpins:   raw.baseSpins.map(scaleSpin),
+      fgSpins:     raw.fgSpins.map(scaleFGSpin),
+    };
   }
 }

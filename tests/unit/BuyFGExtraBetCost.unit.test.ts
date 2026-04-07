@@ -79,6 +79,24 @@ function makeUI(): jest.Mocked<IUIController> {
 
 const instantWait = () => Promise.resolve();
 
+/**
+ * Runs onBuyFreeGame and returns the net debit (= wagered cost).
+ * Uses a spy on account.credit to capture the actual credited amount
+ * (outcome.totalWin), independent of session.roundWin which is only
+ * accumulated by the cascade animation (mocked in tests).
+ */
+async function runAndGetDebit(
+    account: LocalAccountService,
+    ctrl: GameFlowController,
+): Promise<number> {
+    const spy    = jest.spyOn(account, 'credit');
+    const before = account.getBalance();
+    await ctrl.onBuyFreeGame();
+    const credited = (spy.mock.calls as [number][]).reduce((s, a) => s + a[0], 0);
+    spy.mockRestore();
+    return before - account.getBalance() + credited;
+}
+
 /** Helper: expected displayed bet = betLevel × ebMult (always LINES_BASE) */
 function expectedDisplayBet(betLevel: number, ebOn: boolean): number {
     const ebMult = ebOn ? EXTRA_BET_MULT : 1;
@@ -184,13 +202,10 @@ describe('Bug regression: default bet 0.25 — Extra Bet + Buy FG', () => {
     it('Extra Bet OFF → debit = 0.25 × 100 = 25', async () => {
         const { session, account, ctrl } = makeSetup(42);
 
-        const before  = account.getBalance();
         const baseBet = parseFloat((session.betPerLine * LINES_BASE).toFixed(4));
         expect(baseBet).toBeCloseTo(0.25, 4);
 
-        await ctrl.onBuyFreeGame();
-
-        const debited = before - account.getBalance() + session.roundWin;
+        const debited = await runAndGetDebit(account, ctrl);
         expect(debited).toBeCloseTo(25, 2);
     });
 
@@ -198,10 +213,7 @@ describe('Bug regression: default bet 0.25 — Extra Bet + Buy FG', () => {
         const { session, account, ctrl } = makeSetup(42);
         session.setExtraBet(true);
 
-        const before = account.getBalance();
-        await ctrl.onBuyFreeGame();
-
-        const debited = before - account.getBalance() + session.roundWin;
+        const debited = await runAndGetDebit(account, ctrl);
         expect(debited).toBeCloseTo(75, 2);
     });
 
@@ -213,10 +225,7 @@ describe('Bug regression: default bet 0.25 — Extra Bet + Buy FG', () => {
 
         expect(session.totalBet).toBeCloseTo(1.71, 2);
 
-        const before = account.getBalance();
-        await ctrl.onBuyFreeGame();
-
-        const debited = before - account.getBalance() + session.roundWin;
+        const debited = await runAndGetDebit(account, ctrl);
         expect(debited).toBeCloseTo(75, 2);
     });
 });
@@ -230,12 +239,9 @@ describe('All bet levels: Buy FG cost = 100 × displayedBet (EB OFF)', () => {
     it.each(BET_LEVELS)(
         'betLevel=%s rows=3 EB OFF → cost = %s × 100',
         async (betLevel) => {
-            const { session, account, ctrl } = makeSetup(42, betLevel);
+            const { account, ctrl } = makeSetup(42, betLevel);
 
-            const before = account.getBalance();
-            await ctrl.onBuyFreeGame();
-
-            const debited = before - account.getBalance() + session.roundWin;
+            const debited = await runAndGetDebit(account, ctrl);
             expect(debited).toBeCloseTo(expectedBuyCost(betLevel, false), 2);
         },
     );
@@ -249,10 +255,7 @@ describe('All bet levels: Buy FG cost = 100 × displayedBet (EB ON, base rows)',
             const { session, account, ctrl } = makeSetup(42, betLevel);
             session.setExtraBet(true);
 
-            const before = account.getBalance();
-            await ctrl.onBuyFreeGame();
-
-            const debited = before - account.getBalance() + session.roundWin;
+            const debited = await runAndGetDebit(account, ctrl);
             expect(debited).toBeCloseTo(expectedBuyCost(betLevel, true), 2);
         },
     );
@@ -271,10 +274,7 @@ describe('All bet levels: Buy FG cost unaffected by expanded rows (EB ON)', () =
                 session.setCurrentRows(rows);
                 session.computeTotalBet();
 
-                const before = account.getBalance();
-                await ctrl.onBuyFreeGame();
-
-                const debited = before - account.getBalance() + session.roundWin;
+                const debited = await runAndGetDebit(account, ctrl);
                 const expected = expectedBuyCost(betLevel, true);
                 expect(debited).toBeCloseTo(expected, 2);
             }
@@ -294,10 +294,7 @@ describe('All bet levels: Buy FG cost unaffected by expanded rows (EB OFF)', () 
                 session.setCurrentRows(rows);
                 session.computeTotalBet();
 
-                const before = account.getBalance();
-                await ctrl.onBuyFreeGame();
-
-                const debited = before - account.getBalance() + session.roundWin;
+                const debited = await runAndGetDebit(account, ctrl);
                 expect(debited).toBeCloseTo(expectedBuyCost(betLevel, false), 2);
             }
         },
@@ -331,10 +328,7 @@ describe('Spot-check representative bet levels — full matrix', () => {
             session.setCurrentRows(rows);
             session.computeTotalBet();
 
-            const before = account.getBalance();
-            await ctrl.onBuyFreeGame();
-
-            const debited  = before - account.getBalance() + session.roundWin;
+            const debited  = await runAndGetDebit(account, ctrl);
             const expected = expectedBuyCost(bet, eb);
             expect(debited).toBeCloseTo(expected, 2);
         },

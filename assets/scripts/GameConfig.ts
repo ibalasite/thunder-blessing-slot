@@ -21,12 +21,12 @@ export type SymType = typeof SYM[keyof typeof SYM];
 
 // ── Main Game 符號權重（合計 90）──
 export const SYMBOL_WEIGHTS: Record<SymType, number> = {
-    W: 3, SC: 4, P1: 6, P2: 7, P3: 8, P4: 10, L1: 12, L2: 12, L3: 14, L4: 14,
+    W: 3, SC: 2, P1: 6, P2: 7, P3: 8, P4: 10, L1: 13, L2: 13, L3: 14, L4: 14,
 };
 
 // ── Extra Bet 符號權重（合計 90）──
 export const SYMBOL_WEIGHTS_EB: Record<SymType, number> = {
-    W: 4, SC: 4, P1: 7, P2: 8, P3: 9, P4: 10, L1: 11, L2: 11, L3: 13, L4: 13,
+    W: 4, SC: 7, P1: 7, P2: 8, P3: 8, P4: 9, L1: 10, L2: 11, L3: 13, L4: 13,
 };
 
 // ── Free Game 符號權重（合計 90）──
@@ -36,7 +36,7 @@ export const SYMBOL_WEIGHTS_FG: Record<SymType, number> = {
 
 // ── Buy Free Game 符號權重（合計 90）──
 export const SYMBOL_WEIGHTS_BUY_FG: Record<SymType, number> = {
-    W: 1, SC: 2, P1: 2, P2: 3, P3: 4, P4: 6, L1: 14, L2: 14, L3: 22, L4: 22,
+    W: 2, SC: 4, P1: 2, P2: 3, P3: 3, P4: 6, L1: 14, L2: 14, L3: 19, L4: 23,
 };
 
 
@@ -130,7 +130,8 @@ export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 export const COIN_TOSS_HEADS_PROB = [0.8, 0.68, 0.56, 0.48, 0.4];
 export const ENTRY_TOSS_PROB_MAIN = 0.8;
 export const ENTRY_TOSS_PROB_BUY  = 1;
-export const FG_TRIGGER_PROB = 0.0089;
+export const FG_TRIGGER_PROB    = 0.0089;
+export const MG_FG_TRIGGER_PROB = 0.0103;  // MG 獨立校準（97.5% RTP）
 export const TB_SECOND_HIT_PROB = 0.4;
 
 // ─── 符號升階表 ───────────────────────────────────────────
@@ -157,8 +158,7 @@ export const BET_LEVELS: number[] = (() => {
 // ─── Extra Bet & Buy FG ───────────────────────────────────
 export const EXTRA_BET_MULT  = 3;
 export const BUY_COST_MULT   = 100;
-export const BUY_FG_MIN_WIN_MULT      = 20;  // 整場 session 最低總獎
-export const BUY_FG_SPIN_MIN_WIN_MULT = 20;  // 每個 FG spin 最低獎 = 20 × baseBet（非 total bet = 100×BET）
+export const BUY_FG_MIN_WIN_MULT = 20;  // 整場 session 最低總獎（= 20 × baseBet）
 
 // ─── FG Spin Bonus ────────────────────────────────────────
 export const FG_SPIN_BONUS = [

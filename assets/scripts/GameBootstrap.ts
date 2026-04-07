@@ -75,7 +75,8 @@ export class GameBootstrap extends Component {
         let flow!: GameFlowController;
 
         // ── View ────────────────────────────────────────────────────────────────
-        const { reelMgr, uiCtrl } = buildScene(this.node, new GameSession(), account, {
+        const session = new GameSession();
+        const { reelMgr, uiCtrl } = buildScene(this.node, session, account, {
             onSpinClick:      () => flow.doSpin(),
             onBuyFreeGame:    () => flow.onBuyFreeGame(),
             onExtraBetToggle: () => uiCtrl.pressExtraBet(),
@@ -106,7 +107,7 @@ export class GameBootstrap extends Component {
 
         // ── Controller (remote adapters injected) ────────────────────────────────
         flow = new GameFlowController(
-            new GameSession(), account, remoteAdapter, reelMgr, uiCtrl,
+            session, account, remoteAdapter, reelMgr, uiCtrl,
             undefined,    // _wait (default)
             remoteWallet, // IWalletService — remote
         );
