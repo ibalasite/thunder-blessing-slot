@@ -157,7 +157,7 @@
     "extraBetMult": 3,
     "buyCostMult": 100,
     "buyFGMinWin": 20,
-    "mgFgTriggerProb": 0.0103
+    "mgFgTriggerProb": 0.0097
   },
   "fgBonus": [
     {

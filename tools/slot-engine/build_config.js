@@ -47,10 +47,10 @@ const CONFIG = {
       nearMissType:  'ZERO_WIN',      // 可以零獎
       nearMissNote:  '由符號權重自然形成，目標零獎率 65-70%',
       zeroWinTarget:  67,             // % 目標零獎率
-      // 最終校準：MG 獨立 fgTriggerProb=0.0103（97.5% RTP），SC 降低零獎填充
+      // 最終校準：MG 獨立 fgTriggerProb=0.0097（4點回歸插值，std≈3.5pp/run）
       weights: { W:3, SC:2, P1:6, P2:7, P3:8, P4:10, L1:13, L2:13, L3:14, L4:14 },
-      fgTriggerProb:  0.0103,         // MG 專用觸發機率（MG≈97.5%）
-      mgFgTriggerProb: 0.0103,        // 同上（明確標示 MG-only 欄位）
+      fgTriggerProb:  0.0097,         // MG 專用觸發機率（MG≈97.5%）
+      mgFgTriggerProb: 0.0097,        // 同上（明確標示 MG-only 欄位）
       entryTossProb:  0.80,           // 觸發後翻硬幣進入 FG 機率
       scGuarantee:   false,
     },

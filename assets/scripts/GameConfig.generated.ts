@@ -131,7 +131,7 @@ export const COIN_TOSS_HEADS_PROB = [0.8, 0.68, 0.56, 0.48, 0.4];
 export const ENTRY_TOSS_PROB_MAIN = 0.8;
 export const ENTRY_TOSS_PROB_BUY  = 1;
 export const FG_TRIGGER_PROB    = 0.0089;
-export const MG_FG_TRIGGER_PROB = 0.0103;
+export const MG_FG_TRIGGER_PROB = 0.0097;
 export const TB_SECOND_HIT_PROB = 0.4;
 
 // ─── 符號升階表 ───────────────────────────────────────────
