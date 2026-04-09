@@ -126,6 +126,7 @@ function readConfig() {
     if (key === 'EXTRA_BET_MULT')         special.extraBetMult    = parseInt(val, 10);
     if (key === 'BUY_COST_MULT')          special.buyCostMult     = parseInt(val, 10);
     if (key === 'BUY_FG_MIN_WIN_MULT')    special.buyFGMinWin     = parseInt(val, 10);
+    if (key === 'MAX_WIN_MULT')            special.maxWinMult      = parseInt(val, 10);
   }
 
   // FG Spin Bonus
@@ -165,6 +166,17 @@ function readConfig() {
       };
     }
   }
+
+  // 從 USD 幣種表補齊 basic（BET_MIN/MAX/STEP 由 Excel [幣種押注範圍] 派生）
+  const usd = betRanges['USD'];
+  if (usd) {
+    const bu = parseFloat(usd.baseUnit);
+    basic.betMin  = parseFloat((usd.minLevel  * bu).toFixed(2));
+    basic.betMax  = parseFloat((usd.maxLevel  * bu).toFixed(2));
+    basic.betStep = parseFloat((usd.stepLevel * bu).toFixed(2));
+    basic.defaultBet = basic.betMin;
+  }
+  if (!basic.defaultBalance) basic.defaultBalance = 1000;
 
   return { basic, basePT, scales, weights, fgMults, coinProbs,
            entryMain, entryBuy, special, fgBonus, upgrade, betRanges };
@@ -372,14 +384,21 @@ ${fgBonusBlock},
 ];
 
 // ─── 最大獎金上限 ─────────────────────────────────────────
-export const MAX_WIN_MULT = ${basic.maxWinMult};
+export const MAX_WIN_MULT = ${special.maxWinMult ?? 30000};
 
 // ─── 預設值 ───────────────────────────────────────────────
-export const DEFAULT_BET     = ${basic.defaultBet};
-export const DEFAULT_BALANCE = ${basic.defaultBalance};
+export const DEFAULT_BET     = ${basic.defaultBet ?? 0.25};
+export const DEFAULT_BALANCE = ${basic.defaultBalance ?? 1000};
+
+// ─── 符號標籤（顯示名稱）────────────────────────────────
+export const SYMBOL_LABELS: Record<SymType, string> = {
+    W:  'WILD',    SC: 'SC',
+    P1: 'ZEUS',   P2: 'PEGASUS', P3: 'ATHENA', P4: 'EAGLE',
+    L1: 'Z',      L2: 'E',      L3: 'U',      L4: 'S',
+};
 
 // ─── UI 顏色（不影響數學，固定不變）──────────────────────
-export const SYMBOL_COLOR: Record<SymType, string> = {
+export const SYMBOL_COLORS: Record<SymType, string> = {
     W:  '#ffe866', SC: '#cc44ff',
     P1: '#ffcc00', P2: '#44aaff', P3: '#66ffcc', P4: '#ffaa44',
     L1: '#4499ff', L2: '#6688ee', L3: '#5577cc', L4: '#4466bb',

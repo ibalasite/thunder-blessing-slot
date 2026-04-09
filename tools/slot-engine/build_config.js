@@ -559,6 +559,7 @@ function buildDataSheet() {
   P(['EXTRA_BET_MULT',       CONFIG.modes.EB.cost]);
   P(['BUY_COST_MULT',        CONFIG.modes.BuyFG.cost]);
   P(['BUY_FG_MIN_WIN_MULT',  CONFIG.modes.BuyFG.minWinMult]);
+  P(['MAX_WIN_MULT',         CONFIG.maxWinMult]);
   P(['SC_GUARANTEE_EXTRA_BET', 'TRUE']);
   P([]);
 

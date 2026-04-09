@@ -144,10 +144,10 @@ export const LINES_BASE = 25;
 export const LINES_MAX  = 57;
 
 // ─── 押分範圍 ─────────────────────────────────────────────
-export const BET_MIN  = undefined;
-export const BET_MAX  = undefined;
-export const BET_STEP = undefined;
-export const BET_LEVELS: number[] = [];
+export const BET_MIN  = 0.25;
+export const BET_MAX  = 10;
+export const BET_STEP = 0.25;
+export const BET_LEVELS: number[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75, 4, 4.25, 4.5, 4.75, 5, 5.25, 5.5, 5.75, 6, 6.25, 6.5, 6.75, 7, 7.25, 7.5, 7.75, 8, 8.25, 8.5, 8.75, 9, 9.25, 9.5, 9.75, 10];
 
 // ─── Extra Bet & Buy FG ───────────────────────────────────
 export const EXTRA_BET_MULT  = 3;
@@ -164,14 +164,21 @@ export const FG_SPIN_BONUS = [
 ];
 
 // ─── 最大獎金上限 ─────────────────────────────────────────
-export const MAX_WIN_MULT = undefined;
+export const MAX_WIN_MULT = 30000;
 
 // ─── 預設值 ───────────────────────────────────────────────
-export const DEFAULT_BET     = undefined;
-export const DEFAULT_BALANCE = undefined;
+export const DEFAULT_BET     = 0.25;
+export const DEFAULT_BALANCE = 1000;
+
+// ─── 符號標籤（顯示名稱）────────────────────────────────
+export const SYMBOL_LABELS: Record<SymType, string> = {
+    W:  'WILD',    SC: 'SC',
+    P1: 'ZEUS',   P2: 'PEGASUS', P3: 'ATHENA', P4: 'EAGLE',
+    L1: 'Z',      L2: 'E',      L3: 'U',      L4: 'S',
+};
 
 // ─── UI 顏色（不影響數學，固定不變）──────────────────────
-export const SYMBOL_COLOR: Record<SymType, string> = {
+export const SYMBOL_COLORS: Record<SymType, string> = {
     W:  '#ffe866', SC: '#cc44ff',
     P1: '#ffcc00', P2: '#44aaff', P3: '#66ffcc', P4: '#ffaa44',
     L1: '#4499ff', L2: '#6688ee', L3: '#5577cc', L4: '#4466bb',

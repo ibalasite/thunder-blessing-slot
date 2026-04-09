@@ -26,7 +26,7 @@ const GENERATED_DIR = path.resolve(__dirname, 'generated');
 if (!fs.existsSync(GENERATED_DIR)) fs.mkdirSync(GENERATED_DIR, { recursive: true });
 
 // CLI args
-let SIM_SPINS = 500000;
+let SIM_SPINS = 2000000;
 let SIM_RUNS  = 3;
 for (const arg of process.argv.slice(2)) {
   if (arg.startsWith('--spins=')) SIM_SPINS = parseInt(arg.split('=')[1], 10);

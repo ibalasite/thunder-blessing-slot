@@ -1,5 +1,11 @@
 {
-  "basic": {},
+  "basic": {
+    "betMin": 0.25,
+    "betMax": 10,
+    "betStep": 0.25,
+    "defaultBet": 0.25,
+    "defaultBalance": 1000
+  },
   "basePT": {
     "W": [
       0,
