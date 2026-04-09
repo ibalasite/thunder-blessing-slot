@@ -1048,24 +1048,25 @@ test.describe('WIN 累積驗證', () => {
         // Wait for BuyFGPanel to close (spin started)
         await waitPanelClosed(page, 'BuyFGPanel', 15000);
 
-        // Poll WIN label throughout the entire BuyFG session (max 45s)
+        // Poll WIN label throughout the entire BuyFG session (max 60s)
+        // Session ends when TotalWinPanel appears (same logic as runBuyFGWinCheck in WinAccum).
+        // Do NOT use balance changes to detect session end — the high balance from deposits
+        // means the post-cost balance is still well above any threshold.
         const winSamples: number[] = [];
-        const deadline = Date.now() + 45000;
+        const deadline = Date.now() + 60000;
         let sessionDone = false;
 
         while (Date.now() < deadline && !sessionDone) {
             winSamples.push(await readWin());
 
-            // Session ends when TotalWinPanel appears or balance changes
+            // Session ends when TotalWinPanel appears
             if (await isPanelActive(page, 'TotalWinPanel')) {
+                const finalWin = await readWin();
+                winSamples.push(finalWin);
                 sessionDone = true;
-            } else {
-                const curBal = parseBal(await getLabelText(page, 'BalanceLabel'));
-                // Balance decreases by buyCost then increases by win — watch for final credit
-                if (curBal > balBefore - 500) sessionDone = true; // cost deducted + win credited
             }
 
-            await page.waitForTimeout(100);
+            if (!sessionDone) await page.waitForTimeout(120);
         }
 
         // Dismiss TotalWinPanel if present
