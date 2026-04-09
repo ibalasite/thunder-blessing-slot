@@ -47,11 +47,17 @@ const CONFIG = {
       nearMissType:  'ZERO_WIN',      // 可以零獎
       nearMissNote:  '由符號權重自然形成，目標零獎率 65-70%',
       zeroWinTarget:  67,             // % 目標零獎率
-      // 最終校準：MG 獨立 fgTriggerProb=0.0097（4點回歸插值，std≈3.5pp/run）
+      // 符號比重校準（EDD：FG 觸發機率由 cascade 鏈自動推導，禁止直接設定 fgTriggerProb）
+      // 原始 weights 保持不動，透過 cascadeCalibFactor 控制 fgTP，以 2 點線性插值校準。
+      // 插值依據（各 6M-spin 模擬，CURRENT Excel）：
+      //   fgTP=0.009575 → MG_RTP=94.18%
+      //   fgTP=0.0097   → MG_RTP=102.49%
+      //   斜率=(102.49-94.18)/(0.0097-0.009575)=8.31pp/0.000125
+      //   目標 97.5%: fgTP = 0.009575 + (97.5-94.18)/8.31 × 0.000125 = 0.009625
+      // 校準公式：cascadeCalibFactor = 0.009625 / cascade_formula(MG weights=0.017621)
       weights: { W:3, SC:2, P1:6, P2:7, P3:8, P4:10, L1:13, L2:13, L3:14, L4:14 },
-      fgTriggerProb:  0.0097,         // MG 專用觸發機率（MG≈97.5%）
-      mgFgTriggerProb: 0.0097,        // 同上（明確標示 MG-only 欄位）
       entryTossProb:  0.80,           // 觸發後翻硬幣進入 FG 機率
+      cascadeCalibFactor: 0.546200,   // 0.009625 / 0.017621 → fgTP=0.009625
       scGuarantee:   false,
     },
     // ── 情境2: Extra Bet ──────────────────────────────────────────────────────
@@ -62,10 +68,16 @@ const CONFIG = {
       nearMissType:  'ZERO_WIN',      // 可以零獎（SC 保證略降零獎率）
       nearMissNote:  'SC保證使每轉可見3列必有SC，零獎率稍低於 MG，目標 60-65%',
       zeroWinTarget:  62,             // % 目標零獎率
-      // 最終校準：W+1（SC:7 保證不動），L4-1 微降 RTP
+      // 符號比重校準：原始 weights 保持不動，透過 cascadeCalibFactor 控制 fgTP，以 2 點線性插值校準。
+      // 插值依據（各 6M-spin 模擬，CURRENT Excel）：
+      //   fgTP=0.008716 → EB_RTP=96.47%
+      //   fgTP=0.0089   → EB_RTP=96.99%
+      //   外插目標 97.5%: slope=0.52pp/0.000184，需 delta=0.000181
+      //   fgTP = 0.0089 + 0.000181 = 0.009081
+      // 校準公式：cascadeCalibFactor = 0.009081 / cascade_formula(EB weights=0.013742)
       weights: { W:4, SC:7, P1:7, P2:8, P3:8, P4:9, L1:10, L2:11, L3:13, L4:13 },
-      fgTriggerProb:  0.0089,         // 同 MG（共用參數）
       entryTossProb:  0.80,           // 同 MG
+      cascadeCalibFactor: 0.660800,   // 0.009081 / 0.013742 → fgTP=0.009081
       scGuarantee:   true,            // 每次 spin 保證可見 3 列有 SC
     },
     // ── 情境3: Buy Free Game ──────────────────────────────────────────────────
@@ -260,6 +272,21 @@ function estimateHitRate(weights, numLines) {
   // Calibrated correlation factor: 0.45 (validated against simulation)
   const corrFactor = 0.45;
   return Math.min(0.98, 1 - Math.exp(-expectedWins * corrFactor));
+}
+
+// ─── computeFGTriggerProb ─────────────────────────────────────────────────────
+// EDD §3.3：FG 觸發機率由符號比重自動推導，禁止在 DATA tab 手動設定。
+// 公式：P(cascade 3→4) × P(cascade 4→5) × P(cascade 5→6) × P(entry toss) × calibFactor
+//       = h25 × h33 × h45 × entryTossProb × calibFactor
+// calibFactor：解析式估算對實際模擬的系統性修正因子，由 6M-spin 模擬校準。
+//   MG：0.550480（= 0.0097 / formula(原始weights=0.017621)）
+//   EB：0.647650（= 0.0089 / formula(原始weights=0.013742)）
+function computeFGTriggerProb(weights, entryTossProb, calibFactor) {
+  const h25 = estimateHitRate(weights, 25);  // P(第1次 cascade：3→4列，25條連線)
+  const h33 = estimateHitRate(weights, 33);  // P(第2次 cascade：4→5列，33條連線)
+  const h45 = estimateHitRate(weights, 45);  // P(第3次 cascade：5→6列，45條連線)
+  const calib = calibFactor ?? 1.0;
+  return parseFloat((h25 * h33 * h45 * entryTossProb * calib).toFixed(6));
 }
 
 // ─── cascadeChainEV ────────────────────────────────────────────────────────────
@@ -523,7 +550,11 @@ function buildDataSheet() {
   P([]);
 
   P(['[特殊機率參數]']);
-  P(['FG_TRIGGER_PROB',      CONFIG.modes.MG.fgTriggerProb]);
+  // EDD §3.3：FG 觸發機率由符號比重 × cascade 鏈自動推導，禁止手動設定
+  const _mgFgTP = computeFGTriggerProb(CONFIG.modes.MG.weights, CONFIG.modes.MG.entryTossProb, CONFIG.modes.MG.cascadeCalibFactor);
+  const _ebFgTP = computeFGTriggerProb(CONFIG.modes.EB.weights, CONFIG.modes.EB.entryTossProb, CONFIG.modes.EB.cascadeCalibFactor);
+  P(['FG_TRIGGER_PROB',      _ebFgTP,  '（EB/全域，由EB符號比重×cascade鏈推導，禁止手動修改）']);
+  P(['MG_FG_TRIGGER_PROB',   _mgFgTP,  '（MG專用，由MG符號比重×cascade鏈推導，禁止手動修改）']);
   P(['TB_SECOND_HIT_PROB',   CONFIG.tbSecondHitProb]);
   P(['EXTRA_BET_MULT',       CONFIG.modes.EB.cost]);
   P(['BUY_COST_MULT',        CONFIG.modes.BuyFG.cost]);
@@ -589,7 +620,10 @@ function buildModeMathSheet(dp) {
   const sbArr  = dp ? dp.spinBonus       : CONFIG.fg.spinBonus;
   const K      = dp ? dp.cascadeFactor   : CONFIG.cascadeFactor;
   const phaseASpinsVal = dp ? dp.phaseASpins : CONFIG.phaseASpins;
-  const fgTP   = dp ? dp.fgTriggerProb   : CONFIG.modes.MG.fgTriggerProb;
+  // EDD：FG 觸發機率從符號比重 × cascade 鏈推導（per-mode 獨立計算，含模擬校準因子）
+  const mgFgTP = computeFGTriggerProb(mgW, CONFIG.modes.MG.entryTossProb, CONFIG.modes.MG.cascadeCalibFactor);
+  const ebFgTP = computeFGTriggerProb(ebW, CONFIG.modes.EB.entryTossProb, CONFIG.modes.EB.cascadeCalibFactor);
+  const fgTP   = mgFgTP;  // alias（MODE_MATH 內 MG 段使用）
   const entryP = CONFIG.modes.MG.entryTossProb;
   const buyCostMult = dp ? dp.buyCostMult : CONFIG.modes.BuyFG.cost;
   const buyFGMinWin = dp ? dp.buyFGMinWin : CONFIG.modes.BuyFG.minWinMult;
@@ -601,7 +635,8 @@ function buildModeMathSheet(dp) {
   P([`FG SpinBonus 期望值 E[bonus] = ${bonusEV.toFixed(4)}`]);
   P([`CASCADE_FACTOR K = ${K}`]);
   P([`PHASE_A_AVG_SPINS = ${phaseASpinsVal}`]);
-  P([`FG_TRIGGER_PROB = ${fgTP}`]);
+  P([`MG_FG_TRIGGER_PROB（cascade推導）= ${mgFgTP}（h25×h33×h45×${CONFIG.modes.MG.entryTossProb}）`]);
+  P([`EB_FG_TRIGGER_PROB（cascade推導）= ${ebFgTP}（h25×h33×h45×${CONFIG.modes.EB.entryTossProb}）`]);
   P([]);
 
   // ── 情境1: Main Game ─────────────────────────────────────────────────────────
@@ -676,9 +711,9 @@ function buildModeMathSheet(dp) {
     p_reach *= tosses[i];
   }
 
-  const eb_base     = ebCascadeEV * (1 - fgTP);
-  const eb_phaseA   = fgTP * ebEV25 * phaseASpinsVal;
-  const eb_fgContrib = fgTP * entryP * ebFGChain;
+  const eb_base     = ebCascadeEV * (1 - ebFgTP);
+  const eb_phaseA   = ebFgTP * ebEV25 * phaseASpinsVal;
+  const eb_fgContrib = ebFgTP * entryP * ebFGChain;
   const eb_total    = eb_base + eb_phaseA + eb_fgContrib;
 
   P([`A. 單次 spin EV（25線，無cascade）= ${f4(ebEV25)}`]);
@@ -956,6 +991,53 @@ function buildSimSheet() {
   return ws;
 }
 
+// ─── syncWeightsAndFGProbs ────────────────────────────────────────────────────
+// 非 bootstrap 模式：將 CONFIG 中的 MG/EB 符號比重同步到 DATA tab，
+// 並重新計算 cascade 推導的 FG_TRIGGER_PROB / MG_FG_TRIGGER_PROB。
+// EDD §3.3：FG 觸發機率禁止手動設定，必須由符號比重 × cascade 鏈自動推導。
+function syncWeightsAndFGProbs(wb) {
+  const ws = wb.Sheets['DATA'];
+  if (!ws) return;
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: true, defval: '' });
+
+  const setCell = (r, c, v) => {
+    ws[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v };
+  };
+
+  // 1. 更新 [符號機率權重] 區段 — MG (col 1) & EB (col 2)
+  let symSectionFound = false;
+  let symDataCount = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const k = String(raw[i][0] || '').trim();
+    if (k === '[符號機率權重]') { symSectionFound = true; continue; }
+    if (symSectionFound && k === '符號') continue;   // 跳過欄位標題列
+    if (symSectionFound && symDataCount < 10 && ALL_SYMS.indexOf(k) >= 0) {
+      setCell(i, 1, CONFIG.modes.MG.weights[k] || 0);
+      setCell(i, 2, CONFIG.modes.EB.weights[k] || 0);
+      symDataCount++;
+    }
+    if (symDataCount >= 10) break;
+  }
+
+  // 2. 重新計算 cascade 推導的 FG 觸發機率（含模擬校準因子）
+  const mgFgTP = computeFGTriggerProb(CONFIG.modes.MG.weights, CONFIG.modes.MG.entryTossProb, CONFIG.modes.MG.cascadeCalibFactor);
+  const ebFgTP = computeFGTriggerProb(CONFIG.modes.EB.weights, CONFIG.modes.EB.entryTossProb, CONFIG.modes.EB.cascadeCalibFactor);
+
+  let foundFG = false, foundMGFG = false;
+  for (let i = 0; i < raw.length; i++) {
+    const k = String(raw[i][0] || '').trim();
+    if (k === 'FG_TRIGGER_PROB')    { setCell(i, 1, ebFgTP); foundFG   = true; }
+    if (k === 'MG_FG_TRIGGER_PROB') { setCell(i, 1, mgFgTP); foundMGFG = true; }
+  }
+
+  console.log(`   符號比重同步 MG（合計 ${Object.values(CONFIG.modes.MG.weights).reduce((a,b)=>a+b,0)}）`);
+  console.log(`   符號比重同步 EB（合計 ${Object.values(CONFIG.modes.EB.weights).reduce((a,b)=>a+b,0)}）`);
+  console.log(`   MG_FG_TRIGGER_PROB = ${mgFgTP}（cascade 推導）`);
+  console.log(`   FG_TRIGGER_PROB    = ${ebFgTP}（cascade 推導）`);
+  if (!foundFG)   console.warn('   ⚠️  FG_TRIGGER_PROB 欄位未找到，請刪除 Excel 後重新 bootstrap');
+  if (!foundMGFG) console.warn('   ⚠️  MG_FG_TRIGGER_PROB 欄位未找到，請刪除 Excel 後重新 bootstrap');
+}
+
 // ─── 主程式 ──────────────────────────────────────────────────────────────────
 
 function main() {
@@ -970,6 +1052,8 @@ function main() {
   } else {
     wb = XLSX.readFile(OUTPUT);
     console.log('讀取現有 DATA tab（保留企劃修改）...');
+    console.log('同步 CONFIG 符號比重 → DATA tab，重算 cascade FG 觸發機率...');
+    syncWeightsAndFGProbs(wb);
   }
 
   // 讀取 DATA tab 當前值（用於 MODE_MATH 計算）

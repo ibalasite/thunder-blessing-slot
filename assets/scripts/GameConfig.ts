@@ -130,8 +130,8 @@ export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 export const COIN_TOSS_HEADS_PROB = [0.8, 0.68, 0.56, 0.48, 0.4];
 export const ENTRY_TOSS_PROB_MAIN = 0.8;
 export const ENTRY_TOSS_PROB_BUY  = 1;
-export const FG_TRIGGER_PROB    = 0.0089;
-export const MG_FG_TRIGGER_PROB = 0.0097;  // MG 獨立校準（97.5% RTP，回歸插值 4 點）
+export const FG_TRIGGER_PROB    = 0.009081;  // EB/全域 cascade 推導（97.5% 目標，2M×3 驗證）
+export const MG_FG_TRIGGER_PROB = 0.009624;  // MG cascade 推導（97.5% 目標，2M×3 驗證）
 export const TB_SECOND_HIT_PROB = 0.4;
 
 // ─── 符號升階表 ───────────────────────────────────────────

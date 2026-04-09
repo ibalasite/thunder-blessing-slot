@@ -170,6 +170,60 @@ const PAYLINES_57 = [...PAYLINES_45,
 ];
 const PAYLINES_BY_ROWS = { 3:PAYLINES_25, 4:PAYLINES_33, 5:PAYLINES_45, 6:PAYLINES_57 };
 
+// ─── PAYTABLE 解析式命中率計算 ────────────────────────────────────────────────
+// 供 DESIGN_VIEW 的 PAYTABLE 分析頁使用
+
+function paytableHitRate(weights, sym, count) {
+  const total = Object.values(weights).reduce((a,b)=>a+b,0);
+  const p_s   = (weights[sym] || 0) / total;
+  const p_w   = (weights['W'] || 0)  / total;
+  const p_sw  = p_s + p_w;
+  if (p_s <= 0) return 0;
+  if (count === 5) return p_s * Math.pow(p_sw, 4);
+  return p_s * Math.pow(p_sw, count-1) * Math.pow(1-p_sw, 5-count);
+}
+
+function buildPaytableAnalysis(cfg, modeKey) {
+  // modeKey: 'mainGame' | 'extraBet' | 'buyFG'（FG spin 用 freeGame weights）
+  const baseWeightsMap = {
+    mainGame: cfg.weights.mainGame,
+    extraBet: cfg.weights.extraBet,
+    buyFG:    cfg.weights.buyFG,
+  };
+  const baseW  = baseWeightsMap[modeKey] || cfg.weights.mainGame;
+  const fgW    = cfg.weights.freeGame;
+  const scale  = cfg.scales.PAYTABLE_SCALE;
+  const PAY_SYMS = ['W','P1','P2','P3','P4','L1','L2','L3','L4'];
+  const LINES  = [25, 33, 45, 57];
+
+  const rows = [];
+  rows.push(['符號', '連線數', '單線命中率%', '25條EV', '33條EV', '45條EV', '57條EV', '賠率(×bet)', 'RTP貢獻@25線%']);
+
+  let totalRTPContrib = 0;
+  for (const sym of PAY_SYMS) {
+    for (const cnt of [3, 4, 5]) {
+      const basePay = (cfg.basePT[sym]?.[cnt] || 0) * scale;
+      if (basePay <= 0) continue;
+      const baseHR = paytableHitRate(baseW, sym, cnt);
+      const fgHR   = paytableHitRate(fgW,   sym, cnt);
+      const contrib25 = baseHR * basePay * 25 * 100;
+      totalRTPContrib += contrib25;
+      rows.push([
+        sym, cnt + '連',
+        (baseHR * 100).toFixed(4) + '%',
+        (baseHR * basePay * 25).toFixed(5),
+        (baseHR * basePay * 33).toFixed(5),
+        (baseHR * basePay * 45).toFixed(5),
+        (fgHR  * basePay * 57).toFixed(5),
+        basePay.toFixed(4),
+        contrib25.toFixed(4) + '%',
+      ]);
+    }
+  }
+  rows.push(['合計 base spin RTP 貢獻（25線，無cascade）', '', '', '', '', '', '', '', totalRTPContrib.toFixed(3) + '%']);
+  return rows;
+}
+
 // ─── RNG（Mulberry32）───────────────────────────────────────────────────────
 
 function mulberry32(seed) {
@@ -691,14 +745,32 @@ function buildDesignViewSheet(cfg, results, simSpins, simRuns) {
   // ── 6. 企劃調整指引
   P(['══ 6. 企劃調整指引 ══════════════════════════════════════════']);
   P(['狀況',                  '調整方式']);
-  P(['RTP 偏低',              '↑ Wild/Premium 權重 或 ↑ FG_TRIGGER_PROB']);
-  P(['RTP 偏高',              '↓ Wild/Premium 權重 或 ↓ FG_TRIGGER_PROB']);
+  P(['RTP 偏低',              '↑ Wild/Premium 符號比重（出現率）']);
+  P(['RTP 偏高',              '↓ Wild/Premium 符號比重（出現率），↑ L3/L4 比重']);
   P(['零獎率過高（MG/EB）',   '↑ Wild 權重（Wild 替代增加命中）']);
   P(['零獎率過低（MG/EB）',   '↓ Wild 權重']);
   P(['BuyFG 近失率過高',      '↑ BuyFG Wild 權重（使更多 spin 自然超過 floor）']);
   P(['BuyFG 近失率過低',      '↓ BuyFG Wild 權重（使更多 spin 落在 floor 附近）']);
   P(['巨獎率過低',            '↑ Wild 5連命中率；或調整 FG Spin Bonus 分佈']);
-  P(['每次調整後：',          'node excel_simulator.js → 確認 DESIGN_VIEW + SIMULATION 結果']);
+  P(['每次調整後：',          'node build_config.js → node excel_simulator.js → 確認 DESIGN_VIEW + SIMULATION 結果']);
+  P([]);
+
+  // ── 7. PAYTABLE 命中率與 RTP 貢獻（解析式，各情境獨立）
+  P(['══ 7. PAYTABLE 命中率分析（解析式，base spin × 25 條連線）══════════════════']);
+  P(['說明：單線命中率×25線×賠率 = base spin RTP 貢獻；cascade/FG/TB 另外加成（見 MODE_MATH tab）']);
+  P([]);
+
+  const paytableModes = [
+    { key: 'mainGame', label: '情境1 Main Game' },
+    { key: 'extraBet', label: '情境2 Extra Bet' },
+    { key: 'buyFG',    label: '情境3/4 BuyFG（base spin）' },
+  ];
+  for (const { key, label } of paytableModes) {
+    P([`── ${label} ──`]);
+    const ptRows = buildPaytableAnalysis(cfg, key);
+    for (const r of ptRows) P(r);
+    P([]);
+  }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:24},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:28}];
@@ -713,8 +785,9 @@ async function main() {
 
   const cfg = readConfig();
   console.log(`✅  Config loaded from Thunder_Config.xlsx`);
-  console.log(`    PAYTABLE_SCALE=${cfg.scales.PAYTABLE_SCALE}  FG_TRIGGER_PROB=${cfg.special.fgTriggerProb}`);
-  console.log(`    PAYTABLE_SCALE=${cfg.scales.PAYTABLE_SCALE}  （mode-specific payout scales 已依 EDD 移除）\n`);
+  console.log(`    PAYTABLE_SCALE=${cfg.scales.PAYTABLE_SCALE}`);
+  console.log(`    FG_TRIGGER_PROB(EB/全域)=${cfg.special.fgTriggerProb}  MG_FG_TRIGGER_PROB=${cfg.special.mgFgTriggerProb ?? cfg.special.fgTriggerProb}`);
+  console.log(`    （FG觸發機率由符號比重×cascade鏈自動推導，非手動設定）\n`);
 
   const modes = [
     { key: 'mainGame',  label: 'Main Game',  wagered: 1 },

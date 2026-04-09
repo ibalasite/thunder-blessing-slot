@@ -5,8 +5,9 @@
  *   - 與 ProbabilityCore.unit.test.ts 對稱：複製所有結構性驗證
  *   - 加入新校準值的精確比對（FG_TRIGGER_PROB）
  *
- * 校準來源：Thunder_Config.xlsx（2026-04-03）
- *   FG_TRIGGER_PROB      0.008   → 0.0089   (+11.25%，提升 MG RTP)
+ * 校準來源：Thunder_Config.xlsx（2026-04-09）
+ *   FG_TRIGGER_PROB      0.0089  → 0.009081  (+2.03%，EB/全域 cascade 推導 97.5% RTP)
+ *   MG_FG_TRIGGER_PROB   0.0097  → 0.009624  (-0.78%，MG cascade 推導 97.5% RTP)
  */
 
 import { SlotEngine, calcWinAmount, findScatters, WinLine } from '../../assets/scripts/SlotEngine';
@@ -41,10 +42,10 @@ function emptyGrid(sym: SymType = SYM.L4): SymType[][] {
 
 // ── 1. 新校準機率精確值驗證 ──────────────────────────────────────────────────
 
-describe('Calibrated Probability Values — 2026-04-03', () => {
+describe('Calibrated Probability Values — 2026-04-09', () => {
 
-    it('FG_TRIGGER_PROB = 0.0089 (升自 0.008，MG RTP 校準)', () => {
-        expect(FG_TRIGGER_PROB).toBeCloseTo(0.0089, 6);
+    it('FG_TRIGGER_PROB = 0.009081 (EB/全域 cascade 推導，97.5% 目標)', () => {
+        expect(FG_TRIGGER_PROB).toBeCloseTo(0.009081, 6);
     });
 
     it('FG_TRIGGER_PROB 在合法範圍內（0 < p < 0.10）', () => {
@@ -386,9 +387,9 @@ describe('findScatters', () => {
 
 // ── 12. 新 FG_TRIGGER_PROB 模擬收斂驗證 ─────────────────────────────────────
 
-describe('FG Trigger Probability Convergence (new = 0.0089)', () => {
+describe('FG Trigger Probability Convergence (new = 0.009081)', () => {
 
-    it('模擬 100k spins：FG 觸發率收斂至 0.0089 ± 0.001', () => {
+    it('模擬 100k spins：FG 觸發率收斂至 0.009081 ± 0.001', () => {
         const rng = mulberry32(7777);
         const N = 100_000;
         let triggered = 0;
@@ -401,14 +402,14 @@ describe('FG Trigger Probability Convergence (new = 0.0089)', () => {
     });
 
     it('新 fgTriggerProb 比舊值 0.008 多觸發 FG（期望值更高）', () => {
-        // 在相同 N 下，新機率的期望觸發次數 = 0.0089N > 0.008N
+        // 在相同 N 下，新機率的期望觸發次數 = 0.009081N > 0.008N
         const OLD_FG_TRIGGER_PROB = 0.008;
         const expectedNew = FG_TRIGGER_PROB * 100_000;
         const expectedOld = OLD_FG_TRIGGER_PROB * 100_000;
         expect(expectedNew).toBeGreaterThan(expectedOld);
-        // 增幅約 11.25%
+        // 增幅約 13.5%
         expect((FG_TRIGGER_PROB - OLD_FG_TRIGGER_PROB) / OLD_FG_TRIGGER_PROB)
-            .toBeCloseTo(0.1125, 2);
+            .toBeCloseTo(0.1351, 2);
     });
 });
 

@@ -152,12 +152,12 @@
   "entryMain": 0.8,
   "entryBuy": 1,
   "special": {
-    "fgTriggerProb": 0.0089,
+    "fgTriggerProb": 0.009081,
+    "mgFgTriggerProb": 0.009624,
     "tbSecondHit": 0.4,
     "extraBetMult": 3,
     "buyCostMult": 100,
-    "buyFGMinWin": 20,
-    "mgFgTriggerProb": 0.0097
+    "buyFGMinWin": 20
   },
   "fgBonus": [
     {

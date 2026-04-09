@@ -1,6 +1,6 @@
 /**
  * GameConfig.generated.ts
- * ⚠️  此檔案由 tools/slot-engine/engine_generator.js 自動產生 (2026-04-07)
+ * ⚠️  此檔案由 tools/slot-engine/engine_generator.js 自動產生 (2026-04-09)
  * ⚠️  請勿手動編輯 — 修改 Thunder_Config.xlsx DATA tab 後重新執行 engine_generator.js
  *
  * 來源：Thunder_Config.xlsx
@@ -130,8 +130,8 @@ export const FG_MULTIPLIERS = [3, 7, 17, 27, 77];
 export const COIN_TOSS_HEADS_PROB = [0.8, 0.68, 0.56, 0.48, 0.4];
 export const ENTRY_TOSS_PROB_MAIN = 0.8;
 export const ENTRY_TOSS_PROB_BUY  = 1;
-export const FG_TRIGGER_PROB    = 0.0089;
-export const MG_FG_TRIGGER_PROB = 0.0097;
+export const FG_TRIGGER_PROB    = 0.009081;
+export const MG_FG_TRIGGER_PROB = 0.009624;
 export const TB_SECOND_HIT_PROB = 0.4;
 
 // ─── 符號升階表 ───────────────────────────────────────────
