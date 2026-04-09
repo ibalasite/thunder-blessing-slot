@@ -203,7 +203,11 @@ export class GameFlowController {
 
         // ── 3. 入帳（立即）──────────────────────
         // 以引擎的 totalWin 為唯一權威值；session.roundWin 僅供動畫期間 UI 顯示用
+        // Sync roundWin ↔ totalWin: handle both min-win guarantee (totalWin > roundWin)
+        // and floating-point accumulation (roundWin slightly > totalWin).
         const totalWin = outcome.totalWin;
+        const roundWinDiff = parseFloat((totalWin - this._session.roundWin).toFixed(4));
+        if (Math.abs(roundWinDiff) > 0.0001) this._session.addRoundWin(roundWinDiff);
         if (w && tx) {
             const newBal = w.completeSpin(tx, totalWin);
             this._ui.setDisplayBalance(newBal);

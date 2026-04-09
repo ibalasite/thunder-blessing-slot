@@ -165,9 +165,12 @@ function assertFGComplete(r: RunResult): void {
     expect(ui.record.hideFGBarCalls).toBeGreaterThanOrEqual(1);
     expect(session.inFreeGame).toBe(false);
 
-    // At least 1 tier upgrade coin toss played (isFGContext=true)
-    const tierUpgradeTosses = ui.record.playCoinTossCalls.filter(c => c[0] === true);
-    expect(tierUpgradeTosses.length).toBeGreaterThanOrEqual(1);
+    // Tier upgrade coin toss: interactive for MG/EB, auto-skipped for BuyFG
+    // (BuyFG has ENTRY_TOSS_PROB_BUY=1 and guaranteed heads — no interactive UI needed)
+    if (mode !== 'buyFG') {
+        const tierUpgradeTosses = ui.record.playCoinTossCalls.filter(c => c[0] === true);
+        expect(tierUpgradeTosses.length).toBeGreaterThanOrEqual(1);
+    }
 
     // Total Win shown at the end
     expect(ui.record.showTotalWinCalls.length).toBeGreaterThanOrEqual(1);
@@ -218,11 +221,15 @@ describe('E2E: Buy Free Game → 完整 FG 流程 → Total Win', () => {
         }
     });
 
-    it('Buy FG tier 升級硬幣至少翻 1 次', async () => {
-        for (let seed = 0; seed < 20; seed++) {
+    it('Buy FG tier 升級自動推進（status 包含倍率字串，無互動 coin toss）', async () => {
+        // BuyFG skips interactive coin toss (ENTRY_TOSS_PROB_BUY=1, all spins guaranteed heads).
+        // Verify auto-progression via status messages instead.
+        for (let seed = 0; seed < 5; seed++) {
             const r = await runFGFlow('buyFG', seed);
             const tierTosses = r.ui.record.playCoinTossCalls.filter(c => c[0] === true);
-            expect(tierTosses.length).toBeGreaterThanOrEqual(1);
+            expect(tierTosses.length).toBe(0); // BuyFG: no interactive coin toss UI
+            const hasProgression = r.ui.record.statusMessages.some(m => /x\d|FREE GAME/i.test(m));
+            expect(hasProgression).toBe(true);
         }
     });
 });

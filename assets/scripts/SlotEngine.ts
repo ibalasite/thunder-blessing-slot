@@ -271,13 +271,16 @@ export class SlotEngine {
         startRows?:      number;
         /** Max cascade iterations (default 20). Set to 1 to disable cascading. */
         maxCascade?:     number;
+        /** Stop cascading immediately when rows reaches MAX_ROWS (Phase A behavior). */
+        stopAtMaxRows?:  boolean;
     } = {}): SpinResult {
         const useFG    = opts.inFreeGame   ?? false;
         const useEB    = opts.extraBet     ?? false;
         const useBuyFG = opts.buyFG        ?? false;
         const fgMult   = opts.fgMultiplier ?? 1;
         const totalBet = opts.totalBet     ?? 1;
-        const maxCascade = opts.maxCascade ?? 20;
+        const maxCascade    = opts.maxCascade    ?? 20;
+        const stopAtMaxRows = opts.stopAtMaxRows ?? false;
 
         // Direction A fix: EB wins scale with wagered (= totalBet × EXTRA_BET_MULT).
         // BuyFG+EB: totalBet already includes ebMult from GameFlowController, no extra scaling.
@@ -360,6 +363,9 @@ export class SlotEngine {
 
             cascadeSteps.push({ wins, winCells, rawWin, rowsAfter: newRows });
             rows = newRows;
+
+            // Phase A: stop cascade immediately on reaching MAX_ROWS (matches excel_simulator).
+            if (stopAtMaxRows && rows >= MAX_ROWS) break;
         }
 
         return {
@@ -430,6 +436,7 @@ export class SlotEngine {
                     buyFG: isBuyFG,
                     startRows: currentRows,
                     lightningMarks: baseMarks,
+                    stopAtMaxRows: true,   // Phase A: stop when MAX_ROWS reached (matches excel_simulator)
                 });
                 baseSpins.push(this._toSpinResponse(r, 1, baseMarks));
                 baseWin += r.totalRawWin;
@@ -465,14 +472,16 @@ export class SlotEngine {
             for (let safety = 0; safety < 200; safety++) {
                 const mult = FG_MULTIPLIERS[multIdx];
 
-                const r = this.simulateSpin({
-                    inFreeGame: true, fgMultiplier: mult,
-                    buyFG: isBuyFG,
-                    totalBet, lightningMarks: fgMarks,
-                    // BuyFG: no SC guarantee (marks always 0 at spin start, TB can't fire)
-                    // EB/MG FG: preserve SC guarantee to enable TB via accumulated marks
-                    extraBet: isBuyFG ? false : extraBet,
-                });
+                // BuyFG: single-step with win guarantee (matches excel_simulator calibration).
+                //   extraBet=true (EB+BuyFG): SC guarantee applied per spec.
+                // Main/EB FG: full cascade (default 20), SC guarantee via extraBet.
+                const r = isBuyFG
+                    ? this._buyFGSpin(totalBet, mult, extraBet)
+                    : this.simulateSpin({
+                        inFreeGame: true, fgMultiplier: mult,
+                        totalBet, lightningMarks: fgMarks,
+                        extraBet,
+                    });
 
                 const rawWin = r.totalRawWin;
                 const spinBonus = this._drawFGSpinBonus();
@@ -531,6 +540,34 @@ export class SlotEngine {
             fgSpins, fgWin,
             totalRawWin, totalWin, maxWinCapped,
         };
+    }
+
+    /**
+     * BuyFG FG spin: single-step, retries until win > 0 (max 50 attempts).
+     * Uses a fresh marks set per spin (no TB carry-over — BuyFG design spec).
+     * Matches excel_simulator.js _guaranteedWinSpin — calibration depends on this.
+     * When extraBet=true (EB+BuyFG mode), SC guarantee is applied per spec.
+     */
+    private _buyFGSpin(totalBet: number, fgMult: number, extraBet = false): SpinResult {
+        for (let attempt = 0; attempt < 50; attempt++) {
+            const r = this.simulateSpin({
+                inFreeGame: true, fgMultiplier: fgMult,
+                buyFG: true,
+                totalBet,
+                lightningMarks: new Set<string>(),
+                extraBet,
+                maxCascade: 1,
+            });
+            if (r.totalRawWin > 0) return r;
+        }
+        return this.simulateSpin({
+            inFreeGame: true, fgMultiplier: fgMult,
+            buyFG: true,
+            totalBet,
+            lightningMarks: new Set<string>(),
+            extraBet,
+            maxCascade: 1,
+        });
     }
 
     private _drawFGSpinBonus(): number {

@@ -102,13 +102,12 @@ describe('Buy FG — 完整流程整合測試', () => {
         }
     });
 
-    it('Buy FG 播放 playCoinToss（僅 tier 升級儀式）', async () => {
-        const { ui, ctrl } = makeIntegration(42);
-        await ctrl.onBuyFreeGame();
-        expect(ui.playCoinToss).toHaveBeenCalled();
-        const calls = (ui.playCoinToss as jest.Mock).mock.calls;
-        for (const c of calls) {
-            expect(c[0]).toBe(true);
+    it('Buy FG 不呼叫 playCoinToss（自動推進，無互動硬幣動畫）', async () => {
+        for (let seed = 0; seed < 20; seed++) {
+            const { ui, ctrl } = makeIntegration(seed);
+            await ctrl.onBuyFreeGame();
+            const calls = (ui.playCoinToss as jest.Mock).mock.calls;
+            expect(calls.length).toBe(0); // BuyFG: auto-progression, no interactive coin toss
         }
     });
 
