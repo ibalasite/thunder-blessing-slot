@@ -165,12 +165,9 @@ function assertFGComplete(r: RunResult): void {
     expect(ui.record.hideFGBarCalls).toBeGreaterThanOrEqual(1);
     expect(session.inFreeGame).toBe(false);
 
-    // Tier upgrade coin toss: interactive for MG/EB, auto-skipped for BuyFG
-    // (BuyFG has ENTRY_TOSS_PROB_BUY=1 and guaranteed heads — no interactive UI needed)
-    if (mode !== 'buyFG') {
-        const tierUpgradeTosses = ui.record.playCoinTossCalls.filter(c => c[0] === true);
-        expect(tierUpgradeTosses.length).toBeGreaterThanOrEqual(1);
-    }
+    // Tier upgrade coin toss: all modes call playCoinToss (BuyFG uses predetermined heads)
+    const tierUpgradeTosses = ui.record.playCoinTossCalls.filter(c => c[0] === true);
+    expect(tierUpgradeTosses.length).toBeGreaterThanOrEqual(1);
 
     // Total Win shown at the end
     expect(ui.record.showTotalWinCalls.length).toBeGreaterThanOrEqual(1);
@@ -221,13 +218,15 @@ describe('E2E: Buy Free Game → 完整 FG 流程 → Total Win', () => {
         }
     });
 
-    it('Buy FG tier 升級自動推進（status 包含倍率字串，無互動 coin toss）', async () => {
-        // BuyFG skips interactive coin toss (ENTRY_TOSS_PROB_BUY=1, all spins guaranteed heads).
-        // Verify auto-progression via status messages instead.
+    it('Buy FG tier 升級 coin toss 動畫播放（結果全為正面）', async () => {
+        // BuyFG plays coin toss animation (predetermined heads) at entry + each tier upgrade.
         for (let seed = 0; seed < 5; seed++) {
             const r = await runFGFlow('buyFG', seed);
             const tierTosses = r.ui.record.playCoinTossCalls.filter(c => c[0] === true);
-            expect(tierTosses.length).toBe(0); // BuyFG: no interactive coin toss UI
+            expect(tierTosses.length).toBeGreaterThanOrEqual(1); // entry toss + per-spin tosses
+            for (const [, result] of tierTosses) {
+                expect(result).toBe(true); // all predetermined heads
+            }
             const hasProgression = r.ui.record.statusMessages.some(m => /x\d|FREE GAME/i.test(m));
             expect(hasProgression).toBe(true);
         }

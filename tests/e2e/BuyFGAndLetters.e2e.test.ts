@@ -232,9 +232,9 @@ describe('E2E: FREE letters progressive lighting', () => {
 
 describe('E2E: Buy FG tier upgrade coin toss', () => {
 
-    it('BuyFG 無互動 coin toss（全自動推進，playCoinToss 不應被呼叫）', async () => {
-        // BuyFG skips playCoinToss UI — ENTRY_TOSS_PROB_BUY=1 and all per-spin tosses
-        // are guaranteed heads, so the interactive overlay is intentionally omitted.
+    it('BuyFG coin toss 動畫照常播放，結果全為正面（playCoinToss 必須被呼叫）', async () => {
+        // BuyFG entry toss and all per-spin tosses call playCoinToss(true, true).
+        // The animation plays with predetermined heads result.
         for (let seed = 0; seed < 30; seed++) {
             const session = new GameSession();
             const account = new LocalAccountService(10000);
@@ -247,7 +247,10 @@ describe('E2E: Buy FG tier upgrade coin toss', () => {
             await ctrl.onBuyFreeGame();
 
             const coinCalls = (ui.playCoinToss as jest.Mock).mock.calls;
-            expect(coinCalls.length).toBe(0); // BuyFG: auto-progression, no interactive coin toss
+            expect(coinCalls.length).toBeGreaterThanOrEqual(1); // entry + per-spin tosses
+            for (const [, result] of coinCalls) {
+                expect(result).toBe(true); // all predetermined heads
+            }
         }
     });
 

@@ -261,13 +261,14 @@ export class GameFlowController {
             this._ui.showFGBar(0);
 
             if (o.mode === 'buyFG') {
-                // BuyFG: entry is mathematically guaranteed (ENTRY_TOSS_PROB_BUY = 1).
-                // Skip the interactive coin toss UI — go directly to FG spin loop.
-                // Showing a coin toss with WIN: 0 (base spin often has no line wins
-                // in buyFG weight mode) confuses players. The per-spin tosses (x3→x7
-                // etc.) still show, all predetermined heads, each after a spin with wins.
-                this._ui.setStatus('FREE GAME — x3 START!', '#00ff88');
+                // BuyFG: entry is guaranteed heads — show animation (result predetermined).
+                this._ui.setStatus('FLIP TO ENTER FREE GAME!', '#ffaa44');
                 await this._wait(0.5);
+
+                await this._ui.playCoinToss(true, true);
+
+                this._ui.setStatus('FREE GAME — x3 START!', '#00ff88');
+                await this._wait(0.8);
             } else {
                 // Normal / ExtraBet FG: entry coin toss is interactive (may be tails)
                 this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
@@ -352,19 +353,14 @@ export class GameFlowController {
                 // Per-spin Coin Toss
                 if (fg.coinToss.heads && i < o.fgSpins.length - 1) {
                     const nextMult = o.fgSpins[i + 1].multiplier;
-                    if (o.mode === 'buyFG') {
-                        // BuyFG: all per-spin tosses are guaranteed heads — skip interactive UI.
-                        // Same reason as entry toss: showing a full-screen overlay right after
-                        // wins confuses players (WIN can briefly show 0 behind the overlay).
-                        this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
-                        await this._wait(0.6);
-                    } else {
-                        this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
-                        await this._wait(0.3);
-                        await this._ui.playCoinToss(true, true);
-                        this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
-                        await this._wait(0.6);
-                    }
+                    // Both BuyFG and normal FG: show the coin toss animation.
+                    // BuyFG tosses are predetermined heads; normal FG tosses are also heads
+                    // at this branch (tails handled below).
+                    this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
+                    await this._wait(0.3);
+                    await this._ui.playCoinToss(true, true);
+                    this._ui.setStatus(`+1 FREE GAME — x${nextMult}!`, '#ffd700');
+                    await this._wait(0.6);
                 } else if (!fg.coinToss.heads) {
                     this._ui.setStatus('FLIP TO CONTINUE WITH INCREASED MULTIPLIER', '#ffaa44');
                     await this._wait(0.3);
