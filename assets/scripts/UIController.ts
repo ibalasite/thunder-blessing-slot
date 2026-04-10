@@ -313,7 +313,7 @@ export class UIController extends Component implements IUIController {
         return this.showCoinToss(isFGContext, 0).then(() => {});
     }
 
-    showTotalWin(amount: number): Promise<void> {
+    showTotalWin(amount: number, autoCollectAfterMs?: number): Promise<void> {
         return new Promise<void>(resolve => {
             this._collectResolve = resolve;
             if (this._totalWinLbl) this._totalWinLbl.string = amount.toFixed(2);
@@ -325,10 +325,27 @@ export class UIController extends Component implements IUIController {
                     .to(0.15, { scale: new Vec3(1,   1,   1) })
                     .start();
             }
+            if (autoCollectAfterMs !== undefined) {
+                setTimeout(() => {
+                    if (this._collectResolve) {
+                        this.totalWinPanel.active = false;
+                        const cb = this._collectResolve;
+                        this._collectResolve = undefined;
+                        cb();
+                    }
+                }, autoCollectAfterMs);
+            }
         });
     }
 
-    onCollect(): void { this._collectResolve?.(); }
+    onCollect(): void {
+        if (this._collectResolve) {
+            this.totalWinPanel.active = false;
+            const cb = this._collectResolve;
+            this._collectResolve = undefined;
+            cb();
+        }
+    }
 
     async showThunderBlessing(): Promise<void> {
         if (this._tbActive) return;

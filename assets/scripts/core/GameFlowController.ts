@@ -291,7 +291,8 @@ export class GameFlowController {
                     this._ui.hideFGBar();
 
                     if (this._session.roundWin > 0) {
-                        await this._ui.showTotalWin(this._session.roundWin);
+                        const autoMs = this.autoSpinCount !== 0 ? 2000 : undefined;
+                        await this._ui.showTotalWin(this._session.roundWin, autoMs);
                     }
                     return;
                 }
@@ -390,7 +391,8 @@ export class GameFlowController {
             this._ui.refresh();
             await this._wait(1.0);
 
-            await this._ui.showTotalWin(o.totalWin);
+            const autoMs = this.autoSpinCount !== 0 ? 2000 : undefined;
+            await this._ui.showTotalWin(o.totalWin, autoMs);
         }
     }
 

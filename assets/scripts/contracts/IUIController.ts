@@ -34,8 +34,8 @@ export interface IUIController {
     showCoinToss(isFGContext: boolean, headsProb?: number): Promise<boolean>;
     /** 播放已決定結果的硬幣動畫（atomic spin 用，不含隨機） */
     playCoinToss(isFGContext: boolean, result: boolean): Promise<void>;
-    /** 顯示 Total Win 統計面板，等待玩家關閉 */
-    showTotalWin(amount: number): Promise<void>;
+    /** 顯示 Total Win 統計面板，等待玩家關閉；autoCollectAfterMs = 自動關閉延遲（自動旋轉用） */
+    showTotalWin(amount: number, autoCollectAfterMs?: number): Promise<void>;
     /** 顯示雷霆祝福動畫，等待完成 */
     showThunderBlessing(): Promise<void>;
 
