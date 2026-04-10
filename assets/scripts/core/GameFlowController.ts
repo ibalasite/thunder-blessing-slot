@@ -100,11 +100,17 @@ export class GameFlowController {
 
         // ── 1. 扣款（立即，帳務層）──────────────────────
         let tx: SpinTx | undefined;
+        // Phase 2: fullSpin() already applied debit+credit atomically.
+        // Show the deducted-but-not-yet-won state: finalBalance - totalWin = initialBal - wagered.
+        // Phase 1: account.debit() applied, getBalance() already reflects deduction.
+        let balanceAfterDebit: number;
         if (w) {
             tx = w.beginSpin(outcome.wagered);
-            this._ui.setDisplayBalance(w.getBalance());
+            balanceAfterDebit = w.getBalance() - outcome.totalWin;
+            this._ui.setDisplayBalance(balanceAfterDebit);
         } else {
             this._account.debit(outcome.wagered);
+            balanceAfterDebit = this._account.getBalance();
         }
 
         this._session.resetRound();
@@ -114,7 +120,6 @@ export class GameFlowController {
         this._ui.refresh();
 
         // ── 2. UI 表演（純視覺，不動帳務）────────────────
-        const balanceAfterDebit = w ? w.getBalance() : this._account.getBalance();
         await this._playFullOutcome(outcome, balanceAfterDebit);
 
         // ── 3. 入帳（立即，帳務層）──────────────────────
@@ -182,11 +187,16 @@ export class GameFlowController {
 
         // ── 1. 扣款（立即）──────────────────────
         let tx: SpinTx | undefined;
+        // Phase 2: fullSpin() is atomic. Show deducted-but-not-yet-won state.
+        // Phase 1: account.debit() applied before animation.
+        let balanceAfterDebit: number;
         if (w) {
             tx = w.beginSpin(outcome.wagered);
-            this._ui.setDisplayBalance(w.getBalance());
+            balanceAfterDebit = w.getBalance() - outcome.totalWin;
+            this._ui.setDisplayBalance(balanceAfterDebit);
         } else {
             this._account.debit(outcome.wagered);
+            balanceAfterDebit = this._account.getBalance();
         }
 
         this.busy = true;
@@ -198,7 +208,6 @@ export class GameFlowController {
         this._ui.refresh();
 
         // ── 2. UI 表演 ─────────────────────────
-        const balanceAfterDebit = w ? w.getBalance() : this._account.getBalance();
         await this._playFullOutcome(outcome, balanceAfterDebit);
 
         // ── 3. 入帳（立即）──────────────────────
@@ -415,10 +424,11 @@ export class GameFlowController {
 
             this._session.addRoundWin(stepWin);
 
-            if (this._wallet) {
-                this._ui.setDisplayBalance(
-                    (this._wallet?.getBalance() ?? this._account.getBalance()) + this._session.roundWin);
-            }
+            // Phase 2: balanceAfterDebit = initialBal - wagered (computed before calling this method).
+            // Phase 1: balanceAfterDebit = account.getBalance() after debit.
+            // Both cases: display = balanceAfterDebit + accumulated roundWin.
+            const displayBal = balanceAfterDebit ?? this._account.getBalance();
+            this._ui.setDisplayBalance(displayBal + this._session.roundWin);
 
             // ③ 組合中獎符號摘要（顯示消了什麼、得多少分）
             const winDetails = step.wins.map(w => {
