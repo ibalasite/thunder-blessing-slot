@@ -410,6 +410,9 @@ function buildTotalWinPanel(root: Node, cbs: SceneBuildCallbacks): {
         p.active = false;
         cbs.onCollect();
     });
+    // Block touch-through: prevent taps on the panel background from reaching
+    // buttons behind (e.g. AutoSpinBtn), which would reset autoSpinCount.
+    p.addComponent(Button);
     p.active = false;
     return { node: p, totalWinLbl };
 }
